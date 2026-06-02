@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="{Binding AppTitle}"
+        Icon="Assets/Branding/v3dfy.ico"
         Width="1120"
         Height="800"
         MinWidth="920"
@@ -124,10 +125,17 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel>
-                <TextBlock FontSize="28" FontWeight="Bold" Text="{Binding AppTitle}" />
-                <TextBlock Style="{StaticResource MutedTextStyle}"
-                           Text="{Binding SubtitleText}" />
+            <StackPanel Orientation="Horizontal">
+                <Image Width="42"
+                       Height="42"
+                       Margin="0,0,10,0"
+                       Source="Assets/Branding/v3dfy-icon-left-square-transparent.png"
+                       Stretch="Uniform" />
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock FontSize="28" FontWeight="Bold" Text="{Binding AppTitle}" />
+                    <TextBlock Style="{StaticResource MutedTextStyle}"
+                               Text="{Binding SubtitleText}" />
+                </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Margin="0,0,8,0"

@@ -27,6 +27,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets\Branding\v3dfy.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Branding\*.ico" />
+    <Resource Include="Assets\Branding\*.png" />
+  </ItemGroup>
 
 </Project>

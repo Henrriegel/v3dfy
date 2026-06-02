@@ -1,5 +1,5 @@
 ; Initial v3dfy Inno Setup template.
-; Adjust metadata and add a real icon after release assets are available.
+; Adjust release metadata before packaging.
 
 #define MyAppName "v3dfy"
 #define MyAppVersion "0.1.0"
@@ -21,7 +21,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-; Add SetupIconFile after a production icon is available.
+SetupIconFile=..\..\src\V3dfy.App\Assets\Branding\v3dfy-installer.ico
 
 [Files]
 ; The publish script prepares the complete offline bundle in this directory.
