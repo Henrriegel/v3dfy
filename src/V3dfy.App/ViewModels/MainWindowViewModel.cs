@@ -3,10 +3,13 @@ using System.IO;
 using Microsoft.Win32;
 using V3dfy.App.Mvvm;
 using V3dfy.App.Services;
+using V3dfy.Core.Analysis;
 using V3dfy.Core.Models;
 using V3dfy.Core.Presets;
+using V3dfy.Infrastructure.Analysis;
 using V3dfy.Infrastructure.Health;
 using V3dfy.Infrastructure.Paths;
+using V3dfy.Infrastructure.Processes;
 
 namespace V3dfy.App.ViewModels;
 
@@ -25,19 +28,26 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly InternalToolPaths _toolPaths;
     private readonly InternalToolsHealthChecker _healthChecker;
     private readonly AppThemeService _themeService;
+    private readonly IFfprobeVideoAnalysisService _videoAnalysisService;
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
     private EngineHealthStatus? _toolHealth;
+    private VideoAnalysisResult? _analysis;
+    private bool _isAnalyzing;
 
     public MainWindowViewModel()
     {
         _toolPaths = new InternalToolPathResolver(AppContext.BaseDirectory).Resolve();
         _healthChecker = new InternalToolsHealthChecker();
         _themeService = new AppThemeService();
+        _videoAnalysisService = new FfprobeVideoAnalysisService(
+            _toolPaths,
+            new LocalProcessRunner(),
+            new FfprobeJsonParser());
 
         SelectVideoCommand = new RelayCommand(SelectVideo);
-        AnalyzeCommand = new RelayCommand(Analyze);
+        AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
         RefreshEngineStatusCommand = new RelayCommand(RefreshEngineStatus);
         ClearLogsCommand = new RelayCommand(Logs.Clear);
 
@@ -120,6 +130,83 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string AnalyzeText => Text("Analyze", "Analizar");
 
+    public bool IsAnalyzing
+    {
+        get => _isAnalyzing;
+        private set
+        {
+            if (SetProperty(ref _isAnalyzing, value))
+            {
+                AnalyzeCommand.RaiseCanExecuteChanged();
+                OnPropertyChanged(nameof(AnalysisStatusText));
+            }
+        }
+    }
+
+    public string VideoAnalysisTitle => Text("Video analysis", "Análisis de video");
+
+    public string AnalysisStatusText => IsAnalyzing
+        ? Text("Analyzing video...", "Analizando video...")
+        : _analysis is null
+            ? Text("No analysis yet.", "Aún no hay análisis.")
+            : Text("Analysis completed.", "Análisis completado.");
+
+    public string AnalysisDurationText => LabelValue(
+        "Duration",
+        "Duración",
+        _analysis?.File.Duration is { } duration
+            ? duration.ToString(@"hh\:mm\:ss")
+            : null);
+
+    public string AnalysisResolutionText => LabelValue(
+        "Resolution",
+        "Resolución",
+        _analysis?.Video is { Width: { } width, Height: { } height }
+            ? $"{width}x{height}"
+            : null);
+
+    public string AnalysisFpsText => LabelValue(
+        "FPS",
+        "FPS",
+        _analysis?.Video?.FrameRate?.ToString("0.###"));
+
+    public string AnalysisCodecText => LabelValue(
+        "Video codec",
+        "Códec de video",
+        _analysis?.Video?.CodecName);
+
+    public string AnalysisContainerText => LabelValue(
+        "Container",
+        "Contenedor",
+        _analysis?.File.FormatName);
+
+    public string AnalysisAudioStreamsText => LabelValue(
+        "Audio streams",
+        "Pistas de audio",
+        _analysis?.AudioStreams.Count.ToString());
+
+    public string AnalysisSubtitleStreamsText => LabelValue(
+        "Subtitle streams",
+        "Pistas de subtítulos",
+        _analysis?.SubtitleStreams.Count.ToString());
+
+    public string AnalysisHdrText => LabelValue(
+        "HDR",
+        "HDR",
+        _analysis is null
+            ? null
+            : _analysis.Video?.IsHdr == true
+                ? Text("Detected", "Detectado")
+                : Text("Not detected", "No detectado"));
+
+    public string AnalysisCompatibilityText => _analysis?.Video is
+        { Width: { } width, Height: { } height } &&
+        (width > 1920 || height > 1080)
+            ? Text(
+                "Compatibility note: resolution is higher than the LG Full HD target.",
+                "Nota de compatibilidad: la resolución supera el objetivo LG Full HD.")
+            : string.Empty;
+
     public string ToolStatusTitle => Text(
         "Internal tool status",
         "Estado de herramientas internas");
@@ -182,7 +269,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand SelectVideoCommand { get; }
 
-    public RelayCommand AnalyzeCommand { get; }
+    public AsyncRelayCommand AnalyzeCommand { get; }
 
     public RelayCommand RefreshEngineStatusCommand { get; }
 
@@ -222,7 +309,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    private void Analyze()
+    private async Task AnalyzeAsync()
     {
         if (string.IsNullOrWhiteSpace(SelectedVideoPath))
         {
@@ -233,19 +320,36 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         RefreshEngineStatus();
-        if (_toolHealth?.Ffprobe == ToolHealthStatus.Missing)
+        IsAnalyzing = true;
+
+        try
+        {
+            var result = await _videoAnalysisService.AnalyzeAsync(new VideoAnalysisRequest(
+                InputPath: SelectedVideoPath,
+                Timeout: TimeSpan.FromSeconds(30)));
+
+            if (result.IsSuccess && result.Analysis is not null)
+            {
+                _analysis = result.Analysis;
+                RaiseAnalysisPropertiesChanged();
+                AddLog(
+                    "Video analysis completed.",
+                    "Análisis de video completado.");
+                return;
+            }
+
+            LogAnalysisFailure(result.Failure);
+        }
+        catch (Exception exception)
         {
             AddLog(
-                "Bundled FFprobe is not available yet. Analysis will be enabled " +
-                "after tools/ffmpeg/win-x64/ffprobe.exe is bundled.",
-                "FFprobe incluido aún no está disponible. El análisis se habilitará " +
-                "cuando se incluya tools/ffmpeg/win-x64/ffprobe.exe.");
-            return;
+                $"Video analysis failed unexpectedly: {exception.Message}",
+                $"El análisis de video falló inesperadamente: {exception.Message}");
         }
-
-        AddLog(
-            "Bundled FFprobe detected. Video analysis integration is the next step.",
-            "FFprobe incluido detectado. La integración del análisis de video es el siguiente paso.");
+        finally
+        {
+            IsAnalyzing = false;
+        }
     }
 
     private void RefreshEngineStatus()
@@ -293,6 +397,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private string Text(string english, string spanish) => IsSpanish ? spanish : english;
 
+    private string LabelValue(string englishLabel, string spanishLabel, string? value) =>
+        $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
+
     private void AddLog(string englishMessage, string spanishMessage) =>
         Logs.Add(new LogEntryViewModel(
             timestamp: DateTime.Now,
@@ -319,6 +426,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedVideoDisplayPath));
         OnPropertyChanged(nameof(SelectVideoText));
         OnPropertyChanged(nameof(AnalyzeText));
+        OnPropertyChanged(nameof(VideoAnalysisTitle));
+        RaiseAnalysisPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(ActivityLogTitle));
@@ -332,5 +441,63 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(PresetAdvancedOutputText));
         OnPropertyChanged(nameof(TvPlaybackTitle));
         OnPropertyChanged(nameof(TvPlaybackInstructions));
+    }
+
+    private void RaiseAnalysisPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(AnalysisStatusText));
+        OnPropertyChanged(nameof(AnalysisDurationText));
+        OnPropertyChanged(nameof(AnalysisResolutionText));
+        OnPropertyChanged(nameof(AnalysisFpsText));
+        OnPropertyChanged(nameof(AnalysisCodecText));
+        OnPropertyChanged(nameof(AnalysisContainerText));
+        OnPropertyChanged(nameof(AnalysisAudioStreamsText));
+        OnPropertyChanged(nameof(AnalysisSubtitleStreamsText));
+        OnPropertyChanged(nameof(AnalysisHdrText));
+        OnPropertyChanged(nameof(AnalysisCompatibilityText));
+    }
+
+    private void LogAnalysisFailure(VideoAnalysisFailure? failure)
+    {
+        switch (failure?.Kind)
+        {
+            case VideoAnalysisFailureKind.MissingFfprobe:
+                AddLog(
+                    "Bundled FFprobe is not available yet. Add " +
+                    "tools/ffmpeg/win-x64/ffprobe.exe to enable video analysis.",
+                    "FFprobe incluido aún no está disponible. Agrega " +
+                    "tools/ffmpeg/win-x64/ffprobe.exe para habilitar el análisis de video.");
+                break;
+            case VideoAnalysisFailureKind.ProcessFailed:
+                AddLog(
+                    $"FFprobe analysis failed. {failure.StandardError}",
+                    $"El análisis con FFprobe falló. {failure.StandardError}");
+                break;
+            case VideoAnalysisFailureKind.EmptyOutput:
+                AddLog(
+                    "FFprobe returned no analysis data.",
+                    "FFprobe no devolvió datos de análisis.");
+                break;
+            case VideoAnalysisFailureKind.InvalidJson:
+                AddLog(
+                    "FFprobe returned invalid analysis data.",
+                    "FFprobe devolvió datos de análisis no válidos.");
+                break;
+            case VideoAnalysisFailureKind.TimedOut:
+                AddLog(
+                    "FFprobe analysis timed out.",
+                    "El análisis con FFprobe agotó el tiempo de espera.");
+                break;
+            case VideoAnalysisFailureKind.Canceled:
+                AddLog(
+                    "FFprobe analysis was canceled.",
+                    "El análisis con FFprobe fue cancelado.");
+                break;
+            default:
+                AddLog(
+                    "Video analysis failed.",
+                    "El análisis de video falló.");
+                break;
+        }
     }
 }

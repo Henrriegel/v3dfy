@@ -74,6 +74,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="18" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="18" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -108,6 +110,38 @@
                 </Border>
 
                 <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                   Text="{Binding VideoAnalysisTitle}" />
+                        <TextBlock Margin="0,0,0,8"
+                                   Style="{StaticResource MutedTextStyle}"
+                                   Text="{Binding AnalysisStatusText}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="{Binding AnalysisDurationText}" />
+                                <TextBlock Text="{Binding AnalysisResolutionText}" />
+                                <TextBlock Text="{Binding AnalysisFpsText}" />
+                                <TextBlock Text="{Binding AnalysisCodecText}" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding AnalysisContainerText}" />
+                                <TextBlock Text="{Binding AnalysisAudioStreamsText}" />
+                                <TextBlock Text="{Binding AnalysisSubtitleStreamsText}" />
+                                <TextBlock Text="{Binding AnalysisHdrText}" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding AnalysisCompatibilityText}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="4" Style="{StaticResource CardStyle}">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
