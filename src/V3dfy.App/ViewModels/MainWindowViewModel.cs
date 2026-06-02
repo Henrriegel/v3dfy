@@ -5,8 +5,10 @@ using V3dfy.App.Mvvm;
 using V3dfy.App.Services;
 using V3dfy.Core.Analysis;
 using V3dfy.Core.Models;
+using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
 using V3dfy.Core.Recommendations;
+using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
 using V3dfy.Infrastructure.Health;
 using V3dfy.Infrastructure.Paths;
@@ -31,12 +33,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly AppThemeService _themeService;
     private readonly IFfprobeVideoAnalysisService _videoAnalysisService;
     private readonly VideoConversionRecommendationService _recommendationService;
+    private readonly VideoConversionPlanService _conversionPlanService;
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
     private EngineHealthStatus? _toolHealth;
     private VideoAnalysisResult? _analysis;
     private VideoConversionSetupRecommendation? _conversionRecommendation;
+    private VideoConversionPlan? _conversionPlan;
     private int _selectedWorkflowTabIndex;
     private bool _isAnalyzing;
 
@@ -50,6 +54,7 @@ public sealed class MainWindowViewModel : ObservableObject
             new LocalProcessRunner(),
             new FfprobeJsonParser());
         _recommendationService = new VideoConversionRecommendationService();
+        _conversionPlanService = new VideoConversionPlanService();
 
         SelectVideoCommand = new RelayCommand(SelectVideo);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
@@ -284,6 +289,80 @@ public sealed class MainWindowViewModel : ObservableObject
                 _conversionRecommendation.CompatibilityIssues.Select(issue =>
                     $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
 
+    public string ConversionPlanTitle => Text("Conversion plan", "Plan de conversión");
+
+    public string ConversionPlanStatusText => _conversionPlan is null
+        ? Text("No conversion plan yet.", "Aún no hay plan de conversión.")
+        : _conversionPlan.IsDryRun
+            ? Text("Dry-run preview. Conversion is not started.", "Vista previa en seco. La conversión no se ha iniciado.")
+            : Text("Ready for conversion when execution is enabled.", "Listo para convertir cuando se habilite la ejecución.");
+
+    public string ConversionPlanOutputPathText => ConversionPlanLabelValue(
+        "Output path",
+        "Ruta de salida",
+        _conversionPlan?.SuggestedOutputPath);
+
+    public string ConversionPlanOutputFormatText => ConversionPlanLabelValue(
+        "Output format",
+        "Formato de salida",
+        _conversionPlan is null
+            ? null
+            : $"{_conversionPlan.OutputContainer} / {_conversionPlan.VideoCodec} / {_conversionPlan.AudioCodec}");
+
+    public string ConversionPlanResolutionText => ConversionPlanLabelValue(
+        "Target resolution",
+        "Resolución objetivo",
+        _conversionPlan is null
+            ? null
+            : $"{_conversionPlan.Width}x{_conversionPlan.Height}");
+
+    public string ConversionPlanThreeDLayoutText => ConversionPlanLabelValue(
+        "3D layout",
+        "Diseño 3D",
+        _conversionPlan?.ThreeDOutputFormat == ThreeDOutputFormat.HalfTopBottom
+            ? "Half Top-Bottom"
+            : _conversionPlan?.ThreeDOutputFormat.ToString());
+
+    public string ConversionPlanQualityText => ConversionPlanLabelValue(
+        "Quality",
+        "Calidad",
+        _conversionPlan?.QualityPreset == AiQualityPreset.Balanced
+            ? Text("Balanced", "Equilibrada")
+            : _conversionPlan?.QualityPreset.ToString());
+
+    public string ConversionPlanIntensityText => ConversionPlanLabelValue(
+        "3D intensity",
+        "Intensidad 3D",
+        _conversionPlan?.Intensity == ThreeDIntensity.Medium
+            ? Text("Medium", "Media")
+            : _conversionPlan?.Intensity.ToString());
+
+    public string ConversionPlanDryRunReasonText => _conversionPlan?.DryRunReason switch
+    {
+        ConversionDryRunReason.MissingLocalAiBundle => Text(
+            "Conversion is not available yet because the local AI engine, embedded Python runtime, or models are not bundled.",
+            "La conversión aún no está disponible porque todavía no están incluidos el motor local de IA, el runtime de Python embebido o los modelos."),
+        ConversionDryRunReason.MissingRequiredTools => Text(
+            "Conversion is not available because required bundled tools are missing.",
+            "La conversión no está disponible porque faltan herramientas incluidas requeridas."),
+        _ => string.Empty,
+    };
+
+    public string ConversionPlanStepsTitle => Text("Planned steps", "Pasos previstos");
+
+    public string ConversionPlanStepsText => _conversionPlan is null
+        ? "-"
+        : string.Join(
+            Environment.NewLine,
+            _conversionPlan.Steps.Select((step, index) =>
+                $"{index + 1}. {Text(step.EnglishText, step.SpanishText)}"));
+
+    public string ConversionPlanCommandPreviewTitle => Text(
+        "Future iw3 command preview",
+        "Vista previa del futuro comando iw3");
+
+    public string ConversionPlanCommandPreviewText => _conversionPlan?.CommandPreview ?? "-";
+
     public string ToolStatusTitle => Text(
         "Internal tool status",
         "Estado de herramientas internas");
@@ -413,14 +492,24 @@ public sealed class MainWindowViewModel : ObservableObject
                 _conversionRecommendation = _recommendationService.Recommend(
                     _analysis,
                     TargetDevicePresets.Lg3dFullHd2012);
+                _conversionPlan = _conversionPlanService.Create(
+                    _analysis,
+                    _conversionRecommendation,
+                    TargetDevicePresets.Lg3dFullHd2012,
+                    _toolPaths,
+                    _toolHealth ?? _healthChecker.Check(_toolPaths));
                 RaiseAnalysisPropertiesChanged();
                 RaiseRecommendationPropertiesChanged();
+                RaiseConversionPlanPropertiesChanged();
                 AddLog(
                     "Video analysis completed.",
                     "Análisis de video completado.");
                 AddLog(
                     "Recommended 3D setup generated.",
                     "Configuración 3D recomendada generada.");
+                AddLog(
+                    "Conversion plan prepared.",
+                    "Plan de conversión preparado.");
                 return;
             }
 
@@ -477,8 +566,10 @@ public sealed class MainWindowViewModel : ObservableObject
         SelectedVideoPath = path;
         _analysis = null;
         _conversionRecommendation = null;
+        _conversionPlan = null;
         RaiseAnalysisPropertiesChanged();
         RaiseRecommendationPropertiesChanged();
+        RaiseConversionPlanPropertiesChanged();
         AddLog($"Selected video: {path}", $"Video seleccionado: {path}");
     }
 
@@ -520,6 +611,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(VideoAnalysisTitle));
         RaiseAnalysisPropertiesChanged();
         RaiseRecommendationPropertiesChanged();
+        RaiseConversionPlanPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(ActivityLogTitle));
@@ -565,6 +657,26 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     private string RecommendationLabelValue(string englishLabel, string spanishLabel, string? value) =>
+        $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
+
+    private void RaiseConversionPlanPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(ConversionPlanTitle));
+        OnPropertyChanged(nameof(ConversionPlanStatusText));
+        OnPropertyChanged(nameof(ConversionPlanOutputPathText));
+        OnPropertyChanged(nameof(ConversionPlanOutputFormatText));
+        OnPropertyChanged(nameof(ConversionPlanResolutionText));
+        OnPropertyChanged(nameof(ConversionPlanThreeDLayoutText));
+        OnPropertyChanged(nameof(ConversionPlanQualityText));
+        OnPropertyChanged(nameof(ConversionPlanIntensityText));
+        OnPropertyChanged(nameof(ConversionPlanDryRunReasonText));
+        OnPropertyChanged(nameof(ConversionPlanStepsTitle));
+        OnPropertyChanged(nameof(ConversionPlanStepsText));
+        OnPropertyChanged(nameof(ConversionPlanCommandPreviewTitle));
+        OnPropertyChanged(nameof(ConversionPlanCommandPreviewText));
+    }
+
+    private string ConversionPlanLabelValue(string englishLabel, string spanishLabel, string? value) =>
         $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
 
     private void LogAnalysisFailure(VideoAnalysisFailure? failure)
