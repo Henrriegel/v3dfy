@@ -6,6 +6,7 @@ using V3dfy.App.Services;
 using V3dfy.Core.Analysis;
 using V3dfy.Core.Models;
 using V3dfy.Core.Presets;
+using V3dfy.Core.Recommendations;
 using V3dfy.Infrastructure.Analysis;
 using V3dfy.Infrastructure.Health;
 using V3dfy.Infrastructure.Paths;
@@ -29,11 +30,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly InternalToolsHealthChecker _healthChecker;
     private readonly AppThemeService _themeService;
     private readonly IFfprobeVideoAnalysisService _videoAnalysisService;
+    private readonly VideoConversionRecommendationService _recommendationService;
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
     private EngineHealthStatus? _toolHealth;
     private VideoAnalysisResult? _analysis;
+    private VideoConversionSetupRecommendation? _conversionRecommendation;
+    private int _selectedWorkflowTabIndex;
     private bool _isAnalyzing;
 
     public MainWindowViewModel()
@@ -45,6 +49,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _toolPaths,
             new LocalProcessRunner(),
             new FfprobeJsonParser());
+        _recommendationService = new VideoConversionRecommendationService();
 
         SelectVideoCommand = new RelayCommand(SelectVideo);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
@@ -130,6 +135,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string AnalyzeText => Text("Analyze", "Analizar");
 
+    public int SelectedWorkflowTabIndex
+    {
+        get => _selectedWorkflowTabIndex;
+        set => SetProperty(ref _selectedWorkflowTabIndex, value);
+    }
+
     public bool IsAnalyzing
     {
         get => _isAnalyzing;
@@ -206,6 +217,72 @@ public sealed class MainWindowViewModel : ObservableObject
                 "Compatibility note: resolution is higher than the LG Full HD target.",
                 "Nota de compatibilidad: la resolución supera el objetivo LG Full HD.")
             : string.Empty;
+
+    public string RecommendedSetupTitle => Text(
+        "Recommended 3D setup",
+        "Configuración 3D recomendada");
+
+    public string RecommendedSetupStatusText => _conversionRecommendation is null
+        ? Text("No recommended setup yet.", "Aún no hay configuración recomendada.")
+        : Text(
+            "Recommended setup for LG 3D Full HD 2012.",
+            "Configuración recomendada para LG 3D Full HD 2012.");
+
+    public string RecommendedOutputContainerText => RecommendationLabelValue(
+        "Output container",
+        "Contenedor de salida",
+        _conversionRecommendation?.OutputContainer.ToString());
+
+    public string RecommendedVideoCodecText => RecommendationLabelValue(
+        "Video codec",
+        "Códec de video",
+        _conversionRecommendation?.VideoCodec);
+
+    public string RecommendedAudioCodecText => RecommendationLabelValue(
+        "Audio",
+        "Audio",
+        _conversionRecommendation?.AudioCodec);
+
+    public string RecommendedResolutionText => RecommendationLabelValue(
+        "Resolution",
+        "Resolución",
+        _conversionRecommendation is null
+            ? null
+            : $"{_conversionRecommendation.Width}x{_conversionRecommendation.Height}");
+
+    public string RecommendedThreeDLayoutText => RecommendationLabelValue(
+        "3D layout",
+        "Diseño 3D",
+        _conversionRecommendation?.ThreeDOutputFormat == ThreeDOutputFormat.HalfTopBottom
+            ? "Half Top-Bottom"
+            : _conversionRecommendation?.ThreeDOutputFormat.ToString());
+
+    public string RecommendedQualityText => RecommendationLabelValue(
+        "Quality",
+        "Calidad",
+        _conversionRecommendation?.QualityPreset == AiQualityPreset.Balanced
+            ? Text("Balanced", "Equilibrada")
+            : _conversionRecommendation?.QualityPreset.ToString());
+
+    public string RecommendedIntensityText => RecommendationLabelValue(
+        "3D intensity",
+        "Intensidad 3D",
+        _conversionRecommendation?.Intensity == ThreeDIntensity.Medium
+            ? Text("Medium", "Media")
+            : _conversionRecommendation?.Intensity.ToString());
+
+    public string RecommendedNotesTitle => Text(
+        "Notes / compatibility warnings",
+        "Notas / advertencias de compatibilidad");
+
+    public string RecommendedNotesText => _conversionRecommendation is null
+        ? "-"
+        : _conversionRecommendation.CompatibilityIssues.Count == 0
+            ? Text("No compatibility warnings.", "No hay advertencias de compatibilidad.")
+            : string.Join(
+                Environment.NewLine,
+                _conversionRecommendation.CompatibilityIssues.Select(issue =>
+                    $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
 
     public string ToolStatusTitle => Text(
         "Internal tool status",
@@ -311,6 +388,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async Task AnalyzeAsync()
     {
+        SelectedWorkflowTabIndex = 0;
+
         if (string.IsNullOrWhiteSpace(SelectedVideoPath))
         {
             AddLog(
@@ -331,10 +410,17 @@ public sealed class MainWindowViewModel : ObservableObject
             if (result.IsSuccess && result.Analysis is not null)
             {
                 _analysis = result.Analysis;
+                _conversionRecommendation = _recommendationService.Recommend(
+                    _analysis,
+                    TargetDevicePresets.Lg3dFullHd2012);
                 RaiseAnalysisPropertiesChanged();
+                RaiseRecommendationPropertiesChanged();
                 AddLog(
                     "Video analysis completed.",
                     "Análisis de video completado.");
+                AddLog(
+                    "Recommended 3D setup generated.",
+                    "Configuración 3D recomendada generada.");
                 return;
             }
 
@@ -387,7 +473,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void SetSelectedVideo(string path)
     {
+        SelectedWorkflowTabIndex = 0;
         SelectedVideoPath = path;
+        _analysis = null;
+        _conversionRecommendation = null;
+        RaiseAnalysisPropertiesChanged();
+        RaiseRecommendationPropertiesChanged();
         AddLog($"Selected video: {path}", $"Video seleccionado: {path}");
     }
 
@@ -428,6 +519,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(AnalyzeText));
         OnPropertyChanged(nameof(VideoAnalysisTitle));
         RaiseAnalysisPropertiesChanged();
+        RaiseRecommendationPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(ActivityLogTitle));
@@ -456,6 +548,24 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(AnalysisHdrText));
         OnPropertyChanged(nameof(AnalysisCompatibilityText));
     }
+
+    private void RaiseRecommendationPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(RecommendedSetupTitle));
+        OnPropertyChanged(nameof(RecommendedSetupStatusText));
+        OnPropertyChanged(nameof(RecommendedOutputContainerText));
+        OnPropertyChanged(nameof(RecommendedVideoCodecText));
+        OnPropertyChanged(nameof(RecommendedAudioCodecText));
+        OnPropertyChanged(nameof(RecommendedResolutionText));
+        OnPropertyChanged(nameof(RecommendedThreeDLayoutText));
+        OnPropertyChanged(nameof(RecommendedQualityText));
+        OnPropertyChanged(nameof(RecommendedIntensityText));
+        OnPropertyChanged(nameof(RecommendedNotesTitle));
+        OnPropertyChanged(nameof(RecommendedNotesText));
+    }
+
+    private string RecommendationLabelValue(string englishLabel, string spanishLabel, string? value) =>
+        $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
 
     private void LogAnalysisFailure(VideoAnalysisFailure? failure)
     {

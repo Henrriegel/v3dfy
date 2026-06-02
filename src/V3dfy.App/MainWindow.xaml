@@ -6,9 +6,9 @@
         mc:Ignorable="d"
         Title="{Binding AppTitle}"
         Width="1120"
-        Height="760"
+        Height="800"
         MinWidth="920"
-        MinHeight="640"
+        MinHeight="720"
         Background="{DynamicResource WindowBackgroundBrush}"
         AllowDrop="True"
         Drop="OnDrop">
@@ -28,6 +28,87 @@
         </Style>
         <Style x:Key="MutedTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+        </Style>
+        <Style x:Key="WorkflowTabControlStyle" TargetType="TabControl">
+            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TabPanel Background="Transparent"
+                                      IsItemsHost="True" />
+                            <Border Grid.Row="1"
+                                    Padding="14"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ContentPresenter x:Name="PART_SelectedContentHost"
+                                                  ContentSource="SelectedContent" />
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WorkflowTabItemStyle" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{DynamicResource TabUnselectedForegroundBrush}" />
+            <Setter Property="Background" Value="{DynamicResource TabUnselectedBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBorder"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="5,5,0,0">
+                            <Grid>
+                                <Border x:Name="AccentLine"
+                                        Height="3"
+                                        VerticalAlignment="Top"
+                                        Background="{DynamicResource TabAccentBrush}"
+                                        CornerRadius="3,3,0,0"
+                                        Opacity="0" />
+                                <ContentPresenter Margin="0,2,0,0"
+                                                  ContentSource="Header"
+                                                  TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder"
+                                        Property="Background"
+                                        Value="{DynamicResource ComboBoxHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource TabSelectedForegroundBrush}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter TargetName="TabBorder"
+                                        Property="Background"
+                                        Value="{DynamicResource TabSelectedBackgroundBrush}" />
+                                <Setter TargetName="TabBorder"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource TabSelectedBorderBrush}" />
+                                <Setter TargetName="AccentLine"
+                                        Property="Opacity"
+                                        Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -70,14 +151,21 @@
                 <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
 
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="18" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="18" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+            <ScrollViewer Margin="0,0,4,0"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ScrollViewer.Resources>
+                    <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                           TargetType="ScrollBar" />
+                </ScrollViewer.Resources>
+                <Grid Margin="0,0,8,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="18" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="18" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
                 <Border Style="{StaticResource CardStyle}">
                     <StackPanel>
@@ -110,82 +198,106 @@
                 </Border>
 
                 <Border Grid.Row="2" Style="{StaticResource CardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                   Text="{Binding VideoAnalysisTitle}" />
-                        <TextBlock Margin="0,0,0,8"
-                                   Style="{StaticResource MutedTextStyle}"
-                                   Text="{Binding AnalysisStatusText}" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                    <TabControl SelectedIndex="{Binding SelectedWorkflowTabIndex,
+                                                        Mode=TwoWay}"
+                                Style="{StaticResource WorkflowTabControlStyle}">
+                        <TabItem Header="{Binding VideoAnalysisTitle}"
+                                 Style="{StaticResource WorkflowTabItemStyle}">
                             <StackPanel>
-                                <TextBlock Text="{Binding AnalysisDurationText}" />
-                                <TextBlock Text="{Binding AnalysisResolutionText}" />
-                                <TextBlock Text="{Binding AnalysisFpsText}" />
-                                <TextBlock Text="{Binding AnalysisCodecText}" />
+                                <TextBlock Margin="0,0,0,8"
+                                           Style="{StaticResource MutedTextStyle}"
+                                           Text="{Binding AnalysisStatusText}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding AnalysisDurationText}" />
+                                        <TextBlock Text="{Binding AnalysisResolutionText}" />
+                                        <TextBlock Text="{Binding AnalysisFpsText}" />
+                                        <TextBlock Text="{Binding AnalysisCodecText}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding AnalysisContainerText}" />
+                                        <TextBlock Text="{Binding AnalysisAudioStreamsText}" />
+                                        <TextBlock Text="{Binding AnalysisSubtitleStreamsText}" />
+                                        <TextBlock Text="{Binding AnalysisHdrText}" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Margin="0,8,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           Text="{Binding AnalysisCompatibilityText}"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="{Binding AnalysisContainerText}" />
-                                <TextBlock Text="{Binding AnalysisAudioStreamsText}" />
-                                <TextBlock Text="{Binding AnalysisSubtitleStreamsText}" />
-                                <TextBlock Text="{Binding AnalysisHdrText}" />
+                        </TabItem>
+                        <TabItem Header="{Binding RecommendedSetupTitle}"
+                                 Style="{StaticResource WorkflowTabItemStyle}">
+                            <StackPanel>
+                                <TextBlock Margin="0,0,0,8"
+                                           Style="{StaticResource MutedTextStyle}"
+                                           Text="{Binding RecommendedSetupStatusText}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding RecommendedOutputContainerText}" />
+                                        <TextBlock Text="{Binding RecommendedVideoCodecText}" />
+                                        <TextBlock Text="{Binding RecommendedAudioCodecText}" />
+                                        <TextBlock Text="{Binding RecommendedResolutionText}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding RecommendedThreeDLayoutText}" />
+                                        <TextBlock Text="{Binding RecommendedQualityText}" />
+                                        <TextBlock Text="{Binding RecommendedIntensityText}" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Margin="0,10,0,4"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding RecommendedNotesTitle}" />
+                                <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                           Text="{Binding RecommendedNotesText}"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
-                        </Grid>
-                        <TextBlock Margin="0,8,0,0"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="{Binding AnalysisCompatibilityText}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
+                        </TabItem>
+                    </TabControl>
                 </Border>
 
                 <Border Grid.Row="4" Style="{StaticResource CardStyle}">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                       Text="{Binding ActivityLogTitle}" />
-                            <Button Grid.Column="1"
-                                    Margin="0,0,0,8"
-                                    Padding="10,5"
-                                    Command="{Binding ClearLogsCommand}"
-                                    Content="{Binding ClearText}" />
-                        </Grid>
-                        <ListBox Grid.Row="1"
-                                 Padding="8"
-                                 Background="{DynamicResource LogBackgroundBrush}"
-                                 BorderBrush="{DynamicResource CardBorderBrush}"
-                                 Foreground="{DynamicResource PrimaryTextBrush}"
-                                 ItemsSource="{Binding Logs}"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="Foreground"
-                                            Value="{DynamicResource PrimaryTextBrush}" />
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="Padding" Value="2" />
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Foreground="{DynamicResource PrimaryTextBrush}"
-                                               Text="{Binding DisplayText}"
-                                               TextWrapping="Wrap" />
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                   Text="{Binding RecommendedPresetTitle}" />
+                        <TextBlock FontWeight="SemiBold" Text="{Binding PresetName}" />
+                        <TextBlock Margin="0,8,0,0" Text="{Binding PresetContainerText}" />
+                        <TextBlock Text="{Binding PresetVideoCodecText}" />
+                        <TextBlock Text="{Binding PresetAudioCodecText}" />
+                        <TextBlock Text="{Binding PresetResolutionText}" />
+                        <TextBlock Text="{Binding PresetThreeDLayoutText}" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Style="{StaticResource MutedTextStyle}"
+                                   Text="{Binding PresetAdvancedOutputText}" />
+                        <Border Margin="0,10,0,0"
+                                Padding="8"
+                                Background="{DynamicResource InputBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="5">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold"
+                                           Text="{Binding TvPlaybackTitle}" />
+                                <TextBlock Margin="0,4,0,0"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           Text="{Binding TvPlaybackInstructions}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
                 </Border>
-            </Grid>
+
+                </Grid>
+            </ScrollViewer>
 
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
@@ -228,36 +340,69 @@
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Row="2" Style="{StaticResource CardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                   Text="{Binding RecommendedPresetTitle}" />
-                        <TextBlock FontWeight="SemiBold" Text="{Binding PresetName}" />
-                        <TextBlock Margin="0,10,0,0" Text="{Binding PresetContainerText}" />
-                        <TextBlock Text="{Binding PresetVideoCodecText}" />
-                        <TextBlock Text="{Binding PresetAudioCodecText}" />
-                        <TextBlock Text="{Binding PresetResolutionText}" />
-                        <TextBlock Text="{Binding PresetThreeDLayoutText}" />
-                        <TextBlock Margin="0,8,0,0"
-                                   Style="{StaticResource MutedTextStyle}"
-                                   Text="{Binding PresetAdvancedOutputText}" />
-                        <Border Margin="0,14,0,0"
-                                Padding="10"
-                                Background="{DynamicResource InputBackgroundBrush}"
-                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="5">
-                            <StackPanel>
-                                <TextBlock FontWeight="SemiBold"
-                                           Text="{Binding TvPlaybackTitle}" />
-                                <TextBlock Margin="0,6,0,0"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           Text="{Binding TvPlaybackInstructions}"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
+                <Border Grid.Row="2"
+                        MinHeight="160"
+                        Style="{StaticResource CardStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                       Text="{Binding ActivityLogTitle}" />
+                            <Button Grid.Column="1"
+                                    Margin="0,0,0,8"
+                                    Padding="10,5"
+                                    Command="{Binding ClearLogsCommand}"
+                                    Content="{Binding ClearText}" />
+                        </Grid>
+                        <ListBox Grid.Row="1"
+                                 MinHeight="90"
+                                 Padding="8"
+                                 Background="{DynamicResource LogBackgroundBrush}"
+                                 BorderBrush="{DynamicResource CardBorderBrush}"
+                                 Foreground="{DynamicResource PrimaryTextBrush}"
+                                 ItemsSource="{Binding Logs}"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.Resources>
+                                <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                                       TargetType="ScrollBar">
+                                    <Style.Triggers>
+                                        <Trigger Property="Orientation" Value="Horizontal">
+                                            <Setter Property="Width" Value="Auto" />
+                                            <Setter Property="MinWidth" Value="0" />
+                                            <Setter Property="Height" Value="10" />
+                                            <Setter Property="MinHeight" Value="10" />
+                                            <Setter Property="Template"
+                                                    Value="{StaticResource ModernHorizontalScrollBarTemplate}" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.Resources>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Foreground"
+                                            Value="{DynamicResource PrimaryTextBrush}" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Padding" Value="2" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Foreground="{DynamicResource PrimaryTextBrush}"
+                                               Text="{Binding DisplayText}"
+                                               TextWrapping="Wrap" />
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Border>
+
             </Grid>
         </Grid>
     </Grid>

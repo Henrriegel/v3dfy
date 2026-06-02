@@ -26,6 +26,16 @@ public sealed class AppThemeService
         SetBrush("ComboBoxBackgroundBrush", isDark ? "#263544" : "#FFFFFF");
         SetBrush("ComboBoxBorderBrush", isDark ? "#60758A" : "#AFC0D0");
         SetBrush("ComboBoxHoverBrush", isDark ? "#34495D" : "#E8F1FB");
+        SetBrush("ScrollBarTrackBrush", isDark ? "#111922" : "#E5EBF1");
+        SetBrush("ScrollBarThumbBrush", isDark ? "#526779" : "#9AABBA");
+        SetBrush("ScrollBarThumbHoverBrush", isDark ? "#6B8296" : "#7E93A5");
+        SetBrush("ScrollBarThumbPressedBrush", isDark ? "#84A0B8" : "#647B8E");
+        SetBrush("TabSelectedBackgroundBrush", isDark ? "#111922" : "#FFFFFF");
+        SetBrush("TabUnselectedBackgroundBrush", isDark ? "#18212C" : "#E7EDF3");
+        SetBrush("TabSelectedForegroundBrush", isDark ? "#F4F7FA" : "#17212B");
+        SetBrush("TabUnselectedForegroundBrush", isDark ? "#C4D1DD" : "#607386");
+        SetBrush("TabSelectedBorderBrush", isDark ? "#4FA3FF" : "#0969DA");
+        SetBrush("TabAccentBrush", isDark ? "#4FA3FF" : "#0969DA");
     }
 
     private static void SetBrush(string key, string hexColor) =>
