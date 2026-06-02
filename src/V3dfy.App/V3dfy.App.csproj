@@ -6,6 +6,21 @@
     <ProjectReference Include="..\V3dfy.Engine.Iw3\V3dfy.Engine.Iw3.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\tools\**\*">
+      <Link>tools\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\engine\**\*">
+      <Link>engine\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\licenses\**\*">
+      <Link>licenses\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

@@ -35,6 +35,65 @@ function Test-OptionalPath {
     }
 }
 
+function Test-Iw3Engine {
+    $enginePath = Join-Path $repoRoot 'engine\iw3'
+    if (-not (Test-Path -LiteralPath $enginePath -PathType Container)) {
+        Write-Check WARN 'Bundled iw3 engine is not bundled yet: engine\iw3'
+        return
+    }
+
+    $manifestPath = Join-Path $enginePath 'ENGINE_MANIFEST.json'
+    if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        try {
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            if ($manifest.version -and $manifest.version -ne 'placeholder') {
+                Write-Check OK 'Bundled iw3 engine found: engine\iw3'
+                return
+            }
+        }
+        catch {
+        }
+    }
+
+    $engineFiles = @(Get-ChildItem -LiteralPath $enginePath -File -Recurse |
+        Where-Object {
+            $relativePath = $_.FullName.Substring($enginePath.Length).TrimStart('\', '/')
+            $firstSegment = $relativePath.Split(
+                [System.IO.Path]::DirectorySeparatorChar,
+                [System.IO.Path]::AltDirectorySeparatorChar
+            )[0]
+
+            $firstSegment -notin @('models', 'python') -and
+                $_.Name -notin @('README.md', 'ENGINE_MANIFEST.json') -and
+                ($_.Extension -eq '.py' -or $_.Extension -ne '.md')
+        })
+
+    if ($engineFiles.Count -gt 0) {
+        Write-Check OK 'Bundled iw3 engine found: engine\iw3'
+    }
+    else {
+        Write-Check WARN 'Bundled iw3 engine contains placeholders only: engine\iw3'
+    }
+}
+
+function Test-Iw3Models {
+    $modelsPath = Join-Path $repoRoot 'engine\iw3\models'
+    $modelExtensions = @('.pth', '.pt', '.onnx', '.safetensors', '.ckpt', '.bin')
+    $modelFiles = @()
+
+    if (Test-Path -LiteralPath $modelsPath -PathType Container) {
+        $modelFiles = @(Get-ChildItem -LiteralPath $modelsPath -File -Recurse |
+            Where-Object { $_.Extension -in $modelExtensions })
+    }
+
+    if ($modelFiles.Count -gt 0) {
+        Write-Check OK 'iw3 models found: engine\iw3\models'
+    }
+    else {
+        Write-Check WARN 'iw3 models are not bundled yet: engine\iw3\models'
+    }
+}
+
 $hasErrors = $false
 
 if ($IsWindows -or $env:OS -eq 'Windows_NT') {
@@ -100,7 +159,8 @@ else {
 Test-OptionalPath 'tools\ffmpeg\win-x64\ffmpeg.exe' 'Bundled FFmpeg'
 Test-OptionalPath 'tools\ffmpeg\win-x64\ffprobe.exe' 'Bundled FFprobe'
 Test-OptionalPath 'engine\iw3\python\python.exe' 'Embedded Python'
-Test-OptionalPath 'engine\iw3\models' 'iw3 models directory'
+Test-Iw3Engine
+Test-Iw3Models
 
 if ($hasErrors) {
     exit 1
