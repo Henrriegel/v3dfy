@@ -23,24 +23,36 @@ public sealed class VideoConversionRecommendationService
         {
             issues.Add(new(
                 VideoCompatibilitySeverity.Warning,
-                "Source resolution is higher than the LG Full HD target. The recommended output should be downscaled to 1920x1080.",
-                "La resolución de origen supera el objetivo LG Full HD. La salida recomendada debe reducirse a 1920x1080."));
+                targetPreset.UsesLegacyLgCompatibilityGuidance
+                    ? "Source resolution is higher than the LG Full HD target. The recommended output should be downscaled to 1920x1080."
+                    : $"Source resolution is higher than the selected preset target. The recommended output should be downscaled to {preset.Width}x{preset.Height}.",
+                targetPreset.UsesLegacyLgCompatibilityGuidance
+                    ? "La resolución de origen supera el objetivo LG Full HD. La salida recomendada debe reducirse a 1920x1080."
+                    : $"La resolución de origen supera el objetivo del perfil seleccionado. La salida recomendada debe reducirse a {preset.Width}x{preset.Height}."));
         }
 
         if (isHdrSource)
         {
             issues.Add(new(
                 VideoCompatibilitySeverity.Warning,
-                "HDR was detected. SDR tone mapping may be required for older 3D TVs.",
-                "Se detectó HDR. Puede requerirse conversión a SDR para televisores 3D antiguos."));
+                targetPreset.UsesLegacyLgCompatibilityGuidance
+                    ? "HDR was detected. SDR tone mapping may be required for older 3D TVs."
+                    : "HDR was detected. SDR tone mapping may be required for some playback devices.",
+                targetPreset.UsesLegacyLgCompatibilityGuidance
+                    ? "Se detectó HDR. Puede requerirse conversión a SDR para televisores 3D antiguos."
+                    : "Se detectó HDR. Puede requerirse conversión a SDR para algunos dispositivos de reproducción."));
         }
 
         if (IsMkvSource(analysis))
         {
             issues.Add(new(
                 VideoCompatibilitySeverity.Information,
-                "MKV is a good master/archive source, but MP4 is recommended for direct playback on older LG 3D TVs.",
-                "MKV es una buena fuente maestra/de archivo, pero se recomienda MP4 para reproducción directa en televisores LG 3D antiguos."));
+                targetPreset.UsesLegacyLgCompatibilityGuidance
+                    ? "MKV is a good master/archive source, but MP4 is recommended for direct playback on older LG 3D TVs."
+                    : "MKV is a good master/archive source, but MP4 is recommended for broad playback compatibility.",
+                targetPreset.UsesLegacyLgCompatibilityGuidance
+                    ? "MKV es una buena fuente maestra/de archivo, pero se recomienda MP4 para reproducción directa en televisores LG 3D antiguos."
+                    : "MKV es una buena fuente maestra/de archivo, pero se recomienda MP4 para una amplia compatibilidad de reproducción."));
         }
 
         if (analysis.AudioStreams.Count == 0)

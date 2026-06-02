@@ -4,14 +4,15 @@ v3dfy is a Windows offline AI application for local 2D to 3D video conversion.
 It is designed as a .NET 10 WPF desktop app with a bundled local AI engine and
 no cloud conversion dependency.
 
-The primary target is **LG 3D Full HD 2012** televisions. The main compatibility
-preset produces MP4 output with H.264 video and Half Top-Bottom 3D layout. MKV
-remains available as an advanced/master output option.
+The default **General 3D video** preset produces MP4 output with H.264 video and
+Half Top-Bottom 3D layout. Device-specific presets, including **LG 3D Full HD
+2012**, provide tailored playback guidance. MKV remains available as an
+advanced/master output option.
 
 ## Current status
 
 The repository currently contains the application scaffold, testable domain
-models, the LG TV preset, internal tool path resolution, local engine health
+models, selectable output presets, internal tool path resolution, local engine health
 checks, iw3 command preview generation, offline distribution placeholders,
 support scripts, and initial packaging documentation.
 

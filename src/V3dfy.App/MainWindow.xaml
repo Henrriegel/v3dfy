@@ -337,6 +337,10 @@
                                            Style="{StaticResource MutedTextStyle}"
                                            Text="{Binding ConversionPlanStatusText}"
                                            TextWrapping="Wrap" />
+                                <TextBlock Margin="0,0,0,8"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding ConversionPlanPresetText}"
+                                           TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding ConversionPlanOutputPathText}"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding ConversionPlanOutputFormatText}"
@@ -378,8 +382,28 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource SectionTitleStyle}"
                                    Text="{Binding RecommendedPresetTitle}" />
-                        <TextBlock FontWeight="SemiBold" Text="{Binding PresetName}" />
-                        <TextBlock Margin="0,8,0,0" Text="{Binding PresetContainerText}" />
+                        <TextBlock Margin="0,0,0,4"
+                                   Style="{StaticResource MutedTextStyle}"
+                                   Text="{Binding OutputPresetLabel}" />
+                        <ComboBox DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding OutputPresetOptions}"
+                                  SelectedValue="{Binding SelectedOutputPreset}"
+                                  SelectedValuePath="Value" />
+                        <TextBlock Margin="0,10,0,0"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding PresetName}" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PresetDescriptionText}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PresetBestForText}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Margin="0,10,0,4"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding PresetTechnicalRecommendationTitle}" />
+                        <TextBlock Text="{Binding PresetContainerText}" />
                         <TextBlock Text="{Binding PresetVideoCodecText}" />
                         <TextBlock Text="{Binding PresetAudioCodecText}" />
                         <TextBlock Text="{Binding PresetResolutionText}" />
@@ -387,6 +411,10 @@
                         <TextBlock Margin="0,6,0,0"
                                    Style="{StaticResource MutedTextStyle}"
                                    Text="{Binding PresetAdvancedOutputText}" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PresetCompatibilityNoteText}"
+                                   TextWrapping="Wrap" />
                         <Border Margin="0,10,0,0"
                                 Padding="8"
                                 Background="{DynamicResource InputBackgroundBrush}"

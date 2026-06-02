@@ -62,8 +62,8 @@ public sealed class VideoConversionPlanService
                     $"Generate {GetLayoutName(options.ThreeDOutputFormat)} 3D frames with the bundled local iw3 engine.",
                     $"Generar cuadros 3D {GetLayoutName(options.ThreeDOutputFormat)} con el motor local iw3 incluido."),
                 new(
-                    $"Prepare the {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} TV-compatible output.",
-                    $"Preparar la salida compatible con TV en {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec}."),
+                    $"Prepare the {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} output for {targetPreset.Name}.",
+                    $"Preparar la salida {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} para {targetPreset.SpanishName}."),
                 new(
                     $"Write the converted video to {outputPath}.",
                     $"Guardar el video convertido en {outputPath}."),

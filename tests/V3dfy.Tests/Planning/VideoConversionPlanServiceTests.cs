@@ -84,6 +84,16 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
+    public void Create_GeneralPreset_UsesSelectedPresetInPlanStep()
+    {
+        var plan = CreatePlan(targetPreset: TargetDevicePresets.General3dVideo);
+
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains("General 3D video", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Create_UsesLgTvRecommendation()
     {
         var plan = CreatePlan();
@@ -122,17 +132,19 @@ public sealed class VideoConversionPlanServiceTests
     private VideoConversionPlan CreatePlan(
         string inputPath = @"C:\Videos\Movie.mp4",
         VideoConversionPlanOptions? options = null,
-        EngineHealthStatus? healthStatus = null)
+        EngineHealthStatus? healthStatus = null,
+        TargetDevicePreset? targetPreset = null)
     {
+        targetPreset ??= TargetDevicePresets.Lg3dFullHd2012;
         var analysis = CreateAnalysis(inputPath);
         var recommendation = new VideoConversionRecommendationService().Recommend(
             analysis,
-            TargetDevicePresets.Lg3dFullHd2012);
+            targetPreset);
 
         return _service.Create(
             analysis,
             recommendation,
-            TargetDevicePresets.Lg3dFullHd2012,
+            targetPreset,
             options ?? DefaultOptions(),
             Paths,
             healthStatus ?? CompleteHealth());

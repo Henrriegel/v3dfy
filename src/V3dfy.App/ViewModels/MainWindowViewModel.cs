@@ -41,6 +41,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoAnalysisResult? _analysis;
     private VideoConversionSetupRecommendation? _conversionRecommendation;
     private VideoConversionPlan? _conversionPlan;
+    private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private OutputContainer _selectedOutputContainer = OutputContainer.MP4;
     private AiQualityPreset _selectedQualityPreset = AiQualityPreset.Balanced;
     private ThreeDIntensity _selectedThreeDIntensity = ThreeDIntensity.Medium;
@@ -145,6 +146,30 @@ public sealed class MainWindowViewModel : ObservableObject
     public string SelectVideoText => Text("Select video", "Seleccionar video");
 
     public string AnalyzeText => Text("Analyze", "Analizar");
+
+    public IReadOnlyList<LocalizedOptionViewModel<TargetDevicePreset>> OutputPresetOptions { get; } =
+    [
+        new(TargetDevicePresets.General3dVideo, "General 3D video", "Video 3D general"),
+        new(TargetDevicePresets.Lg3dFullHd2012, "LG 3D Full HD 2012", "LG 3D Full HD 2012"),
+    ];
+
+    public TargetDevicePreset SelectedOutputPreset
+    {
+        get => _selectedOutputPreset;
+        set
+        {
+            if (SetProperty(ref _selectedOutputPreset, value))
+            {
+                ApplyPresetDefaults(value);
+                RegenerateRecommendationAndPlan();
+                RaisePresetPropertiesChanged();
+                RaiseAnalysisPropertiesChanged();
+                AddLog(
+                    $"Output preset changed to {value.Name}.",
+                    $"Perfil de salida cambiado a {value.SpanishName}.");
+            }
+        }
+    }
 
     public IReadOnlyList<LocalizedOptionViewModel<OutputContainer>> OutputContainerOptions { get; } =
     [
@@ -307,10 +332,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string AnalysisCompatibilityText => _analysis?.Video is
         { Width: { } width, Height: { } height } &&
-        (width > 1920 || height > 1080)
+        (width > SelectedOutputPreset.Recommendation.Width ||
+         height > SelectedOutputPreset.Recommendation.Height)
             ? Text(
-                "Compatibility note: resolution is higher than the LG Full HD target.",
-                "Nota de compatibilidad: la resolución supera el objetivo LG Full HD.")
+                "Compatibility note: resolution is higher than the selected preset target.",
+                "Nota de compatibilidad: la resolución supera el objetivo del perfil seleccionado.")
             : string.Empty;
 
     public string RecommendedSetupTitle => Text(
@@ -320,8 +346,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public string RecommendedSetupStatusText => _conversionRecommendation is null
         ? Text("No recommended setup yet.", "Aún no hay configuración recomendada.")
         : Text(
-            "Recommended setup for LG 3D Full HD 2012.",
-            "Configuración recomendada para LG 3D Full HD 2012.");
+            $"Recommended setup for {SelectedOutputPreset.Name}.",
+            $"Configuración recomendada para {SelectedOutputPreset.SpanishName}.");
 
     public string RecommendedOutputContainerText => RecommendationLabelValue(
         "Output container",
@@ -396,6 +422,10 @@ public sealed class MainWindowViewModel : ObservableObject
         : _conversionPlan.IsDryRun
             ? Text("Dry-run preview. Conversion is not started.", "Vista previa en seco. La conversión no se ha iniciado.")
             : Text("Ready for conversion when execution is enabled.", "Listo para convertir cuando se habilite la ejecución.");
+
+    public string ConversionPlanPresetText => Text(
+        $"Based on preset: {SelectedOutputPreset.Name}",
+        $"Basado en el perfil: {SelectedOutputPreset.SpanishName}");
 
     public string ConversionPlanOutputPathText => ConversionPlanLabelValue(
         "Output path",
@@ -474,50 +504,53 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ClearText => Text("Clear", "Limpiar");
 
     public string RecommendedPresetTitle => Text(
-        "Recommended TV preset",
-        "Perfil recomendado para TV");
+        "Selected output preset",
+        "Perfil de salida seleccionado");
 
-    public string PresetName => TargetDevicePresets.Lg3dFullHd2012.Name;
+    public string OutputPresetLabel => Text("Output preset", "Perfil de salida");
 
-    public string PresetContainerText => Text("Container", "Contenedor") +
-        $": {TargetDevicePresets.Lg3dFullHd2012.Recommendation.OutputContainer}";
+    public string PresetName => Text(SelectedOutputPreset.Name, SelectedOutputPreset.SpanishName);
+
+    public string PresetDescriptionText => Text("Description", "Descripción") +
+        $": {Text(SelectedOutputPreset.Description, SelectedOutputPreset.SpanishDescription)}";
+
+    public string PresetBestForText => Text("Best for", "Ideal para") +
+        $": {Text(SelectedOutputPreset.BestFor, SelectedOutputPreset.SpanishBestFor)}";
+
+    public string PresetTechnicalRecommendationTitle => Text(
+        "Technical recommendation",
+        "Recomendación técnica");
+
+    public string PresetContainerText => Text("Recommended container", "Contenedor recomendado") +
+        $": {SelectedOutputPreset.Recommendation.OutputContainer}";
 
     public string PresetVideoCodecText => Text("Codec", "Códec") +
-        $": {TargetDevicePresets.Lg3dFullHd2012.Recommendation.VideoCodec}";
+        $": {SelectedOutputPreset.Recommendation.VideoCodec}";
 
     public string PresetAudioCodecText => Text("Audio", "Audio") +
-        $": {TargetDevicePresets.Lg3dFullHd2012.Recommendation.AudioCodec}";
+        $": {SelectedOutputPreset.Recommendation.AudioCodec}";
 
-    public string PresetResolutionText => Text("Resolution", "Resolución") +
-        $": {TargetDevicePresets.Lg3dFullHd2012.Recommendation.Width}x" +
-        $"{TargetDevicePresets.Lg3dFullHd2012.Recommendation.Height}";
+    public string PresetResolutionText => Text("Target resolution", "Resolución objetivo") +
+        $": {SelectedOutputPreset.Recommendation.Width}x" +
+        $"{SelectedOutputPreset.Recommendation.Height}";
 
-    public string PresetThreeDLayoutText => Text("3D layout", "Diseño 3D") +
-        ": Half Top-Bottom";
+    public string PresetThreeDLayoutText => Text("Recommended 3D layout", "Diseño 3D recomendado") +
+        $": {ThreeDOutputFormatText(SelectedOutputPreset.Recommendation.ThreeDOutputFormat, IsSpanish)}";
 
     public string PresetAdvancedOutputText => Text(
         "MKV: advanced/master output",
         "MKV: salida avanzada/maestra");
 
+    public string PresetCompatibilityNoteText => Text("Compatibility note", "Nota de compatibilidad") +
+        $": {Text(SelectedOutputPreset.CompatibilityNote, SelectedOutputPreset.SpanishCompatibilityNote)}";
+
     public string TvPlaybackTitle => Text(
-        "How to watch on the TV",
-        "Cómo verlo en la TV");
+        SelectedOutputPreset.PlaybackTitle,
+        SelectedOutputPreset.SpanishPlaybackTitle);
 
     public string TvPlaybackInstructions => Text(
-        """
-        1. Copy the converted video to a USB drive or play it from your media player/server.
-        2. Open the video on the LG 3D TV.
-        3. Enable the TV 3D mode.
-        4. Select Top & Bottom mode.
-        5. Use your passive 3D glasses.
-        """,
-        """
-        1. Copia el video convertido a una USB o reprodúcelo desde tu servidor/reproductor.
-        2. Abre el video en la TV LG 3D.
-        3. Activa el modo 3D de la TV.
-        4. Selecciona Top & Bottom / Arriba-Abajo.
-        5. Usa tus lentes 3D pasivos.
-        """);
+        SelectedOutputPreset.PlaybackInstructions,
+        SelectedOutputPreset.SpanishPlaybackInstructions);
 
     public ObservableCollection<ToolStatusItemViewModel> ToolStatuses { get; } = [];
 
@@ -591,7 +624,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 _analysis = result.Analysis;
                 _conversionRecommendation = _recommendationService.Recommend(
                     _analysis,
-                    TargetDevicePresets.Lg3dFullHd2012);
+                    SelectedOutputPreset);
                 ApplyRecommendationDefaultsIfNeeded(_conversionRecommendation);
                 RegenerateConversionPlan();
                 RaiseAnalysisPropertiesChanged();
@@ -709,6 +742,28 @@ public sealed class MainWindowViewModel : ObservableObject
             nameof(SelectedThreeDOutputFormat));
     }
 
+    private void ApplyPresetDefaults(TargetDevicePreset preset)
+    {
+        var recommendation = preset.Recommendation;
+        _hasCustomizedPlanOptions = false;
+        SetProperty(ref _selectedOutputContainer, recommendation.OutputContainer, nameof(SelectedOutputContainer));
+        SetProperty(ref _selectedQualityPreset, AiQualityPreset.Balanced, nameof(SelectedQualityPreset));
+        SetProperty(ref _selectedThreeDIntensity, ThreeDIntensity.Medium, nameof(SelectedThreeDIntensity));
+        SetProperty(ref _selectedThreeDOutputFormat, recommendation.ThreeDOutputFormat, nameof(SelectedThreeDOutputFormat));
+    }
+
+    private void RegenerateRecommendationAndPlan()
+    {
+        if (_analysis is null)
+        {
+            return;
+        }
+
+        _conversionRecommendation = _recommendationService.Recommend(_analysis, SelectedOutputPreset);
+        RegenerateConversionPlan();
+        RaiseRecommendationPropertiesChanged();
+    }
+
     private bool RegenerateConversionPlan()
     {
         if (_analysis is null || _conversionRecommendation is null)
@@ -719,7 +774,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _conversionPlan = _conversionPlanService.Create(
             _analysis,
             _conversionRecommendation,
-            TargetDevicePresets.Lg3dFullHd2012,
+            SelectedOutputPreset,
             new VideoConversionPlanOptions(
                 SelectedOutputContainer,
                 SelectedQualityPreset,
@@ -779,6 +834,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void UpdatePlanOptionLanguages()
     {
+        foreach (var option in OutputPresetOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
         foreach (var option in OutputContainerOptions)
         {
             option.SetLanguage(IsSpanish);
@@ -819,13 +879,24 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(ActivityLogTitle));
         OnPropertyChanged(nameof(ClearText));
+        RaisePresetPropertiesChanged();
+    }
+
+    private void RaisePresetPropertiesChanged()
+    {
         OnPropertyChanged(nameof(RecommendedPresetTitle));
+        OnPropertyChanged(nameof(OutputPresetLabel));
+        OnPropertyChanged(nameof(PresetName));
+        OnPropertyChanged(nameof(PresetDescriptionText));
+        OnPropertyChanged(nameof(PresetBestForText));
+        OnPropertyChanged(nameof(PresetTechnicalRecommendationTitle));
         OnPropertyChanged(nameof(PresetContainerText));
         OnPropertyChanged(nameof(PresetVideoCodecText));
         OnPropertyChanged(nameof(PresetAudioCodecText));
         OnPropertyChanged(nameof(PresetResolutionText));
         OnPropertyChanged(nameof(PresetThreeDLayoutText));
         OnPropertyChanged(nameof(PresetAdvancedOutputText));
+        OnPropertyChanged(nameof(PresetCompatibilityNoteText));
         OnPropertyChanged(nameof(TvPlaybackTitle));
         OnPropertyChanged(nameof(TvPlaybackInstructions));
     }
@@ -871,6 +942,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ThreeDIntensityOptionLabel));
         OnPropertyChanged(nameof(ThreeDOutputFormatOptionLabel));
         OnPropertyChanged(nameof(ConversionPlanStatusText));
+        OnPropertyChanged(nameof(ConversionPlanPresetText));
         OnPropertyChanged(nameof(ConversionPlanOutputPathText));
         OnPropertyChanged(nameof(ConversionPlanOutputFormatText));
         OnPropertyChanged(nameof(ConversionPlanResolutionText));

@@ -79,6 +79,18 @@ public sealed class VideoConversionRecommendationServiceTests
             issue => issue.EnglishMessage.Contains("No audio streams", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void Recommend_GeneralPreset_UsesNeutralCompatibilityGuidance()
+    {
+        var recommendation = _service.Recommend(
+            CreateAnalysis(width: 3840, height: 2160),
+            TargetDevicePresets.General3dVideo);
+
+        Assert.Contains(
+            recommendation.CompatibilityIssues,
+            issue => issue.EnglishMessage.Contains("selected preset target", StringComparison.Ordinal));
+    }
+
     private VideoConversionSetupRecommendation Recommend(VideoAnalysisResult analysis) =>
         _service.Recommend(analysis, TargetDevicePresets.Lg3dFullHd2012);
 
