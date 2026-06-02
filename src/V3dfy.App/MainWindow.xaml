@@ -273,6 +273,66 @@
                         <TabItem Header="{Binding ConversionPlanTitle}"
                                  Style="{StaticResource WorkflowTabItemStyle}">
                             <StackPanel>
+                                <Border Margin="0,0,0,10"
+                                        Padding="10"
+                                        Background="{DynamicResource CardBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5">
+                                    <StackPanel>
+                                        <TextBlock Margin="0,0,0,8"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding PlanOptionsTitle}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="10" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="10" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Margin="0,0,0,4"
+                                                           Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding OutputContainerOptionLabel}" />
+                                                <ComboBox DisplayMemberPath="DisplayName"
+                                                          ItemsSource="{Binding OutputContainerOptions}"
+                                                          SelectedValue="{Binding SelectedOutputContainer}"
+                                                          SelectedValuePath="Value" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Margin="0,0,0,4"
+                                                           Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding QualityOptionLabel}" />
+                                                <ComboBox DisplayMemberPath="DisplayName"
+                                                          ItemsSource="{Binding QualityPresetOptions}"
+                                                          SelectedValue="{Binding SelectedQualityPreset}"
+                                                          SelectedValuePath="Value" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Row="2">
+                                                <TextBlock Margin="0,0,0,4"
+                                                           Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding ThreeDIntensityOptionLabel}" />
+                                                <ComboBox DisplayMemberPath="DisplayName"
+                                                          ItemsSource="{Binding ThreeDIntensityOptions}"
+                                                          SelectedValue="{Binding SelectedThreeDIntensity}"
+                                                          SelectedValuePath="Value" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Row="2" Grid.Column="2">
+                                                <TextBlock Margin="0,0,0,4"
+                                                           Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding ThreeDOutputFormatOptionLabel}" />
+                                                <ComboBox DisplayMemberPath="DisplayName"
+                                                          ItemsSource="{Binding ThreeDOutputFormatOptions}"
+                                                          SelectedValue="{Binding SelectedThreeDOutputFormat}"
+                                                          SelectedValuePath="Value" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
                                 <TextBlock Margin="0,0,0,8"
                                            Style="{StaticResource MutedTextStyle}"
                                            Text="{Binding ConversionPlanStatusText}"

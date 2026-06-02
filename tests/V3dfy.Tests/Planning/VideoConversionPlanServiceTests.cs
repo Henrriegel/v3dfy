@@ -35,6 +35,55 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
+    public void Create_MkvOption_SuggestsMkvOutput()
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            OutputContainer = OutputContainer.MKV,
+        });
+
+        Assert.Equal(OutputContainer.MKV, plan.OutputContainer);
+        Assert.EndsWith(".v3dfy.3d.htab.mkv", plan.SuggestedOutputPath);
+    }
+
+    [Fact]
+    public void Create_SelectedQuality_UpdatesPlanAndCommandPreview()
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            QualityPreset = AiQualityPreset.HighQuality,
+        });
+
+        Assert.Equal(AiQualityPreset.HighQuality, plan.QualityPreset);
+        Assert.Contains("--preset slow", plan.CommandPreview);
+    }
+
+    [Fact]
+    public void Create_SelectedIntensity_UpdatesPlanAndCommandPreview()
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            Intensity = ThreeDIntensity.High,
+        });
+
+        Assert.Equal(ThreeDIntensity.High, plan.Intensity);
+        Assert.Contains("-d 2.0", plan.CommandPreview);
+    }
+
+    [Fact]
+    public void Create_SelectedHalfSideBySide_UpdatesPlanOutputAndCommandPreview()
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            ThreeDOutputFormat = ThreeDOutputFormat.HalfSideBySide,
+        });
+
+        Assert.Equal(ThreeDOutputFormat.HalfSideBySide, plan.ThreeDOutputFormat);
+        Assert.EndsWith(".v3dfy.3d.hsbs.mp4", plan.SuggestedOutputPath);
+        Assert.Contains("--half-sbs", plan.CommandPreview);
+    }
+
+    [Fact]
     public void Create_UsesLgTvRecommendation()
     {
         var plan = CreatePlan();
@@ -72,6 +121,7 @@ public sealed class VideoConversionPlanServiceTests
 
     private VideoConversionPlan CreatePlan(
         string inputPath = @"C:\Videos\Movie.mp4",
+        VideoConversionPlanOptions? options = null,
         EngineHealthStatus? healthStatus = null)
     {
         var analysis = CreateAnalysis(inputPath);
@@ -83,9 +133,16 @@ public sealed class VideoConversionPlanServiceTests
             analysis,
             recommendation,
             TargetDevicePresets.Lg3dFullHd2012,
+            options ?? DefaultOptions(),
             Paths,
             healthStatus ?? CompleteHealth());
     }
+
+    private static VideoConversionPlanOptions DefaultOptions() => new(
+        OutputContainer: OutputContainer.MP4,
+        QualityPreset: AiQualityPreset.Balanced,
+        Intensity: ThreeDIntensity.Medium,
+        ThreeDOutputFormat: ThreeDOutputFormat.HalfTopBottom);
 
     private static VideoAnalysisResult CreateAnalysis(string inputPath) => new(
         InputPath: inputPath,

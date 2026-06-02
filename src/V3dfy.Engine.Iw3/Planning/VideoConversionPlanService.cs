@@ -14,36 +14,43 @@ public sealed class VideoConversionPlanService
         VideoAnalysisResult analysis,
         VideoConversionSetupRecommendation recommendation,
         TargetDevicePreset targetPreset,
+        VideoConversionPlanOptions options,
         InternalToolPaths paths,
         EngineHealthStatus healthStatus)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(recommendation);
         ArgumentNullException.ThrowIfNull(targetPreset);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(healthStatus);
 
-        var outputPath = SuggestOutputPath(analysis.InputPath, recommendation.OutputContainer);
+        var outputPath = string.IsNullOrWhiteSpace(options.CustomOutputPath)
+            ? SuggestOutputPath(
+                analysis.InputPath,
+                options.OutputContainer,
+                options.ThreeDOutputFormat)
+            : options.CustomOutputPath;
         var request = new ConversionRequest(
             InputPath: analysis.InputPath,
             OutputPath: outputPath,
-            OutputContainer: recommendation.OutputContainer,
-            ThreeDOutputFormat: recommendation.ThreeDOutputFormat,
-            AiQualityPreset: recommendation.QualityPreset,
-            ThreeDIntensity: recommendation.Intensity);
+            OutputContainer: options.OutputContainer,
+            ThreeDOutputFormat: options.ThreeDOutputFormat,
+            AiQualityPreset: options.QualityPreset,
+            ThreeDIntensity: options.Intensity);
         var command = _commandBuilder.Build(request, paths, healthStatus);
 
         return new(
             SourcePath: analysis.InputPath,
             SuggestedOutputPath: outputPath,
-            OutputContainer: recommendation.OutputContainer,
+            OutputContainer: options.OutputContainer,
             VideoCodec: recommendation.VideoCodec,
             AudioCodec: recommendation.AudioCodec,
             Width: recommendation.Width,
             Height: recommendation.Height,
-            ThreeDOutputFormat: recommendation.ThreeDOutputFormat,
-            QualityPreset: recommendation.QualityPreset,
-            Intensity: recommendation.Intensity,
+            ThreeDOutputFormat: options.ThreeDOutputFormat,
+            QualityPreset: options.QualityPreset,
+            Intensity: options.Intensity,
             Status: command.DryRun ? VideoConversionPlanStatus.DryRun : VideoConversionPlanStatus.Ready,
             DryRunReason: GetDryRunReason(healthStatus),
             Steps:
@@ -52,8 +59,8 @@ public sealed class VideoConversionPlanService
                     "Read the analyzed source video.",
                     "Leer el video de origen analizado."),
                 new(
-                    "Generate Half Top-Bottom 3D frames with the bundled local iw3 engine.",
-                    "Generar cuadros 3D Half Top-Bottom con el motor local iw3 incluido."),
+                    $"Generate {GetLayoutName(options.ThreeDOutputFormat)} 3D frames with the bundled local iw3 engine.",
+                    $"Generar cuadros 3D {GetLayoutName(options.ThreeDOutputFormat)} con el motor local iw3 incluido."),
                 new(
                     $"Prepare the {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} TV-compatible output.",
                     $"Preparar la salida compatible con TV en {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec}."),
@@ -64,17 +71,39 @@ public sealed class VideoConversionPlanService
             CommandPreview: command.FullCommandPreview);
     }
 
-    private static string SuggestOutputPath(string inputPath, OutputContainer outputContainer)
+    private static string GetLayoutName(ThreeDOutputFormat format) => format switch
+    {
+        ThreeDOutputFormat.HalfTopBottom => "Half Top-Bottom",
+        ThreeDOutputFormat.HalfSideBySide => "Half Side-by-Side",
+        ThreeDOutputFormat.FullSideBySide => "Full Side-by-Side",
+        ThreeDOutputFormat.Anaglyph => "Anaglyph",
+        _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
+    };
+
+    private static string SuggestOutputPath(
+        string inputPath,
+        OutputContainer outputContainer,
+        ThreeDOutputFormat threeDOutputFormat)
     {
         var directory = Path.GetDirectoryName(inputPath);
         var fileName = Path.GetFileNameWithoutExtension(inputPath);
         var extension = outputContainer.ToString().ToLowerInvariant();
-        var outputName = $"{fileName}.v3dfy.3d.htab.{extension}";
+        var layoutSuffix = GetLayoutSuffix(threeDOutputFormat);
+        var outputName = $"{fileName}.v3dfy.3d.{layoutSuffix}.{extension}";
 
         return string.IsNullOrWhiteSpace(directory)
             ? outputName
             : Path.Combine(directory, outputName);
     }
+
+    private static string GetLayoutSuffix(ThreeDOutputFormat format) => format switch
+    {
+        ThreeDOutputFormat.HalfTopBottom => "htab",
+        ThreeDOutputFormat.HalfSideBySide => "hsbs",
+        ThreeDOutputFormat.FullSideBySide => "sbs",
+        ThreeDOutputFormat.Anaglyph => "anaglyph",
+        _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
+    };
 
     private static ConversionDryRunReason GetDryRunReason(EngineHealthStatus healthStatus)
     {

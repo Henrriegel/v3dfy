@@ -41,6 +41,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoAnalysisResult? _analysis;
     private VideoConversionSetupRecommendation? _conversionRecommendation;
     private VideoConversionPlan? _conversionPlan;
+    private OutputContainer _selectedOutputContainer = OutputContainer.MP4;
+    private AiQualityPreset _selectedQualityPreset = AiQualityPreset.Balanced;
+    private ThreeDIntensity _selectedThreeDIntensity = ThreeDIntensity.Medium;
+    private ThreeDOutputFormat _selectedThreeDOutputFormat = ThreeDOutputFormat.HalfTopBottom;
+    private bool _hasCustomizedPlanOptions;
     private int _selectedWorkflowTabIndex;
     private bool _isAnalyzing;
 
@@ -95,6 +100,7 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 RaiseLocalizedPropertiesChanged();
                 UpdateToolStatuses();
+                UpdatePlanOptionLanguages();
                 UpdateLogLanguages();
                 AddLog("Language selected: English.", "Idioma seleccionado: Español.");
             }
@@ -139,6 +145,90 @@ public sealed class MainWindowViewModel : ObservableObject
     public string SelectVideoText => Text("Select video", "Seleccionar video");
 
     public string AnalyzeText => Text("Analyze", "Analizar");
+
+    public IReadOnlyList<LocalizedOptionViewModel<OutputContainer>> OutputContainerOptions { get; } =
+    [
+        new(OutputContainer.MP4, "MP4", "MP4"),
+        new(OutputContainer.MKV, "MKV", "MKV"),
+    ];
+
+    public IReadOnlyList<LocalizedOptionViewModel<AiQualityPreset>> QualityPresetOptions { get; } =
+    [
+        new(AiQualityPreset.Fast, "Fast", "Rápida"),
+        new(AiQualityPreset.Balanced, "Balanced", "Equilibrada"),
+        new(AiQualityPreset.HighQuality, "High quality", "Alta calidad"),
+    ];
+
+    public IReadOnlyList<LocalizedOptionViewModel<ThreeDIntensity>> ThreeDIntensityOptions { get; } =
+    [
+        new(ThreeDIntensity.Low, "Low", "Baja"),
+        new(ThreeDIntensity.Medium, "Medium", "Media"),
+        new(ThreeDIntensity.High, "High", "Alta"),
+    ];
+
+    public IReadOnlyList<LocalizedOptionViewModel<ThreeDOutputFormat>> ThreeDOutputFormatOptions { get; } =
+    [
+        new(ThreeDOutputFormat.HalfTopBottom, "Half Top-Bottom", "Medio Arriba-Abajo"),
+        new(ThreeDOutputFormat.HalfSideBySide, "Half Side-by-Side", "Medio Lado a Lado"),
+        new(ThreeDOutputFormat.FullSideBySide, "Full Side-by-Side", "Completo Lado a Lado"),
+        new(ThreeDOutputFormat.Anaglyph, "Anaglyph", "Anaglifo"),
+    ];
+
+    public OutputContainer SelectedOutputContainer
+    {
+        get => _selectedOutputContainer;
+        set
+        {
+            if (SetProperty(ref _selectedOutputContainer, value))
+            {
+                PlanOptionChanged(
+                    $"Output container changed to {value}.",
+                    $"Contenedor de salida cambiado a {value}.");
+            }
+        }
+    }
+
+    public AiQualityPreset SelectedQualityPreset
+    {
+        get => _selectedQualityPreset;
+        set
+        {
+            if (SetProperty(ref _selectedQualityPreset, value))
+            {
+                PlanOptionChanged(
+                    $"Quality changed to {QualityPresetText(value, useSpanish: false)}.",
+                    $"Calidad cambiada a {QualityPresetText(value, useSpanish: true)}.");
+            }
+        }
+    }
+
+    public ThreeDIntensity SelectedThreeDIntensity
+    {
+        get => _selectedThreeDIntensity;
+        set
+        {
+            if (SetProperty(ref _selectedThreeDIntensity, value))
+            {
+                PlanOptionChanged(
+                    $"3D intensity changed to {ThreeDIntensityText(value, useSpanish: false)}.",
+                    $"Intensidad 3D cambiada a {ThreeDIntensityText(value, useSpanish: true)}.");
+            }
+        }
+    }
+
+    public ThreeDOutputFormat SelectedThreeDOutputFormat
+    {
+        get => _selectedThreeDOutputFormat;
+        set
+        {
+            if (SetProperty(ref _selectedThreeDOutputFormat, value))
+            {
+                PlanOptionChanged(
+                    $"3D layout changed to {ThreeDOutputFormatText(value, useSpanish: false)}.",
+                    $"Diseño 3D cambiado a {ThreeDOutputFormatText(value, useSpanish: true)}.");
+            }
+        }
+    }
 
     public int SelectedWorkflowTabIndex
     {
@@ -265,16 +355,16 @@ public sealed class MainWindowViewModel : ObservableObject
     public string RecommendedQualityText => RecommendationLabelValue(
         "Quality",
         "Calidad",
-        _conversionRecommendation?.QualityPreset == AiQualityPreset.Balanced
-            ? Text("Balanced", "Equilibrada")
-            : _conversionRecommendation?.QualityPreset.ToString());
+        _conversionRecommendation is null
+            ? null
+            : QualityPresetText(_conversionRecommendation.QualityPreset, IsSpanish));
 
     public string RecommendedIntensityText => RecommendationLabelValue(
         "3D intensity",
         "Intensidad 3D",
-        _conversionRecommendation?.Intensity == ThreeDIntensity.Medium
-            ? Text("Medium", "Media")
-            : _conversionRecommendation?.Intensity.ToString());
+        _conversionRecommendation is null
+            ? null
+            : ThreeDIntensityText(_conversionRecommendation.Intensity, IsSpanish));
 
     public string RecommendedNotesTitle => Text(
         "Notes / compatibility warnings",
@@ -290,6 +380,16 @@ public sealed class MainWindowViewModel : ObservableObject
                     $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
 
     public string ConversionPlanTitle => Text("Conversion plan", "Plan de conversión");
+
+    public string PlanOptionsTitle => Text("Plan options", "Opciones del plan");
+
+    public string OutputContainerOptionLabel => Text("Output container", "Contenedor de salida");
+
+    public string QualityOptionLabel => Text("Quality", "Calidad");
+
+    public string ThreeDIntensityOptionLabel => Text("3D intensity", "Intensidad 3D");
+
+    public string ThreeDOutputFormatOptionLabel => Text("3D layout", "Diseño 3D");
 
     public string ConversionPlanStatusText => _conversionPlan is null
         ? Text("No conversion plan yet.", "Aún no hay plan de conversión.")
@@ -319,23 +419,23 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ConversionPlanThreeDLayoutText => ConversionPlanLabelValue(
         "3D layout",
         "Diseño 3D",
-        _conversionPlan?.ThreeDOutputFormat == ThreeDOutputFormat.HalfTopBottom
-            ? "Half Top-Bottom"
-            : _conversionPlan?.ThreeDOutputFormat.ToString());
+        _conversionPlan is null
+            ? null
+            : ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat, IsSpanish));
 
     public string ConversionPlanQualityText => ConversionPlanLabelValue(
         "Quality",
         "Calidad",
-        _conversionPlan?.QualityPreset == AiQualityPreset.Balanced
-            ? Text("Balanced", "Equilibrada")
-            : _conversionPlan?.QualityPreset.ToString());
+        _conversionPlan is null
+            ? null
+            : QualityPresetText(_conversionPlan.QualityPreset, IsSpanish));
 
     public string ConversionPlanIntensityText => ConversionPlanLabelValue(
         "3D intensity",
         "Intensidad 3D",
-        _conversionPlan?.Intensity == ThreeDIntensity.Medium
-            ? Text("Medium", "Media")
-            : _conversionPlan?.Intensity.ToString());
+        _conversionPlan is null
+            ? null
+            : ThreeDIntensityText(_conversionPlan.Intensity, IsSpanish));
 
     public string ConversionPlanDryRunReasonText => _conversionPlan?.DryRunReason switch
     {
@@ -492,12 +592,8 @@ public sealed class MainWindowViewModel : ObservableObject
                 _conversionRecommendation = _recommendationService.Recommend(
                     _analysis,
                     TargetDevicePresets.Lg3dFullHd2012);
-                _conversionPlan = _conversionPlanService.Create(
-                    _analysis,
-                    _conversionRecommendation,
-                    TargetDevicePresets.Lg3dFullHd2012,
-                    _toolPaths,
-                    _toolHealth ?? _healthChecker.Check(_toolPaths));
+                ApplyRecommendationDefaultsIfNeeded(_conversionRecommendation);
+                RegenerateConversionPlan();
                 RaiseAnalysisPropertiesChanged();
                 RaiseRecommendationPropertiesChanged();
                 RaiseConversionPlanPropertiesChanged();
@@ -577,6 +673,90 @@ public sealed class MainWindowViewModel : ObservableObject
         !string.IsNullOrWhiteSpace(path) &&
         SupportedVideoExtensions.Contains(Path.GetExtension(path));
 
+    private void PlanOptionChanged(string englishMessage, string spanishMessage)
+    {
+        _hasCustomizedPlanOptions = true;
+
+        if (RegenerateConversionPlan())
+        {
+            AddLog(englishMessage, spanishMessage);
+        }
+    }
+
+    private void ApplyRecommendationDefaultsIfNeeded(
+        VideoConversionSetupRecommendation recommendation)
+    {
+        if (_hasCustomizedPlanOptions)
+        {
+            return;
+        }
+
+        SetProperty(
+            ref _selectedOutputContainer,
+            recommendation.OutputContainer,
+            nameof(SelectedOutputContainer));
+        SetProperty(
+            ref _selectedQualityPreset,
+            recommendation.QualityPreset,
+            nameof(SelectedQualityPreset));
+        SetProperty(
+            ref _selectedThreeDIntensity,
+            recommendation.Intensity,
+            nameof(SelectedThreeDIntensity));
+        SetProperty(
+            ref _selectedThreeDOutputFormat,
+            recommendation.ThreeDOutputFormat,
+            nameof(SelectedThreeDOutputFormat));
+    }
+
+    private bool RegenerateConversionPlan()
+    {
+        if (_analysis is null || _conversionRecommendation is null)
+        {
+            return false;
+        }
+
+        _conversionPlan = _conversionPlanService.Create(
+            _analysis,
+            _conversionRecommendation,
+            TargetDevicePresets.Lg3dFullHd2012,
+            new VideoConversionPlanOptions(
+                SelectedOutputContainer,
+                SelectedQualityPreset,
+                SelectedThreeDIntensity,
+                SelectedThreeDOutputFormat),
+            _toolPaths,
+            _toolHealth ?? _healthChecker.Check(_toolPaths));
+        RaiseConversionPlanPropertiesChanged();
+        return true;
+    }
+
+    private static string QualityPresetText(AiQualityPreset value, bool useSpanish) => value switch
+    {
+        AiQualityPreset.Fast => useSpanish ? "Rápida" : "Fast",
+        AiQualityPreset.Balanced => useSpanish ? "Equilibrada" : "Balanced",
+        AiQualityPreset.HighQuality => useSpanish ? "Alta calidad" : "High quality",
+        _ => value.ToString(),
+    };
+
+    private static string ThreeDIntensityText(ThreeDIntensity value, bool useSpanish) => value switch
+    {
+        ThreeDIntensity.Low => useSpanish ? "Baja" : "Low",
+        ThreeDIntensity.Medium => useSpanish ? "Media" : "Medium",
+        ThreeDIntensity.High => useSpanish ? "Alta" : "High",
+        ThreeDIntensity.Custom => useSpanish ? "Personalizada" : "Custom",
+        _ => value.ToString(),
+    };
+
+    private static string ThreeDOutputFormatText(ThreeDOutputFormat value, bool useSpanish) => value switch
+    {
+        ThreeDOutputFormat.HalfTopBottom => useSpanish ? "Medio Arriba-Abajo" : "Half Top-Bottom",
+        ThreeDOutputFormat.HalfSideBySide => useSpanish ? "Medio Lado a Lado" : "Half Side-by-Side",
+        ThreeDOutputFormat.FullSideBySide => useSpanish ? "Completo Lado a Lado" : "Full Side-by-Side",
+        ThreeDOutputFormat.Anaglyph => useSpanish ? "Anaglifo" : "Anaglyph",
+        _ => value.ToString(),
+    };
+
     private string Text(string english, string spanish) => IsSpanish ? spanish : english;
 
     private string LabelValue(string englishLabel, string spanishLabel, string? value) =>
@@ -594,6 +774,29 @@ public sealed class MainWindowViewModel : ObservableObject
         foreach (var log in Logs)
         {
             log.SetLanguage(IsSpanish);
+        }
+    }
+
+    private void UpdatePlanOptionLanguages()
+    {
+        foreach (var option in OutputContainerOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in QualityPresetOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in ThreeDIntensityOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in ThreeDOutputFormatOptions)
+        {
+            option.SetLanguage(IsSpanish);
         }
     }
 
@@ -662,6 +865,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseConversionPlanPropertiesChanged()
     {
         OnPropertyChanged(nameof(ConversionPlanTitle));
+        OnPropertyChanged(nameof(PlanOptionsTitle));
+        OnPropertyChanged(nameof(OutputContainerOptionLabel));
+        OnPropertyChanged(nameof(QualityOptionLabel));
+        OnPropertyChanged(nameof(ThreeDIntensityOptionLabel));
+        OnPropertyChanged(nameof(ThreeDOutputFormatOptionLabel));
         OnPropertyChanged(nameof(ConversionPlanStatusText));
         OnPropertyChanged(nameof(ConversionPlanOutputPathText));
         OnPropertyChanged(nameof(ConversionPlanOutputFormatText));
