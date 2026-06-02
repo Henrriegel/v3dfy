@@ -200,6 +200,14 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="{DynamicResource ComboBoxForegroundBrush}" />
+            <Setter Property="Background" Value="{DynamicResource ComboBoxBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ComboBoxBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="CaretBrush" Value="{DynamicResource ComboBoxForegroundBrush}" />
+        </Style>
         <Style x:Key="ModernScrollBarThumbStyle" TargetType="Thumb">
             <Setter Property="MinHeight" Value="28" />
             <Setter Property="Template">

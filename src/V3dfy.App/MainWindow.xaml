@@ -333,6 +333,39 @@
                                         </Grid>
                                     </StackPanel>
                                 </Border>
+                                <Border Margin="0,0,0,10"
+                                        Padding="10"
+                                        Background="{DynamicResource CardBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5">
+                                    <StackPanel>
+                                        <TextBlock Margin="0,0,0,8"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding OutputLocationTitle}" />
+                                        <TextBlock Margin="0,0,0,4"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding OutputPathLabel}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Text="{Binding OutputPathText}" />
+                                            <Button Grid.Column="2"
+                                                    Padding="10,5"
+                                                    Command="{Binding BrowseOutputFolderCommand}"
+                                                    Content="{Binding BrowseOutputFolderText}" />
+                                            <Button Grid.Column="4"
+                                                    Padding="10,5"
+                                                    Command="{Binding ResetOutputPathCommand}"
+                                                    Content="{Binding ResetOutputPathText}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
                                 <TextBlock Margin="0,0,0,8"
                                            Style="{StaticResource MutedTextStyle}"
                                            Text="{Binding ConversionPlanStatusText}"

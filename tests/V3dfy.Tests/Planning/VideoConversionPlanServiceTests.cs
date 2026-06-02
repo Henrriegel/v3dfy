@@ -47,6 +47,18 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
+    public void Create_CustomOutputPath_UsesExactPath()
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            CustomOutputPath = @"D:\Converted\ManualName.custom",
+        });
+
+        Assert.Equal(@"D:\Converted\ManualName.custom", plan.SuggestedOutputPath);
+        Assert.Contains(@"D:\Converted\ManualName.custom", plan.CommandPreview);
+    }
+
+    [Fact]
     public void Create_SelectedQuality_UpdatesPlanAndCommandPreview()
     {
         var plan = CreatePlan(options: DefaultOptions() with
@@ -81,6 +93,38 @@ public sealed class VideoConversionPlanServiceTests
         Assert.Equal(ThreeDOutputFormat.HalfSideBySide, plan.ThreeDOutputFormat);
         Assert.EndsWith(".v3dfy.3d.hsbs.mp4", plan.SuggestedOutputPath);
         Assert.Contains("--half-sbs", plan.CommandPreview);
+    }
+
+    [Theory]
+    [InlineData(ThreeDOutputFormat.HalfTopBottom, ".v3dfy.3d.htab.mp4")]
+    [InlineData(ThreeDOutputFormat.HalfSideBySide, ".v3dfy.3d.hsbs.mp4")]
+    [InlineData(ThreeDOutputFormat.FullSideBySide, ".v3dfy.3d.sbs.mp4")]
+    [InlineData(ThreeDOutputFormat.Anaglyph, ".v3dfy.3d.anaglyph.mp4")]
+    public void Create_AutomaticOutputPath_UsesLayoutSuffix(
+        ThreeDOutputFormat outputFormat,
+        string expectedSuffix)
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            ThreeDOutputFormat = outputFormat,
+        });
+
+        Assert.EndsWith(expectedSuffix, plan.SuggestedOutputPath);
+    }
+
+    [Theory]
+    [InlineData(OutputContainer.MP4, ".mp4")]
+    [InlineData(OutputContainer.MKV, ".mkv")]
+    public void Create_AutomaticOutputPath_UsesSelectedContainerExtension(
+        OutputContainer outputContainer,
+        string expectedExtension)
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            OutputContainer = outputContainer,
+        });
+
+        Assert.EndsWith(expectedExtension, plan.SuggestedOutputPath);
     }
 
     [Fact]

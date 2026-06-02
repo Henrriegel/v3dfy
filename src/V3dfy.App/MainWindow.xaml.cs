@@ -11,10 +11,10 @@ public partial class MainWindow : Window
         DataContext = new MainWindowViewModel();
     }
 
-    private void OnDrop(object sender, DragEventArgs e)
+    private void OnDrop(object sender, System.Windows.DragEventArgs e)
     {
         if (DataContext is MainWindowViewModel viewModel &&
-            e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } files)
+            e.Data.GetData(System.Windows.DataFormats.FileDrop) is string[] { Length: 1 } files)
         {
             viewModel.SelectDroppedVideo(files[0]);
         }

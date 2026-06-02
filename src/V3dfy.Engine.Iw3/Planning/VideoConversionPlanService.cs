@@ -26,7 +26,7 @@ public sealed class VideoConversionPlanService
         ArgumentNullException.ThrowIfNull(healthStatus);
 
         var outputPath = string.IsNullOrWhiteSpace(options.CustomOutputPath)
-            ? SuggestOutputPath(
+            ? CreateSuggestedOutputPath(
                 analysis.InputPath,
                 options.OutputContainer,
                 options.ThreeDOutputFormat)
@@ -80,7 +80,7 @@ public sealed class VideoConversionPlanService
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
     };
 
-    private static string SuggestOutputPath(
+    public static string CreateSuggestedOutputPath(
         string inputPath,
         OutputContainer outputContainer,
         ThreeDOutputFormat threeDOutputFormat)

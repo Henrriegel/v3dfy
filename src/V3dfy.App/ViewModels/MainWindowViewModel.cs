@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using Microsoft.Win32;
+using Forms = System.Windows.Forms;
 using V3dfy.App.Mvvm;
 using V3dfy.App.Services;
 using V3dfy.Core.Analysis;
@@ -42,11 +43,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoConversionSetupRecommendation? _conversionRecommendation;
     private VideoConversionPlan? _conversionPlan;
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
+    private string? _customOutputPath;
+    private string _outputPathText = string.Empty;
     private OutputContainer _selectedOutputContainer = OutputContainer.MP4;
     private AiQualityPreset _selectedQualityPreset = AiQualityPreset.Balanced;
     private ThreeDIntensity _selectedThreeDIntensity = ThreeDIntensity.Medium;
     private ThreeDOutputFormat _selectedThreeDOutputFormat = ThreeDOutputFormat.HalfTopBottom;
     private bool _hasCustomizedPlanOptions;
+    private bool _isUpdatingOutputPathText;
     private int _selectedWorkflowTabIndex;
     private bool _isAnalyzing;
 
@@ -66,6 +70,8 @@ public sealed class MainWindowViewModel : ObservableObject
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
         RefreshEngineStatusCommand = new RelayCommand(RefreshEngineStatus);
         ClearLogsCommand = new RelayCommand(Logs.Clear);
+        BrowseOutputFolderCommand = new RelayCommand(BrowseOutputFolder);
+        ResetOutputPathCommand = new RelayCommand(ResetOutputPath);
 
         _themeService.Apply(_selectedTheme);
         RefreshEngineStatus();
@@ -417,6 +423,28 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ThreeDOutputFormatOptionLabel => Text("3D layout", "Diseño 3D");
 
+    public string OutputLocationTitle => Text("Output location", "Ubicación de salida");
+
+    public string OutputPathLabel => Text("Output path", "Ruta de salida");
+
+    public string BrowseOutputFolderText => Text("Browse...", "Examinar...");
+
+    public string ResetOutputPathText => Text("Reset", "Restablecer");
+
+    public bool HasCustomOutputPath => !string.IsNullOrWhiteSpace(_customOutputPath);
+
+    public string OutputPathText
+    {
+        get => _outputPathText;
+        set
+        {
+            if (SetProperty(ref _outputPathText, value) && !_isUpdatingOutputPathText)
+            {
+                CommitOutputPath(value);
+            }
+        }
+    }
+
     public string ConversionPlanStatusText => _conversionPlan is null
         ? Text("No conversion plan yet.", "Aún no hay plan de conversión.")
         : _conversionPlan.IsDryRun
@@ -564,6 +592,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand ClearLogsCommand { get; }
 
+    public RelayCommand BrowseOutputFolderCommand { get; }
+
+    public RelayCommand ResetOutputPathCommand { get; }
+
     public void SelectDroppedVideo(string path)
     {
         if (!IsSupportedVideoFile(path))
@@ -582,7 +614,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void SelectVideo()
     {
-        var dialog = new OpenFileDialog
+        var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Title = Text("Select a video", "Selecciona un video"),
             Filter = Text("Video files", "Archivos de video") +
@@ -696,6 +728,9 @@ public sealed class MainWindowViewModel : ObservableObject
         _analysis = null;
         _conversionRecommendation = null;
         _conversionPlan = null;
+        _customOutputPath = null;
+        OnPropertyChanged(nameof(HasCustomOutputPath));
+        SetOutputPathText(string.Empty);
         RaiseAnalysisPropertiesChanged();
         RaiseRecommendationPropertiesChanged();
         RaiseConversionPlanPropertiesChanged();
@@ -713,6 +748,141 @@ public sealed class MainWindowViewModel : ObservableObject
         if (RegenerateConversionPlan())
         {
             AddLog(englishMessage, spanishMessage);
+        }
+    }
+
+    private void CommitOutputPath(string value)
+    {
+        var normalizedPath = string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Trim();
+
+        if (string.Equals(_customOutputPath, normalizedPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _customOutputPath = normalizedPath;
+        OnPropertyChanged(nameof(HasCustomOutputPath));
+
+        if (RegenerateConversionPlan())
+        {
+            if (normalizedPath is null)
+            {
+                AddLog(
+                    "Output path reset to automatic suggestion.",
+                    "Ruta de salida restablecida a la sugerencia automática.");
+            }
+            else
+            {
+                AddLog(
+                    $"Output path changed to {normalizedPath}.",
+                    $"Ruta de salida cambiada a {normalizedPath}.");
+            }
+        }
+    }
+
+    private void BrowseOutputFolder()
+    {
+        var automaticPath = GetAutomaticOutputPath();
+        if (automaticPath is null)
+        {
+            AddLog(
+                "Select a video before choosing an output folder.",
+                "Selecciona un video antes de elegir una carpeta de salida.");
+            return;
+        }
+
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = Text("Choose output folder", "Elige la carpeta de salida"),
+            UseDescriptionForTitle = true,
+            SelectedPath = GetInitialOutputDirectory() ?? string.Empty,
+        };
+
+        if (dialog.ShowDialog() != Forms.DialogResult.OK ||
+            string.IsNullOrWhiteSpace(dialog.SelectedPath))
+        {
+            return;
+        }
+
+        var outputPath = Path.Combine(dialog.SelectedPath, Path.GetFileName(automaticPath));
+        SetCustomOutputPath(outputPath, logChange: true);
+    }
+
+    private void ResetOutputPath()
+    {
+        if (_customOutputPath is null)
+        {
+            return;
+        }
+
+        _customOutputPath = null;
+        OnPropertyChanged(nameof(HasCustomOutputPath));
+
+        if (RegenerateConversionPlan())
+        {
+            AddLog(
+                "Output path reset to automatic suggestion.",
+                "Ruta de salida restablecida a la sugerencia automática.");
+        }
+        else
+        {
+            SetOutputPathText(GetAutomaticOutputPath() ?? string.Empty);
+        }
+    }
+
+    private void SetCustomOutputPath(string outputPath, bool logChange)
+    {
+        if (string.Equals(_customOutputPath, outputPath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _customOutputPath = outputPath;
+        OnPropertyChanged(nameof(HasCustomOutputPath));
+        SetOutputPathText(outputPath);
+
+        if (RegenerateConversionPlan() && logChange)
+        {
+            AddLog(
+                $"Output path changed to {outputPath}.",
+                $"Ruta de salida cambiada a {outputPath}.");
+        }
+    }
+
+    private string? GetAutomaticOutputPath()
+    {
+        var inputPath = _analysis?.InputPath ?? SelectedVideoPath;
+        return string.IsNullOrWhiteSpace(inputPath)
+            ? null
+            : VideoConversionPlanService.CreateSuggestedOutputPath(
+                inputPath,
+                SelectedOutputContainer,
+                SelectedThreeDOutputFormat);
+    }
+
+    private string? GetInitialOutputDirectory()
+    {
+        var outputPath = string.IsNullOrWhiteSpace(_customOutputPath)
+            ? GetAutomaticOutputPath()
+            : _customOutputPath;
+
+        return string.IsNullOrWhiteSpace(outputPath)
+            ? null
+            : Path.GetDirectoryName(outputPath);
+    }
+
+    private void SetOutputPathText(string value)
+    {
+        _isUpdatingOutputPathText = true;
+        try
+        {
+            SetProperty(ref _outputPathText, value, nameof(OutputPathText));
+        }
+        finally
+        {
+            _isUpdatingOutputPathText = false;
         }
     }
 
@@ -779,10 +949,14 @@ public sealed class MainWindowViewModel : ObservableObject
                 SelectedOutputContainer,
                 SelectedQualityPreset,
                 SelectedThreeDIntensity,
-                SelectedThreeDOutputFormat),
+                SelectedThreeDOutputFormat,
+                // Manual paths are preserved exactly across option changes.
+                // Use Reset to return to automatic suffix and extension naming.
+                _customOutputPath),
             _toolPaths,
             _toolHealth ?? _healthChecker.Check(_toolPaths));
         RaiseConversionPlanPropertiesChanged();
+        SetOutputPathText(_conversionPlan.SuggestedOutputPath);
         return true;
     }
 
@@ -941,6 +1115,10 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(QualityOptionLabel));
         OnPropertyChanged(nameof(ThreeDIntensityOptionLabel));
         OnPropertyChanged(nameof(ThreeDOutputFormatOptionLabel));
+        OnPropertyChanged(nameof(OutputLocationTitle));
+        OnPropertyChanged(nameof(OutputPathLabel));
+        OnPropertyChanged(nameof(BrowseOutputFolderText));
+        OnPropertyChanged(nameof(ResetOutputPathText));
         OnPropertyChanged(nameof(ConversionPlanStatusText));
         OnPropertyChanged(nameof(ConversionPlanPresetText));
         OnPropertyChanged(nameof(ConversionPlanOutputPathText));

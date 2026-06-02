@@ -39,6 +39,8 @@ public sealed class AppThemeService
     }
 
     private static void SetBrush(string key, string hexColor) =>
-        Application.Current.Resources[key] =
-            new SolidColorBrush((Color)ColorConverter.ConvertFromString(hexColor));
+        System.Windows.Application.Current.Resources[key] =
+            new SolidColorBrush(
+                (System.Windows.Media.Color)System.Windows.Media.ColorConverter
+                    .ConvertFromString(hexColor));
 }
