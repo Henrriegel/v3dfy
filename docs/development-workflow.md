@@ -2,14 +2,16 @@
 
 ## Repository scope
 
-Work only inside `C:\dev\v3dfy`. Keep Codex tasks scoped to the current request
-and do not resume or modify old Codex tasks unless explicitly requested.
+Work only inside `C:\dev\v3dfy`. Keep implementation tasks scoped to the current
+request and do not resume or modify unrelated previous work unless explicitly
+requested.
 
 ## GitHub Desktop workflow
 
-1. Review the current changes in GitHub Desktop before starting a Codex task.
+1. Review the current changes in GitHub Desktop before starting an implementation
+   task.
 2. Create a clear checkpoint commit manually when the worktree is ready.
-3. Ask Codex to implement one scoped change.
+3. Implement one scoped change.
 4. Review the resulting diff in GitHub Desktop.
 5. Run build and tests before committing:
 
@@ -20,4 +22,5 @@ and do not resume or modify old Codex tasks unless explicitly requested.
 
 6. Commit manually in GitHub Desktop after the validation result is understood.
 
-Codex must not create branches, commit, or push unless explicitly requested.
+Do not create branches, commit, or push from automation or scripts unless
+explicitly requested.

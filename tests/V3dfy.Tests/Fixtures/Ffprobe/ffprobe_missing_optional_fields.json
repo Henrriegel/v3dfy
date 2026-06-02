@@ -1,0 +1,21 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_type": "video",
+      "avg_frame_rate": "0/0",
+      "r_frame_rate": "not-a-rate"
+    },
+    {
+      "index": 1,
+      "codec_type": "audio"
+    },
+    {
+      "index": 2,
+      "codec_type": "subtitle"
+    }
+  ],
+  "format": {
+    "duration": "not-a-duration"
+  }
+}

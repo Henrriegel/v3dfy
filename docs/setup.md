@@ -6,7 +6,6 @@
 - Visual Studio with the **.NET desktop development** workload.
 - .NET 10 SDK.
 - Git and GitHub Desktop.
-- Codex CLI for repository-scoped implementation work.
 
 Run the local environment check from the repository root:
 

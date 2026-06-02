@@ -1,0 +1,52 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "hevc",
+      "codec_type": "video",
+      "width": 3840,
+      "height": 2160,
+      "pix_fmt": "yuv420p10le",
+      "avg_frame_rate": "0/0",
+      "r_frame_rate": "30000/1001",
+      "color_transfer": "smpte2084",
+      "color_space": "bt2020nc",
+      "color_primaries": "bt2020"
+    },
+    {
+      "index": 1,
+      "codec_name": "eac3",
+      "codec_type": "audio",
+      "sample_rate": "48000",
+      "channels": 6,
+      "channel_layout": "5.1(side)",
+      "tags": { "language": "eng" }
+    },
+    {
+      "index": 2,
+      "codec_name": "aac",
+      "codec_type": "audio",
+      "sample_rate": "48000",
+      "channels": 2,
+      "channel_layout": "stereo",
+      "tags": { "language": "spa" }
+    },
+    {
+      "index": 3,
+      "codec_name": "subrip",
+      "codec_type": "subtitle",
+      "tags": { "language": "eng" }
+    },
+    {
+      "index": 4,
+      "codec_name": "subrip",
+      "codec_type": "subtitle",
+      "tags": { "language": "spa" }
+    }
+  ],
+  "format": {
+    "format_name": "matroska,webm",
+    "duration": "7200.500",
+    "bit_rate": "18250000"
+  }
+}
