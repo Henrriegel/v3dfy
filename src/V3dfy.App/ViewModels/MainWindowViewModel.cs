@@ -39,6 +39,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly VideoConversionRecommendationService _recommendationService;
     private readonly VideoConversionPlanService _conversionPlanService;
     private readonly ConversionReadinessService _conversionReadinessService;
+    private readonly ConversionExecutionFeatureGate _conversionExecutionFeatureGate;
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
@@ -73,6 +74,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _recommendationService = new VideoConversionRecommendationService();
         _conversionPlanService = new VideoConversionPlanService();
         _conversionReadinessService = new ConversionReadinessService();
+        _conversionExecutionFeatureGate = new ConversionExecutionFeatureGate();
 
         SelectVideoCommand = new RelayCommand(SelectVideo);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
@@ -650,13 +652,19 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Text(
                 "Prepare a conversion plan before converting.",
                 "Prepara un plan de conversión antes de convertir.")
+            : _conversionReadiness?.CanConvert == true
+                ? Text(
+                    "Conversion is not enabled yet. The local execution runner still needs to be connected.",
+                    "La conversi\u00f3n a\u00fan no est\u00e1 habilitada. Todav\u00eda falta conectar el ejecutor local.")
             : Text(
                 "This button will become available after the local engine, embedded runtime and models are bundled.",
                 "Este botón estará disponible cuando se incluyan el motor local, el runtime embebido y los modelos.");
 
     public bool CanStartConversion =>
-        _conversionPlan is not null &&
-        _conversionReadiness?.CanConvert == true;
+        _conversionExecutionFeatureGate.CanStartConversion(
+            HasCompletedAnalysis,
+            _conversionPlan is not null,
+            _conversionReadiness);
 
     public string StartConversionText => Text("Convert", "Convertir");
 
@@ -966,6 +974,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void StartConversion()
     {
+        if (!_conversionExecutionFeatureGate.IsRealConversionExecutionEnabled)
+        {
+            AddLog(
+                "Conversion execution is not enabled yet.",
+                "La ejecuci\u00f3n de conversi\u00f3n a\u00fan no est\u00e1 habilitada.");
+            return;
+        }
+
         if (!CanStartConversion)
         {
             AddLog(
