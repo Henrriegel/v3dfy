@@ -69,7 +69,9 @@ public sealed class MainWindowViewModel : ObservableObject
         _themeService = new AppThemeService();
         _videoAnalysisService = new FfprobeVideoAnalysisService(
             _toolPaths,
-            new LocalProcessRunner(),
+            new BundledLocalProcessRunner(
+                new LocalProcessRunner(),
+                Path.GetDirectoryName(_toolPaths.FfprobeExecutable)),
             new FfprobeJsonParser());
         _recommendationService = new VideoConversionRecommendationService();
         _conversionPlanService = new VideoConversionPlanService();

@@ -115,7 +115,8 @@ public sealed class FfprobeVideoAnalysisService : IFfprobeVideoAnalysisService
             request.InputPath,
         ],
         Timeout: request.Timeout ?? DefaultTimeout,
-        CaptureStandardError: true);
+        CaptureStandardError: true,
+        AllowedRootDirectory: Path.GetDirectoryName(_paths.FfprobeExecutable));
 
     private static VideoAnalysisServiceResult Failed(
         VideoAnalysisFailureKind kind,

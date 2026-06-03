@@ -3,6 +3,9 @@ using V3dfy.Infrastructure.Processes;
 
 namespace V3dfy.Tests.Infrastructure;
 
+// Tests marked Category=Integration start a real local cmd.exe process.
+// Default validation excludes them; run them manually when process execution
+// behavior itself needs verification.
 public sealed class LocalProcessRunnerTests
 {
     private readonly LocalProcessRunner _runner = new();
@@ -27,6 +30,7 @@ public sealed class LocalProcessRunnerTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task RunAsync_CapturesStandardOutput()
     {
         var result = await _runner.RunAsync(CreateRequest(
@@ -44,6 +48,7 @@ public sealed class LocalProcessRunnerTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task RunAsync_CapturesStandardErrorAndNonZeroExitCode()
     {
         var result = await _runner.RunAsync(CreateRequest(
@@ -61,6 +66,7 @@ public sealed class LocalProcessRunnerTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task RunAsync_ReturnsTimedOutResult()
     {
         var request = CreateRequest(
@@ -76,6 +82,7 @@ public sealed class LocalProcessRunnerTests
     }
 
     [Fact]
+    [Trait("Category", "Integration")]
     public async Task RunAsync_ReturnsCanceledResult()
     {
         using var cancellationTokenSource = new CancellationTokenSource(

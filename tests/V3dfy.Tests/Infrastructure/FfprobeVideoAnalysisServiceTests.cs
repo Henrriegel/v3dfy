@@ -19,6 +19,9 @@ public sealed class FfprobeVideoAnalysisServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(GetExistingSentinelPath(), runner.Request?.ExecutablePath);
         Assert.NotEqual("ffprobe", runner.Request?.ExecutablePath);
+        Assert.Equal(
+            Path.GetDirectoryName(GetExistingSentinelPath()),
+            runner.Request?.AllowedRootDirectory);
         AssertArgumentsContainPair(runner.Request, "-print_format", "json");
         Assert.Contains("-show_format", runner.Request!.Arguments);
         Assert.Contains("-show_streams", runner.Request.Arguments);
