@@ -5,46 +5,58 @@ namespace V3dfy.Infrastructure.Health;
 
 public sealed class InternalToolsHealthChecker
 {
-    public EngineHealthStatus Check(InternalToolPaths paths)
+    public EngineHealthStatus Check(InternalToolPaths paths) => CheckDetailed(paths).Summary;
+
+    public EngineDependencyHealth CheckDetailed(InternalToolPaths paths)
     {
         ArgumentNullException.ThrowIfNull(paths);
 
-        return new EngineHealthStatus(
-            Ffmpeg: GetFileStatus(paths.FfmpegExecutable),
-            Ffprobe: GetFileStatus(paths.FfprobeExecutable),
-            Python: GetFileStatus(paths.PythonExecutable),
-            Iw3EngineDirectory: GetIw3EngineStatus(paths.Iw3EngineDirectory),
-            ModelsDirectory: GetModelsStatus(paths.ModelsDirectory));
+        return new EngineDependencyHealth(
+            Ffmpeg: GetBundledFileHealth(paths.FfmpegExecutable),
+            Ffprobe: GetBundledFileHealth(paths.FfprobeExecutable),
+            Python: GetBundledFileHealth(paths.PythonExecutable),
+            Iw3EngineDirectory: GetIw3EngineHealth(paths.Iw3EngineDirectory),
+            ModelsDirectory: GetModelsHealth(paths.ModelsDirectory));
     }
 
-    private static ToolHealthStatus GetFileStatus(string path) =>
-        File.Exists(path) ? ToolHealthStatus.Found : ToolHealthStatus.Missing;
+    private static ToolDependencyHealth GetBundledFileHealth(string path) =>
+        File.Exists(path)
+            ? new(ToolHealthStatus.Found, ToolHealthDetailKind.BundledFileFound, path)
+            : new(ToolHealthStatus.Missing, ToolHealthDetailKind.BundledFileMissing, path);
 
-    private static ToolHealthStatus GetIw3EngineStatus(string path)
+    private static ToolDependencyHealth GetIw3EngineHealth(string path)
     {
         if (!Directory.Exists(path))
         {
-            return ToolHealthStatus.Missing;
+            return new(
+                ToolHealthStatus.Missing,
+                ToolHealthDetailKind.EngineDirectoryMissing,
+                path);
         }
 
         var manifestPath = Path.Combine(path, "ENGINE_MANIFEST.json");
         if (HasNonPlaceholderManifest(manifestPath))
         {
-            return ToolHealthStatus.Found;
+            return new(ToolHealthStatus.Found, ToolHealthDetailKind.EngineBundleFound, path);
         }
 
         var hasEngineFile = Directory
             .EnumerateFiles(path, "*", SearchOption.AllDirectories)
             .Any(file => IsPlausibleEngineFile(path, file));
 
-        return hasEngineFile ? ToolHealthStatus.Found : ToolHealthStatus.Missing;
+        return hasEngineFile
+            ? new(ToolHealthStatus.Found, ToolHealthDetailKind.EngineBundleFound, path)
+            : new(ToolHealthStatus.Missing, ToolHealthDetailKind.EnginePlaceholderOnly, path);
     }
 
-    private static ToolHealthStatus GetModelsStatus(string path)
+    private static ToolDependencyHealth GetModelsHealth(string path)
     {
         if (!Directory.Exists(path))
         {
-            return ToolHealthStatus.Missing;
+            return new(
+                ToolHealthStatus.Missing,
+                ToolHealthDetailKind.ModelsDirectoryMissing,
+                path);
         }
 
         var hasModelFile = Directory
@@ -53,7 +65,9 @@ public sealed class InternalToolsHealthChecker
                 Path.GetExtension(file),
                 StringComparer.OrdinalIgnoreCase));
 
-        return hasModelFile ? ToolHealthStatus.Found : ToolHealthStatus.Missing;
+        return hasModelFile
+            ? new(ToolHealthStatus.Found, ToolHealthDetailKind.ModelFilesFound, path)
+            : new(ToolHealthStatus.Missing, ToolHealthDetailKind.ModelFilesMissing, path);
     }
 
     private static bool IsPlausibleEngineFile(string engineDirectory, string file)

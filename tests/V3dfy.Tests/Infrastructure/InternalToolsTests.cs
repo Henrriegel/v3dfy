@@ -41,6 +41,22 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
+    public void DetailedHealthCheck_ReturnsExpectedPathsAndMissingFileReasons()
+    {
+        var paths = CreateToolLayout();
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(paths.FfmpegExecutable, health.Ffmpeg.ExpectedPath);
+        Assert.Equal(ToolHealthStatus.Missing, health.Ffmpeg.Status);
+        Assert.Equal(ToolHealthDetailKind.BundledFileMissing, health.Ffmpeg.DetailKind);
+        Assert.Equal(paths.FfprobeExecutable, health.Ffprobe.ExpectedPath);
+        Assert.Equal(ToolHealthDetailKind.BundledFileMissing, health.Ffprobe.DetailKind);
+        Assert.Equal(paths.PythonExecutable, health.Python.ExpectedPath);
+        Assert.Equal(ToolHealthDetailKind.BundledFileMissing, health.Python.DetailKind);
+    }
+
+    [Fact]
     public void HealthCheck_MarksPlaceholderOnlyEngineAndModelsMissing()
     {
         var paths = CreateToolLayout();
@@ -56,6 +72,25 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
+    public void DetailedHealthCheck_ReportsPlaceholderOnlyEngineAndEmptyModels()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "README.md"), "placeholder");
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "README.md"), "placeholder");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(paths.Iw3EngineDirectory, health.Iw3EngineDirectory.ExpectedPath);
+        Assert.Equal(ToolHealthStatus.Missing, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.EnginePlaceholderOnly, health.Iw3EngineDirectory.DetailKind);
+        Assert.Equal(paths.ModelsDirectory, health.ModelsDirectory.ExpectedPath);
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.ModelFilesMissing, health.ModelsDirectory.DetailKind);
+    }
+
+    [Fact]
     public void HealthCheck_MarksEngineFound_WhenPythonModuleExists()
     {
         var paths = CreateToolLayout();
@@ -65,6 +100,21 @@ public sealed class InternalToolsTests
         var status = new InternalToolsHealthChecker().Check(paths);
 
         Assert.Equal(ToolHealthStatus.Found, status.Iw3EngineDirectory);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_MarksEngineFound_WhenNonPlaceholderManifestExists()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"1.0.0"}""");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.EngineBundleFound, health.Iw3EngineDirectory.DetailKind);
     }
 
     [Theory]
@@ -79,6 +129,19 @@ public sealed class InternalToolsTests
         var status = new InternalToolsHealthChecker().Check(paths);
 
         Assert.Equal(ToolHealthStatus.Found, status.ModelsDirectory);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_MarksModelsFound_WhenModelFileExists()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.safetensors"), "model");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.ModelFilesFound, health.ModelsDirectory.DetailKind);
     }
 
     [Fact]

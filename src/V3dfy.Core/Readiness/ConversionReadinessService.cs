@@ -60,6 +60,49 @@ public sealed class ConversionReadinessService
             SpanishRequiredComponentsSummary: SpanishRequiredComponents);
     }
 
+    public ConversionReadiness Evaluate(EngineDependencyHealth dependencyHealth)
+    {
+        ArgumentNullException.ThrowIfNull(dependencyHealth);
+
+        var issues = new List<ConversionReadinessIssue>();
+
+        AddDetailedMissingIssue(
+            dependencyHealth.Ffmpeg,
+            issues,
+            "FFmpeg is missing.",
+            "Falta FFmpeg.");
+        AddDetailedMissingIssue(
+            dependencyHealth.Ffprobe,
+            issues,
+            "FFprobe is missing.",
+            "Falta FFprobe.");
+        AddDetailedMissingIssue(
+            dependencyHealth.Python,
+            issues,
+            "Embedded Python runtime is missing.",
+            "Falta el runtime de Python embebido.");
+        AddDetailedMissingIssue(
+            dependencyHealth.Iw3EngineDirectory,
+            issues,
+            "Local iw3 engine is missing.",
+            "Falta el motor local iw3.");
+        AddDetailedMissingIssue(
+            dependencyHealth.ModelsDirectory,
+            issues,
+            "Local 3D models are missing.",
+            "Faltan los modelos 3D locales.");
+
+        var canConvert = issues.Count == 0;
+
+        return new(
+            CanConvert: canConvert,
+            EnglishStatus: canConvert ? EnglishReadyStatus : EnglishBlockedStatus,
+            SpanishStatus: canConvert ? SpanishReadyStatus : SpanishBlockedStatus,
+            Issues: issues,
+            EnglishRequiredComponentsSummary: EnglishRequiredComponents,
+            SpanishRequiredComponentsSummary: SpanishRequiredComponents);
+    }
+
     private static void AddMissingIssue(
         ToolHealthStatus status,
         ICollection<ConversionReadinessIssue> issues,
@@ -71,4 +114,52 @@ public sealed class ConversionReadinessService
             issues.Add(new(englishMessage, spanishMessage));
         }
     }
+
+    private static void AddDetailedMissingIssue(
+        ToolDependencyHealth dependencyHealth,
+        ICollection<ConversionReadinessIssue> issues,
+        string englishMessage,
+        string spanishMessage)
+    {
+        if (dependencyHealth.Status == ToolHealthStatus.Found)
+        {
+            return;
+        }
+
+        issues.Add(new(
+            $"{englishMessage} {EnglishDetail(dependencyHealth)}",
+            $"{spanishMessage} {SpanishDetail(dependencyHealth)}"));
+    }
+
+    private static string EnglishDetail(ToolDependencyHealth dependencyHealth) =>
+        dependencyHealth.DetailKind switch
+        {
+            ToolHealthDetailKind.BundledFileMissing =>
+                $"Expected bundled executable: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.EngineDirectoryMissing =>
+                $"Expected engine directory: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.EnginePlaceholderOnly =>
+                $"Engine directory exists but only placeholder files were detected: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.ModelsDirectoryMissing =>
+                $"Expected models directory: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.ModelFilesMissing =>
+                $"No supported model files were found under: {dependencyHealth.ExpectedPath}",
+            _ => $"Expected local path: {dependencyHealth.ExpectedPath}",
+        };
+
+    private static string SpanishDetail(ToolDependencyHealth dependencyHealth) =>
+        dependencyHealth.DetailKind switch
+        {
+            ToolHealthDetailKind.BundledFileMissing =>
+                $"Ejecutable incluido esperado: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.EngineDirectoryMissing =>
+                $"Carpeta esperada del motor: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.EnginePlaceholderOnly =>
+                $"La carpeta del motor existe, pero solo contiene marcadores: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.ModelsDirectoryMissing =>
+                $"Carpeta esperada de modelos: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.ModelFilesMissing =>
+                $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}",
+            _ => $"Ruta local esperada: {dependencyHealth.ExpectedPath}",
+        };
 }

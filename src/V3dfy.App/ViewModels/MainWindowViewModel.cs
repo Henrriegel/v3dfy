@@ -48,6 +48,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
     private EngineHealthStatus? _toolHealth;
+    private EngineDependencyHealth? _dependencyHealth;
     private VideoAnalysisResult? _analysis;
     private VideoConversionSetupRecommendation? _conversionRecommendation;
     private VideoConversionPlan? _conversionPlan;
@@ -901,7 +902,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void RefreshEngineStatus()
     {
-        _toolHealth = _healthChecker.Check(_toolPaths);
+        _dependencyHealth = _healthChecker.CheckDetailed(_toolPaths);
+        _toolHealth = _dependencyHealth.Summary;
         UpdateToolStatuses();
         UpdateConversionReadiness();
         AddLog(
@@ -911,38 +913,69 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void UpdateConversionReadiness()
     {
-        if (_toolHealth is null)
+        if (_dependencyHealth is null)
         {
             return;
         }
 
-        _conversionReadiness = _conversionReadinessService.Evaluate(_toolHealth);
+        _conversionReadiness = _conversionReadinessService.Evaluate(_dependencyHealth);
         RaiseConversionReadinessPropertiesChanged();
     }
 
     private void UpdateToolStatuses()
     {
-        if (_toolHealth is null)
+        if (_dependencyHealth is null)
         {
             return;
         }
 
         ToolStatuses.Clear();
-        ToolStatuses.Add(CreateToolStatus("FFmpeg", "FFmpeg", _toolHealth.Ffmpeg));
-        ToolStatuses.Add(CreateToolStatus("FFprobe", "FFprobe", _toolHealth.Ffprobe));
-        ToolStatuses.Add(CreateToolStatus("Python", "Python", _toolHealth.Python));
-        ToolStatuses.Add(CreateToolStatus("iw3 engine", "Motor iw3", _toolHealth.Iw3EngineDirectory));
-        ToolStatuses.Add(CreateToolStatus("models", "modelos", _toolHealth.ModelsDirectory));
+        ToolStatuses.Add(CreateToolStatus("FFmpeg", "FFmpeg", _dependencyHealth.Ffmpeg));
+        ToolStatuses.Add(CreateToolStatus("FFprobe", "FFprobe", _dependencyHealth.Ffprobe));
+        ToolStatuses.Add(CreateToolStatus("Python", "Python", _dependencyHealth.Python));
+        ToolStatuses.Add(CreateToolStatus("iw3 engine", "Motor iw3", _dependencyHealth.Iw3EngineDirectory));
+        ToolStatuses.Add(CreateToolStatus("3D models", "modelos 3D", _dependencyHealth.ModelsDirectory));
     }
 
     private ToolStatusItemViewModel CreateToolStatus(
         string englishName,
         string spanishName,
-        ToolHealthStatus status) => new(
+        ToolDependencyHealth dependencyHealth) => new(
         Name: Text(englishName, spanishName),
-        StatusText: status == ToolHealthStatus.Found
+        StatusText: dependencyHealth.Status == ToolHealthStatus.Found
             ? Text("Found", "Encontrado")
-            : Text("Missing", "Faltante"));
+            : Text("Missing", "Faltante"),
+        DetailText: ToolStatusDetailText(dependencyHealth));
+
+    private string ToolStatusDetailText(ToolDependencyHealth dependencyHealth) =>
+        dependencyHealth.DetailKind switch
+        {
+            ToolHealthDetailKind.BundledFileFound => Text(
+                $"Bundled executable found: {dependencyHealth.ExpectedPath}",
+                $"Ejecutable incluido encontrado: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.BundledFileMissing => Text(
+                $"Missing bundled executable: {dependencyHealth.ExpectedPath}",
+                $"Falta el ejecutable incluido: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.EngineBundleFound => Text(
+                $"Local iw3 engine files found under: {dependencyHealth.ExpectedPath}",
+                $"Archivos del motor iw3 local encontrados en: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.EngineDirectoryMissing => Text(
+                $"Expected local iw3 engine folder: {dependencyHealth.ExpectedPath}",
+                $"Carpeta esperada del motor iw3 local: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.EnginePlaceholderOnly => Text(
+                $"Engine folder exists, but only placeholder files were detected: {dependencyHealth.ExpectedPath}",
+                $"La carpeta del motor existe, pero solo contiene marcadores: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.ModelFilesFound => Text(
+                $"Local 3D model files found under: {dependencyHealth.ExpectedPath}",
+                $"Modelos 3D locales encontrados en: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.ModelsDirectoryMissing => Text(
+                $"Expected local 3D models folder: {dependencyHealth.ExpectedPath}",
+                $"Carpeta esperada de modelos 3D locales: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.ModelFilesMissing => Text(
+                $"No supported model files found in: {dependencyHealth.ExpectedPath}",
+                $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}"),
+            _ => dependencyHealth.ExpectedPath,
+        };
 
     private void SetSelectedVideo(string path, bool replacingVideo)
     {

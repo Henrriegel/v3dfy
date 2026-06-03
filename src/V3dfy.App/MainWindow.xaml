@@ -580,6 +580,10 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,4">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
@@ -588,6 +592,12 @@
                                         <TextBlock Grid.Column="1"
                                                    FontWeight="SemiBold"
                                                    Text="{Binding StatusText}" />
+                                        <TextBlock Grid.Row="1"
+                                                   Grid.ColumnSpan="2"
+                                                   Margin="0,2,0,0"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding DetailText}"
+                                                   TextWrapping="Wrap" />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
