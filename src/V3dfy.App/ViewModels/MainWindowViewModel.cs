@@ -40,6 +40,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly VideoConversionPlanService _conversionPlanService;
     private readonly ConversionReadinessService _conversionReadinessService;
     private readonly ConversionExecutionFeatureGate _conversionExecutionFeatureGate;
+    private readonly ConversionOutputPathState _outputPathState = new();
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
@@ -50,7 +51,6 @@ public sealed class MainWindowViewModel : ObservableObject
     private ConversionReadiness? _conversionReadiness;
     private ConversionExecutionState _conversionExecutionState = ConversionExecutionState.NotStarted();
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
-    private string? _customOutputPath;
     private string _outputPathText = string.Empty;
     private OutputContainer _selectedOutputContainer = OutputContainer.MP4;
     private AiQualityPreset _selectedQualityPreset = AiQualityPreset.Balanced;
@@ -471,7 +471,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ResetOutputPathText => Text("Reset", "Restablecer");
 
-    public bool HasCustomOutputPath => !string.IsNullOrWhiteSpace(_customOutputPath);
+    public bool HasCustomOutputPath => _outputPathState.HasCustomOutputPath;
 
     public string OutputPathText
     {
@@ -963,7 +963,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (clearOutputPath)
         {
-            _customOutputPath = null;
+            _outputPathState.ClearCustomOutputPath();
             OnPropertyChanged(nameof(HasCustomOutputPath));
             SetOutputPathText(string.Empty);
         }
@@ -1029,16 +1029,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void CommitOutputPath(string value)
     {
-        var normalizedPath = string.IsNullOrWhiteSpace(value)
-            ? null
-            : value.Trim();
-
-        if (string.Equals(_customOutputPath, normalizedPath, StringComparison.Ordinal))
+        if (!_outputPathState.CommitOutputPathText(value, out var normalizedPath))
         {
             return;
         }
 
-        _customOutputPath = normalizedPath;
         OnPropertyChanged(nameof(HasCustomOutputPath));
         ResetConversionExecutionState();
 
@@ -1089,12 +1084,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ResetOutputPath()
     {
-        if (_customOutputPath is null)
+        if (!_outputPathState.ResetCustomOutputPath())
         {
             return;
         }
 
-        _customOutputPath = null;
         OnPropertyChanged(nameof(HasCustomOutputPath));
         ResetConversionExecutionState();
 
@@ -1112,12 +1106,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void SetCustomOutputPath(string outputPath, bool logChange)
     {
-        if (string.Equals(_customOutputPath, outputPath, StringComparison.Ordinal))
+        if (!_outputPathState.SetCustomOutputPath(outputPath))
         {
             return;
         }
 
-        _customOutputPath = outputPath;
         OnPropertyChanged(nameof(HasCustomOutputPath));
         SetOutputPathText(outputPath);
         ResetConversionExecutionState();
@@ -1143,13 +1136,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private string? GetInitialOutputDirectory()
     {
-        var outputPath = string.IsNullOrWhiteSpace(_customOutputPath)
-            ? GetAutomaticOutputPath()
-            : _customOutputPath;
-
-        return string.IsNullOrWhiteSpace(outputPath)
-            ? null
-            : Path.GetDirectoryName(outputPath);
+        return _outputPathState.GetInitialOutputDirectory(GetAutomaticOutputPath());
     }
 
     private void SetOutputPathText(string value)
@@ -1232,7 +1219,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 SelectedThreeDOutputFormat,
                 // Manual paths are preserved exactly across option changes.
                 // Use Reset to return to automatic suffix and extension naming.
-                _customOutputPath),
+                _outputPathState.CustomOutputPath),
             _toolPaths,
             _toolHealth ?? _healthChecker.Check(_toolPaths));
         RaiseConversionPlanPropertiesChanged();
