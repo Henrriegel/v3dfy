@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 using V3dfy.App.Mvvm;
@@ -9,6 +10,7 @@ using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
 using V3dfy.Core.Recommendations;
+using V3dfy.Core.Readiness;
 using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
 using V3dfy.Infrastructure.Health;
@@ -35,6 +37,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IFfprobeVideoAnalysisService _videoAnalysisService;
     private readonly VideoConversionRecommendationService _recommendationService;
     private readonly VideoConversionPlanService _conversionPlanService;
+    private readonly ConversionReadinessService _conversionReadinessService;
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
@@ -42,6 +45,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoAnalysisResult? _analysis;
     private VideoConversionSetupRecommendation? _conversionRecommendation;
     private VideoConversionPlan? _conversionPlan;
+    private ConversionReadiness? _conversionReadiness;
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private string? _customOutputPath;
     private string _outputPathText = string.Empty;
@@ -52,6 +56,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _hasCustomizedPlanOptions;
     private bool _isUpdatingOutputPathText;
     private int _selectedWorkflowTabIndex;
+    private bool _hasCompletedAnalysis;
     private bool _isAnalyzing;
 
     public MainWindowViewModel()
@@ -65,6 +70,7 @@ public sealed class MainWindowViewModel : ObservableObject
             new FfprobeJsonParser());
         _recommendationService = new VideoConversionRecommendationService();
         _conversionPlanService = new VideoConversionPlanService();
+        _conversionReadinessService = new ConversionReadinessService();
 
         SelectVideoCommand = new RelayCommand(SelectVideo);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
@@ -72,6 +78,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ClearLogsCommand = new RelayCommand(Logs.Clear);
         BrowseOutputFolderCommand = new RelayCommand(BrowseOutputFolder);
         ResetOutputPathCommand = new RelayCommand(ResetOutputPath);
+        StartConversionCommand = new RelayCommand(StartConversion, () => CanStartConversion);
 
         _themeService.Apply(_selectedTheme);
         RefreshEngineStatus();
@@ -90,11 +97,33 @@ public sealed class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _selectedVideoPath, value))
             {
                 OnPropertyChanged(nameof(SelectedVideoDisplayPath));
+                OnPropertyChanged(nameof(HasSelectedVideo));
+                OnPropertyChanged(nameof(ConversionReadinessVisibility));
             }
         }
     }
 
     public string SelectedVideoDisplayPath => SelectedVideoPath ?? NoVideoSelectedText;
+
+    public bool HasSelectedVideo => !string.IsNullOrWhiteSpace(SelectedVideoPath);
+
+    public bool HasCompletedAnalysis
+    {
+        get => _hasCompletedAnalysis;
+        private set
+        {
+            if (SetProperty(ref _hasCompletedAnalysis, value))
+            {
+                if (!value)
+                {
+                    SelectedWorkflowTabIndex = 0;
+                }
+
+                RaiseWorkflowAvailabilityPropertiesChanged();
+                RaiseConversionReadinessPropertiesChanged();
+            }
+        }
+    }
 
     public IReadOnlyList<string> LanguageOptions { get; } = ["Español", "English"];
 
@@ -349,6 +378,8 @@ public sealed class MainWindowViewModel : ObservableObject
         "Recommended 3D setup",
         "Configuración 3D recomendada");
 
+    public bool CanOpenRecommendedSetupTab => HasCompletedAnalysis;
+
     public string RecommendedSetupStatusText => _conversionRecommendation is null
         ? Text("No recommended setup yet.", "Aún no hay configuración recomendada.")
         : Text(
@@ -412,6 +443,8 @@ public sealed class MainWindowViewModel : ObservableObject
                     $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
 
     public string ConversionPlanTitle => Text("Conversion plan", "Plan de conversión");
+
+    public bool CanOpenConversionPlanTab => HasCompletedAnalysis;
 
     public string PlanOptionsTitle => Text("Plan options", "Opciones del plan");
 
@@ -521,6 +554,56 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ConversionPlanCommandPreviewText => _conversionPlan?.CommandPreview ?? "-";
 
+    public string ConversionReadinessTitle => Text(
+        "Conversion readiness",
+        "Estado de conversión");
+
+    public Visibility ConversionReadinessVisibility =>
+        HasCompletedAnalysis ? Visibility.Visible : Visibility.Collapsed;
+
+    public string ConversionReadinessStatusLabel => Text("Status", "Estado");
+
+    public string ConversionReadinessMissingRequirementsTitle => Text(
+        "Missing requirements",
+        "Requisitos faltantes");
+
+    public string ConversionReadinessStatusText => Text(
+        _conversionReadiness?.EnglishStatus ??
+        "Conversion unavailable. Required local components are missing.",
+        _conversionReadiness?.SpanishStatus ??
+        "Conversión no disponible. Faltan componentes locales requeridos.");
+
+    public string ConversionReadinessIssuesText => _conversionReadiness is null
+        ? "-"
+        : _conversionReadiness.Issues.Count == 0
+            ? Text("No missing requirements.", "No hay requisitos faltantes.")
+            : string.Join(
+                Environment.NewLine,
+                _conversionReadiness.Issues.Select(issue =>
+                    $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
+
+    public string ConversionReadinessRequiredComponentsText => _conversionReadiness is null
+        ? string.Empty
+        : Text(
+            _conversionReadiness.EnglishRequiredComponentsSummary,
+            _conversionReadiness.SpanishRequiredComponentsSummary);
+
+    public string ConversionBlockedReasonText => CanStartConversion
+        ? string.Empty
+        : _conversionPlan is null
+            ? Text(
+                "Prepare a conversion plan before converting.",
+                "Prepara un plan de conversión antes de convertir.")
+            : Text(
+                "This button will become available after the local engine, embedded runtime and models are bundled.",
+                "Este botón estará disponible cuando se incluyan el motor local, el runtime embebido y los modelos.");
+
+    public bool CanStartConversion =>
+        _conversionPlan is not null &&
+        _conversionReadiness?.CanConvert == true;
+
+    public string StartConversionText => Text("Convert", "Convertir");
+
     public string ToolStatusTitle => Text(
         "Internal tool status",
         "Estado de herramientas internas");
@@ -596,7 +679,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand ResetOutputPathCommand { get; }
 
-    public void SelectDroppedVideo(string path)
+    public RelayCommand StartConversionCommand { get; }
+
+    public async void SelectDroppedVideo(string path)
     {
         if (!IsSupportedVideoFile(path))
         {
@@ -606,13 +691,13 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        SetSelectedVideo(path);
+        await TrySelectVideoAndAnalyzeAsync(path);
     }
 
     private bool IsSpanish =>
         string.Equals(SelectedLanguage, "Español", StringComparison.Ordinal);
 
-    private void SelectVideo()
+    private async void SelectVideo()
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
@@ -626,7 +711,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (dialog.ShowDialog() == true)
         {
-            SetSelectedVideo(dialog.FileName);
+            await TrySelectVideoAndAnalyzeAsync(dialog.FileName);
         }
     }
 
@@ -642,13 +727,69 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        ResetAnalysisState(clearOutputPath: false);
+        await AnalyzeSelectedVideoAsync();
+    }
+
+    private async Task TrySelectVideoAndAnalyzeAsync(string path)
+    {
+        if (string.Equals(SelectedVideoPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            SelectedWorkflowTabIndex = 0;
+            AddLog(
+                "Starting automatic analysis.",
+                "Iniciando análisis automático.");
+            ResetAnalysisState(clearOutputPath: false);
+            await AnalyzeSelectedVideoAsync();
+            return;
+        }
+
+        var replacingVideo = HasSelectedVideo;
+        if (replacingVideo && !ConfirmReplaceSelectedVideo())
+        {
+            AddLog(
+                "Video replacement canceled.",
+                "Reemplazo de video cancelado.");
+            return;
+        }
+
+        SetSelectedVideo(path, replacingVideo);
+        AddLog(
+            "Starting automatic analysis.",
+            "Iniciando análisis automático.");
+        await AnalyzeSelectedVideoAsync();
+    }
+
+    private bool ConfirmReplaceSelectedVideo()
+    {
+        var result = System.Windows.MessageBox.Show(
+            Text(
+                "Selecting a new video will clear the current analysis, recommended setup, conversion plan, selected options and custom output path. Continue?",
+                "Seleccionar un nuevo video borrará el análisis actual, la configuración recomendada, el plan de conversión, las opciones seleccionadas y la ruta de salida personalizada. ¿Continuar?"),
+            Text(
+                "Replace selected video?",
+                "¿Reemplazar video seleccionado?"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        return result == MessageBoxResult.Yes;
+    }
+
+    private async Task AnalyzeSelectedVideoAsync()
+    {
+        var inputPath = SelectedVideoPath;
+        if (string.IsNullOrWhiteSpace(inputPath))
+        {
+            return;
+        }
+
         RefreshEngineStatus();
         IsAnalyzing = true;
 
         try
         {
             var result = await _videoAnalysisService.AnalyzeAsync(new VideoAnalysisRequest(
-                InputPath: SelectedVideoPath,
+                InputPath: inputPath,
                 Timeout: TimeSpan.FromSeconds(30)));
 
             if (result.IsSuccess && result.Analysis is not null)
@@ -662,6 +803,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 RaiseAnalysisPropertiesChanged();
                 RaiseRecommendationPropertiesChanged();
                 RaiseConversionPlanPropertiesChanged();
+                HasCompletedAnalysis = true;
                 AddLog(
                     "Video analysis completed.",
                     "Análisis de video completado.");
@@ -692,9 +834,21 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         _toolHealth = _healthChecker.Check(_toolPaths);
         UpdateToolStatuses();
+        UpdateConversionReadiness();
         AddLog(
             "Internal tool status refreshed.",
             "Estado de herramientas internas actualizado.");
+    }
+
+    private void UpdateConversionReadiness()
+    {
+        if (_toolHealth is null)
+        {
+            return;
+        }
+
+        _conversionReadiness = _conversionReadinessService.Evaluate(_toolHealth);
+        RaiseConversionReadinessPropertiesChanged();
     }
 
     private void UpdateToolStatuses()
@@ -721,20 +875,49 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Text("Found", "Encontrado")
             : Text("Missing", "Faltante"));
 
-    private void SetSelectedVideo(string path)
+    private void SetSelectedVideo(string path, bool replacingVideo)
     {
         SelectedWorkflowTabIndex = 0;
         SelectedVideoPath = path;
+        ResetAnalysisState(clearOutputPath: true);
+        AddLog(
+            replacingVideo ? $"Selected video replaced: {path}" : $"Selected video: {path}",
+            replacingVideo ? $"Video seleccionado reemplazado: {path}" : $"Video seleccionado: {path}");
+    }
+
+    private void ResetAnalysisState(bool clearOutputPath)
+    {
+        HasCompletedAnalysis = false;
         _analysis = null;
         _conversionRecommendation = null;
         _conversionPlan = null;
-        _customOutputPath = null;
-        OnPropertyChanged(nameof(HasCustomOutputPath));
-        SetOutputPathText(string.Empty);
+
+        if (clearOutputPath)
+        {
+            _customOutputPath = null;
+            OnPropertyChanged(nameof(HasCustomOutputPath));
+            SetOutputPathText(string.Empty);
+        }
+
         RaiseAnalysisPropertiesChanged();
         RaiseRecommendationPropertiesChanged();
         RaiseConversionPlanPropertiesChanged();
-        AddLog($"Selected video: {path}", $"Video seleccionado: {path}");
+        RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void StartConversion()
+    {
+        if (!CanStartConversion)
+        {
+            AddLog(
+                "Conversion cannot start because required local components are missing.",
+                "La conversión no puede iniciar porque faltan componentes locales requeridos.");
+            return;
+        }
+
+        AddLog(
+            "Conversion execution is not enabled yet.",
+            "La ejecución de conversión aún no está habilitada.");
     }
 
     private static bool IsSupportedVideoFile(string path) =>
@@ -957,6 +1140,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _toolHealth ?? _healthChecker.Check(_toolPaths));
         RaiseConversionPlanPropertiesChanged();
         SetOutputPathText(_conversionPlan.SuggestedOutputPath);
+        RaiseConversionReadinessPropertiesChanged();
         return true;
     }
 
@@ -1049,6 +1233,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseAnalysisPropertiesChanged();
         RaiseRecommendationPropertiesChanged();
         RaiseConversionPlanPropertiesChanged();
+        RaiseConversionReadinessPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(ActivityLogTitle));
@@ -1092,6 +1277,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseRecommendationPropertiesChanged()
     {
         OnPropertyChanged(nameof(RecommendedSetupTitle));
+        OnPropertyChanged(nameof(CanOpenRecommendedSetupTab));
         OnPropertyChanged(nameof(RecommendedSetupStatusText));
         OnPropertyChanged(nameof(RecommendedOutputContainerText));
         OnPropertyChanged(nameof(RecommendedVideoCodecText));
@@ -1110,6 +1296,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseConversionPlanPropertiesChanged()
     {
         OnPropertyChanged(nameof(ConversionPlanTitle));
+        OnPropertyChanged(nameof(CanOpenConversionPlanTab));
         OnPropertyChanged(nameof(PlanOptionsTitle));
         OnPropertyChanged(nameof(OutputContainerOptionLabel));
         OnPropertyChanged(nameof(QualityOptionLabel));
@@ -1132,6 +1319,29 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionPlanStepsText));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewTitle));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewText));
+        RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void RaiseWorkflowAvailabilityPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(HasCompletedAnalysis));
+        OnPropertyChanged(nameof(CanOpenRecommendedSetupTab));
+        OnPropertyChanged(nameof(CanOpenConversionPlanTab));
+    }
+
+    private void RaiseConversionReadinessPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(ConversionReadinessTitle));
+        OnPropertyChanged(nameof(ConversionReadinessVisibility));
+        OnPropertyChanged(nameof(ConversionReadinessStatusLabel));
+        OnPropertyChanged(nameof(ConversionReadinessMissingRequirementsTitle));
+        OnPropertyChanged(nameof(ConversionReadinessStatusText));
+        OnPropertyChanged(nameof(ConversionReadinessIssuesText));
+        OnPropertyChanged(nameof(ConversionReadinessRequiredComponentsText));
+        OnPropertyChanged(nameof(ConversionBlockedReasonText));
+        OnPropertyChanged(nameof(CanStartConversion));
+        OnPropertyChanged(nameof(StartConversionText));
+        StartConversionCommand.RaiseCanExecuteChanged();
     }
 
     private string ConversionPlanLabelValue(string englishLabel, string spanishLabel, string? value) =>
