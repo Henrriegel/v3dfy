@@ -481,6 +481,57 @@
                 <StackPanel>
                     <Border Margin="0,0,0,18"
                             Style="{StaticResource CardStyle}"
+                            Visibility="{Binding ConversionProgressVisibility}">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="{Binding ConversionProgressTitle}" />
+                                <Button Grid.Column="1"
+                                        Margin="0,0,0,8"
+                                        Padding="10,5"
+                                        Command="{Binding CancelConversionCommand}"
+                                        Content="{Binding CancelConversionText}"
+                                        IsEnabled="{Binding CanCancelConversion}" />
+                            </Grid>
+                            <TextBlock Text="{Binding ConversionExecutionStatusLabel}"
+                                       Style="{StaticResource MutedTextStyle}" />
+                            <TextBlock Margin="0,2,0,8"
+                                       Text="{Binding ConversionExecutionStatusText}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding ConversionExecutionStepLabel}"
+                                       Style="{StaticResource MutedTextStyle}" />
+                            <TextBlock Margin="0,2,0,8"
+                                       Text="{Binding ConversionExecutionStepText}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding ConversionExecutionProgressLabel}"
+                                       Style="{StaticResource MutedTextStyle}" />
+                            <Grid Margin="0,4,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ProgressBar Height="10"
+                                             Maximum="100"
+                                             Minimum="0"
+                                             Value="{Binding ConversionExecutionProgressPercent,
+                                                             Mode=OneWay}" />
+                                <TextBlock Grid.Column="1"
+                                           Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding ConversionExecutionProgressText}" />
+                            </Grid>
+                            <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Text="{Binding ConversionExecutionDetailText}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,0,0,18"
+                            Style="{StaticResource CardStyle}"
                             Visibility="{Binding ConversionReadinessVisibility}">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}"

@@ -6,6 +6,7 @@ using Forms = System.Windows.Forms;
 using V3dfy.App.Mvvm;
 using V3dfy.App.Services;
 using V3dfy.Core.Analysis;
+using V3dfy.Core.Execution;
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
@@ -46,6 +47,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoConversionSetupRecommendation? _conversionRecommendation;
     private VideoConversionPlan? _conversionPlan;
     private ConversionReadiness? _conversionReadiness;
+    private ConversionExecutionState _conversionExecutionState = ConversionExecutionState.NotStarted();
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private string? _customOutputPath;
     private string _outputPathText = string.Empty;
@@ -79,6 +81,7 @@ public sealed class MainWindowViewModel : ObservableObject
         BrowseOutputFolderCommand = new RelayCommand(BrowseOutputFolder);
         ResetOutputPathCommand = new RelayCommand(ResetOutputPath);
         StartConversionCommand = new RelayCommand(StartConversion, () => CanStartConversion);
+        CancelConversionCommand = new RelayCommand(CancelConversion);
 
         _themeService.Apply(_selectedTheme);
         RefreshEngineStatus();
@@ -554,12 +557,65 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ConversionPlanCommandPreviewText => _conversionPlan?.CommandPreview ?? "-";
 
+    public string ConversionProgressTitle => Text(
+        "Conversion progress",
+        "Progreso de conversión");
+
+    public string ConversionExecutionStatusLabel => Text("Status", "Estado");
+
+    public string ConversionExecutionStatusText => _conversionExecutionState.Status switch
+    {
+        ConversionExecutionStatus.NotStarted => Text("Not started", "No iniciada"),
+        ConversionExecutionStatus.Ready => Text("Ready", "Lista"),
+        ConversionExecutionStatus.Running => Text("Running", "En ejecución"),
+        ConversionExecutionStatus.Canceling => Text("Canceling", "Cancelando"),
+        ConversionExecutionStatus.Canceled => Text("Canceled", "Cancelada"),
+        ConversionExecutionStatus.Failed => Text("Failed", "Fallida"),
+        ConversionExecutionStatus.Completed => Text("Completed", "Completada"),
+        _ => _conversionExecutionState.Status.ToString(),
+    };
+
+    public string ConversionExecutionStepLabel => Text("Current step", "Paso actual");
+
+    public string ConversionExecutionStepText => Text(
+        _conversionExecutionState.CurrentStep.EnglishText,
+        _conversionExecutionState.CurrentStep.SpanishText);
+
+    public string ConversionExecutionProgressLabel => Text("Progress", "Progreso");
+
+    public int ConversionExecutionProgressPercent => _conversionExecutionState.ProgressPercent;
+
+    public string ConversionExecutionProgressText => $"{ConversionExecutionProgressPercent}%";
+
+    public string ConversionExecutionDetailText => Text(
+        _conversionExecutionState.DetailEnglish,
+        _conversionExecutionState.DetailSpanish);
+
+    public bool CanCancelConversion => _conversionExecutionState.CanCancel;
+
+    public string CancelConversionText => Text("Cancel", "Cancelar");
+
     public string ConversionReadinessTitle => Text(
         "Conversion readiness",
         "Estado de conversión");
 
+    public bool ShowConversionReadinessCard =>
+        HasCompletedAnalysis &&
+        (_conversionExecutionState.Status == ConversionExecutionStatus.NotStarted ||
+         _conversionExecutionState.Status == ConversionExecutionStatus.Ready);
+
     public Visibility ConversionReadinessVisibility =>
-        HasCompletedAnalysis ? Visibility.Visible : Visibility.Collapsed;
+        ShowConversionReadinessCard ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool ShowConversionProgressCard => _conversionExecutionState.Status is
+        ConversionExecutionStatus.Running or
+        ConversionExecutionStatus.Canceling or
+        ConversionExecutionStatus.Canceled or
+        ConversionExecutionStatus.Failed or
+        ConversionExecutionStatus.Completed;
+
+    public Visibility ConversionProgressVisibility =>
+        ShowConversionProgressCard ? Visibility.Visible : Visibility.Collapsed;
 
     public string ConversionReadinessStatusLabel => Text("Status", "Estado");
 
@@ -680,6 +736,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand ResetOutputPathCommand { get; }
 
     public RelayCommand StartConversionCommand { get; }
+
+    public RelayCommand CancelConversionCommand { get; }
 
     public async void SelectDroppedVideo(string path)
     {
@@ -887,6 +945,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ResetAnalysisState(bool clearOutputPath)
     {
+        ResetConversionExecutionState();
         HasCompletedAnalysis = false;
         _analysis = null;
         _conversionRecommendation = null;
@@ -920,6 +979,21 @@ public sealed class MainWindowViewModel : ObservableObject
             "La ejecución de conversión aún no está habilitada.");
     }
 
+    private void CancelConversion()
+    {
+        if (!CanCancelConversion)
+        {
+            AddLog(
+                "There is no active conversion to cancel.",
+                "No hay una conversión activa para cancelar.");
+            return;
+        }
+
+        AddLog(
+            "Conversion cancellation is not enabled yet.",
+            "La cancelación de conversión aún no está habilitada.");
+    }
+
     private static bool IsSupportedVideoFile(string path) =>
         !string.IsNullOrWhiteSpace(path) &&
         SupportedVideoExtensions.Contains(Path.GetExtension(path));
@@ -927,6 +1001,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void PlanOptionChanged(string englishMessage, string spanishMessage)
     {
         _hasCustomizedPlanOptions = true;
+        ResetConversionExecutionState();
 
         if (RegenerateConversionPlan())
         {
@@ -947,6 +1022,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _customOutputPath = normalizedPath;
         OnPropertyChanged(nameof(HasCustomOutputPath));
+        ResetConversionExecutionState();
 
         if (RegenerateConversionPlan())
         {
@@ -1002,6 +1078,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _customOutputPath = null;
         OnPropertyChanged(nameof(HasCustomOutputPath));
+        ResetConversionExecutionState();
 
         if (RegenerateConversionPlan())
         {
@@ -1025,6 +1102,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _customOutputPath = outputPath;
         OnPropertyChanged(nameof(HasCustomOutputPath));
         SetOutputPathText(outputPath);
+        ResetConversionExecutionState();
 
         if (RegenerateConversionPlan() && logChange)
         {
@@ -1099,6 +1177,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         var recommendation = preset.Recommendation;
         _hasCustomizedPlanOptions = false;
+        ResetConversionExecutionState();
         SetProperty(ref _selectedOutputContainer, recommendation.OutputContainer, nameof(SelectedOutputContainer));
         SetProperty(ref _selectedQualityPreset, AiQualityPreset.Balanced, nameof(SelectedQualityPreset));
         SetProperty(ref _selectedThreeDIntensity, ThreeDIntensity.Medium, nameof(SelectedThreeDIntensity));
@@ -1142,6 +1221,12 @@ public sealed class MainWindowViewModel : ObservableObject
         SetOutputPathText(_conversionPlan.SuggestedOutputPath);
         RaiseConversionReadinessPropertiesChanged();
         return true;
+    }
+
+    private void ResetConversionExecutionState()
+    {
+        _conversionExecutionState = ConversionExecutionState.NotStarted();
+        RaiseConversionExecutionPropertiesChanged();
     }
 
     private static string QualityPresetText(AiQualityPreset value, bool useSpanish) => value switch
@@ -1233,6 +1318,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseAnalysisPropertiesChanged();
         RaiseRecommendationPropertiesChanged();
         RaiseConversionPlanPropertiesChanged();
+        RaiseConversionExecutionPropertiesChanged();
         RaiseConversionReadinessPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
@@ -1319,7 +1405,27 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionPlanStepsText));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewTitle));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewText));
+        RaiseConversionExecutionPropertiesChanged();
         RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void RaiseConversionExecutionPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(ShowConversionProgressCard));
+        OnPropertyChanged(nameof(ConversionProgressVisibility));
+        OnPropertyChanged(nameof(ShowConversionReadinessCard));
+        OnPropertyChanged(nameof(ConversionReadinessVisibility));
+        OnPropertyChanged(nameof(ConversionProgressTitle));
+        OnPropertyChanged(nameof(ConversionExecutionStatusLabel));
+        OnPropertyChanged(nameof(ConversionExecutionStatusText));
+        OnPropertyChanged(nameof(ConversionExecutionStepLabel));
+        OnPropertyChanged(nameof(ConversionExecutionStepText));
+        OnPropertyChanged(nameof(ConversionExecutionProgressLabel));
+        OnPropertyChanged(nameof(ConversionExecutionProgressPercent));
+        OnPropertyChanged(nameof(ConversionExecutionProgressText));
+        OnPropertyChanged(nameof(ConversionExecutionDetailText));
+        OnPropertyChanged(nameof(CanCancelConversion));
+        OnPropertyChanged(nameof(CancelConversionText));
     }
 
     private void RaiseWorkflowAvailabilityPropertiesChanged()
@@ -1332,6 +1438,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseConversionReadinessPropertiesChanged()
     {
         OnPropertyChanged(nameof(ConversionReadinessTitle));
+        OnPropertyChanged(nameof(ShowConversionReadinessCard));
         OnPropertyChanged(nameof(ConversionReadinessVisibility));
         OnPropertyChanged(nameof(ConversionReadinessStatusLabel));
         OnPropertyChanged(nameof(ConversionReadinessMissingRequirementsTitle));
