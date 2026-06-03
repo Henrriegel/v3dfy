@@ -56,8 +56,12 @@ public sealed class MainWindowViewModel : ObservableObject
     private ConversionExecutionState _conversionExecutionState = ConversionExecutionState.NotStarted();
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private string _outputPathText = string.Empty;
+    private string _technicalDetailsBodyText = string.Empty;
+    private TaskCompletionSource<bool>? _replaceVideoConfirmationCompletion;
     private bool _isUpdatingOutputPathText;
     private bool _isAnalyzing;
+    private bool _isTechnicalDetailsModalOpen;
+    private bool _isReplaceVideoConfirmationModalOpen;
 
     public MainWindowViewModel()
     {
@@ -83,6 +87,10 @@ public sealed class MainWindowViewModel : ObservableObject
         ResetOutputPathCommand = new RelayCommand(ResetOutputPath);
         StartConversionCommand = new RelayCommand(StartConversion, () => CanStartConversion);
         CancelConversionCommand = new RelayCommand(CancelConversion);
+        ShowTechnicalDetailsCommand = new RelayCommand(ShowTechnicalDetails);
+        CloseTechnicalDetailsCommand = new RelayCommand(CloseTechnicalDetails);
+        ConfirmReplaceVideoCommand = new RelayCommand(ConfirmReplaceVideo);
+        CancelReplaceVideoCommand = new RelayCommand(CancelReplaceVideo);
 
         _themeService.Apply(_selectedTheme);
         RefreshEngineStatus();
@@ -124,6 +132,8 @@ public sealed class MainWindowViewModel : ObservableObject
                     OnPropertyChanged(nameof(SelectedWorkflowTabIndex));
                 }
 
+                OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
+                OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
                 RaiseWorkflowAvailabilityPropertiesChanged();
                 RaiseConversionReadinessPropertiesChanged();
             }
@@ -310,6 +320,21 @@ public sealed class MainWindowViewModel : ObservableObject
             }
         }
     }
+
+    public int SelectedSystemStatusTabIndex
+    {
+        get => _workflowState.SelectedSystemStatusTabIndex;
+        set
+        {
+            if (_workflowState.SetSelectedSystemStatusTabIndex(value))
+            {
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public bool CanOpenSystemStatusConversionTab =>
+        _workflowState.CanOpenSystemStatusConversionTab;
 
     public bool IsAnalyzing
     {
@@ -611,6 +636,84 @@ public sealed class MainWindowViewModel : ObservableObject
         "Conversion readiness",
         "Estado de conversión");
 
+    public string SystemStatusTitle => Text(
+        "System status",
+        "Estado del sistema");
+
+    public string SystemStatusToolsTabTitle => Text("Tools", "Herramientas");
+
+    public string SystemStatusConversionTabTitle => Text("Conversion", "Conversión");
+
+    public string SystemStatusTechnicalDetailsTitle => Text(
+        "Technical details",
+        "Detalles técnicos");
+
+    public string SystemStatusDetailsButtonText => Text("Details", "Detalles");
+
+    public string CloseDialogText => Text("Close", "Cerrar");
+
+    public string CancelDialogText => Text("Cancel", "Cancelar");
+
+    public string ReplaceSelectedVideoTitleText => Text(
+        "Replace selected video?",
+        "¿Reemplazar video seleccionado?");
+
+    public string ReplaceSelectedVideoBodyText => Text(
+        "Selecting a new video will clear the current analysis, recommended setup, conversion plan, and custom output path before analyzing the new video. Plan options may update when the new recommendation is prepared.",
+        "Seleccionar un nuevo video borrará el análisis actual, la configuración recomendada, el plan de conversión y la ruta de salida personalizada antes de analizar el nuevo video. Las opciones del plan pueden actualizarse cuando se prepare la nueva recomendación.");
+
+    public string ReplaceVideoConfirmText => Text("Replace", "Reemplazar");
+
+    public string ActiveModalTitleText => IsReplaceVideoConfirmationModalOpen
+        ? ReplaceSelectedVideoTitleText
+        : SystemStatusTechnicalDetailsTitle;
+
+    public bool IsAnyModalOpen =>
+        IsTechnicalDetailsModalOpen || IsReplaceVideoConfirmationModalOpen;
+
+    public Visibility ModalOverlayVisibility =>
+        IsAnyModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool IsTechnicalDetailsModalOpen
+    {
+        get => _isTechnicalDetailsModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isTechnicalDetailsModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsReplaceVideoConfirmationModalOpen
+    {
+        get => _isReplaceVideoConfirmationModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isReplaceVideoConfirmationModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public Visibility TechnicalDetailsModalContentVisibility =>
+        IsTechnicalDetailsModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ReplaceVideoConfirmationModalContentVisibility =>
+        IsReplaceVideoConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public string TechnicalDetailsBodyText
+    {
+        get => _technicalDetailsBodyText;
+        private set => SetProperty(ref _technicalDetailsBodyText, value);
+    }
+
+    public string ConversionReadinessEmptyText => Text(
+        "Analyze a video to see conversion readiness.",
+        "Analiza un video para ver el estado de conversión.");
+
     public bool ShowConversionReadinessCard =>
         _workflowState.ShowConversionReadinessCard(_conversionExecutionState.Status);
 
@@ -643,6 +746,11 @@ public sealed class MainWindowViewModel : ObservableObject
                 Environment.NewLine,
                 _conversionReadiness.Issues.Select(issue =>
                     $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
+
+    public string ConversionReadinessMissingComponentsSummaryText =>
+        _dependencyHealth is null || !HasCompletedAnalysis
+            ? "-"
+            : CreateMissingComponentsSummary();
 
     public string ConversionReadinessRequiredComponentsText => _conversionReadiness is null
         ? string.Empty
@@ -751,6 +859,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand CancelConversionCommand { get; }
 
+    public RelayCommand ShowTechnicalDetailsCommand { get; }
+
+    public RelayCommand CloseTechnicalDetailsCommand { get; }
+
+    public RelayCommand ConfirmReplaceVideoCommand { get; }
+
+    public RelayCommand CancelReplaceVideoCommand { get; }
+
     public async void SelectDroppedVideo(string path)
     {
         if (!IsSupportedVideoFile(path))
@@ -815,7 +931,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         var replacingVideo = HasSelectedVideo;
-        if (replacingVideo && !ConfirmReplaceSelectedVideo())
+        if (replacingVideo && !await ConfirmReplaceSelectedVideoAsync())
         {
             AddLog(
                 "Video replacement canceled.",
@@ -830,19 +946,13 @@ public sealed class MainWindowViewModel : ObservableObject
         await AnalyzeSelectedVideoAsync();
     }
 
-    private bool ConfirmReplaceSelectedVideo()
+    private Task<bool> ConfirmReplaceSelectedVideoAsync()
     {
-        var result = System.Windows.MessageBox.Show(
-            Text(
-                "Selecting a new video will clear the current analysis, recommended setup, conversion plan, selected options and custom output path. Continue?",
-                "Seleccionar un nuevo video borrará el análisis actual, la configuración recomendada, el plan de conversión, las opciones seleccionadas y la ruta de salida personalizada. ¿Continuar?"),
-            Text(
-                "Replace selected video?",
-                "¿Reemplazar video seleccionado?"),
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        return result == MessageBoxResult.Yes;
+        IsTechnicalDetailsModalOpen = false;
+        _replaceVideoConfirmationCompletion =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        IsReplaceVideoConfirmationModalOpen = true;
+        return _replaceVideoConfirmationCompletion.Task;
     }
 
     private async Task AnalyzeSelectedVideoAsync()
@@ -911,6 +1021,39 @@ public sealed class MainWindowViewModel : ObservableObject
             "Estado de herramientas internas actualizado.");
     }
 
+    private void ShowTechnicalDetails()
+    {
+        if (IsReplaceVideoConfirmationModalOpen)
+        {
+            return;
+        }
+
+        TechnicalDetailsBodyText = CreateSystemStatusTechnicalDetailsText();
+        IsTechnicalDetailsModalOpen = true;
+    }
+
+    private void CloseTechnicalDetails()
+    {
+        IsTechnicalDetailsModalOpen = false;
+    }
+
+    private void ConfirmReplaceVideo()
+    {
+        CompleteReplaceVideoConfirmation(replaceVideo: true);
+    }
+
+    private void CancelReplaceVideo()
+    {
+        CompleteReplaceVideoConfirmation(replaceVideo: false);
+    }
+
+    private void CompleteReplaceVideoConfirmation(bool replaceVideo)
+    {
+        IsReplaceVideoConfirmationModalOpen = false;
+        _replaceVideoConfirmationCompletion?.TrySetResult(replaceVideo);
+        _replaceVideoConfirmationCompletion = null;
+    }
+
     private void UpdateConversionReadiness()
     {
         if (_dependencyHealth is null)
@@ -945,7 +1088,38 @@ public sealed class MainWindowViewModel : ObservableObject
         StatusText: dependencyHealth.Status == ToolHealthStatus.Found
             ? Text("Found", "Encontrado")
             : Text("Missing", "Faltante"),
+        ReasonText: ToolStatusReasonText(dependencyHealth),
         DetailText: ToolStatusDetailText(dependencyHealth));
+
+    private string ToolStatusReasonText(ToolDependencyHealth dependencyHealth) =>
+        dependencyHealth.DetailKind switch
+        {
+            ToolHealthDetailKind.BundledFileFound => Text(
+                "Bundled executable found",
+                "Ejecutable incluido encontrado"),
+            ToolHealthDetailKind.BundledFileMissing => Text(
+                "Bundled executable not found",
+                "Ejecutable incluido no encontrado"),
+            ToolHealthDetailKind.EngineBundleFound => Text(
+                "Engine files found",
+                "Archivos del motor encontrados"),
+            ToolHealthDetailKind.EngineDirectoryMissing => Text(
+                "Engine folder not found",
+                "Carpeta del motor no encontrada"),
+            ToolHealthDetailKind.EnginePlaceholderOnly => Text(
+                "Engine folder only contains placeholders",
+                "La carpeta del motor solo contiene marcadores"),
+            ToolHealthDetailKind.ModelFilesFound => Text(
+                "Compatible model files found",
+                "Modelos compatibles encontrados"),
+            ToolHealthDetailKind.ModelsDirectoryMissing => Text(
+                "Models folder not found",
+                "Carpeta de modelos no encontrada"),
+            ToolHealthDetailKind.ModelFilesMissing => Text(
+                "No compatible model files found",
+                "No se encontraron modelos compatibles"),
+            _ => Text("Local dependency checked", "Dependencia local revisada"),
+        };
 
     private string ToolStatusDetailText(ToolDependencyHealth dependencyHealth) =>
         dependencyHealth.DetailKind switch
@@ -976,6 +1150,74 @@ public sealed class MainWindowViewModel : ObservableObject
                 $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}"),
             _ => dependencyHealth.ExpectedPath,
         };
+
+    private string CreateSystemStatusTechnicalDetailsText()
+    {
+        var lines = new List<string>
+        {
+            SystemStatusToolsTabTitle,
+            string.Empty,
+        };
+
+        foreach (var toolStatus in ToolStatuses)
+        {
+            lines.Add(toolStatus.Name);
+            lines.Add(toolStatus.DetailText);
+            lines.Add(string.Empty);
+        }
+
+        lines.Add(SystemStatusConversionTabTitle);
+        lines.Add(string.Empty);
+        lines.Add($"{ConversionReadinessStatusLabel}: {ConversionReadinessStatusText}");
+        lines.Add(string.Empty);
+        lines.Add($"{ConversionReadinessMissingRequirementsTitle}:");
+        lines.Add(ConversionReadinessIssuesText);
+        lines.Add(string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(ConversionReadinessRequiredComponentsText))
+        {
+            lines.Add(ConversionReadinessRequiredComponentsText);
+            lines.Add(string.Empty);
+        }
+
+        if (!string.IsNullOrWhiteSpace(ConversionBlockedReasonText))
+        {
+            lines.Add(ConversionBlockedReasonText);
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string CreateMissingComponentsSummary()
+    {
+        if (_dependencyHealth is null)
+        {
+            return "-";
+        }
+
+        var missingComponents = new List<string>();
+        AddMissingComponent(missingComponents, _dependencyHealth.Ffmpeg, "FFmpeg", "FFmpeg");
+        AddMissingComponent(missingComponents, _dependencyHealth.Ffprobe, "FFprobe", "FFprobe");
+        AddMissingComponent(missingComponents, _dependencyHealth.Python, "Python", "Python");
+        AddMissingComponent(missingComponents, _dependencyHealth.Iw3EngineDirectory, "iw3 engine", "motor iw3");
+        AddMissingComponent(missingComponents, _dependencyHealth.ModelsDirectory, "3D models", "modelos 3D");
+
+        return missingComponents.Count == 0
+            ? Text("No missing components.", "No faltan componentes.")
+            : Text("Missing: ", "Faltan: ") + string.Join(", ", missingComponents);
+    }
+
+    private void AddMissingComponent(
+        ICollection<string> missingComponents,
+        ToolDependencyHealth dependencyHealth,
+        string englishName,
+        string spanishName)
+    {
+        if (dependencyHealth.Status == ToolHealthStatus.Missing)
+        {
+            missingComponents.Add(Text(englishName, spanishName));
+        }
+    }
 
     private void SetSelectedVideo(string path, bool replacingVideo)
     {
@@ -1332,6 +1574,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionPlanPropertiesChanged();
         RaiseConversionExecutionPropertiesChanged();
         RaiseConversionReadinessPropertiesChanged();
+        RaiseSystemStatusPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(ActivityLogTitle));
@@ -1453,6 +1696,35 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCompletedAnalysis));
         OnPropertyChanged(nameof(CanOpenRecommendedSetupTab));
         OnPropertyChanged(nameof(CanOpenConversionPlanTab));
+        OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
+    }
+
+    private void RaiseSystemStatusPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SystemStatusTitle));
+        OnPropertyChanged(nameof(SystemStatusToolsTabTitle));
+        OnPropertyChanged(nameof(SystemStatusConversionTabTitle));
+        OnPropertyChanged(nameof(SystemStatusTechnicalDetailsTitle));
+        OnPropertyChanged(nameof(SystemStatusDetailsButtonText));
+        OnPropertyChanged(nameof(CloseDialogText));
+        OnPropertyChanged(nameof(CancelDialogText));
+        OnPropertyChanged(nameof(ReplaceSelectedVideoTitleText));
+        OnPropertyChanged(nameof(ReplaceSelectedVideoBodyText));
+        OnPropertyChanged(nameof(ReplaceVideoConfirmText));
+        OnPropertyChanged(nameof(ActiveModalTitleText));
+        OnPropertyChanged(nameof(TechnicalDetailsBodyText));
+        OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
+        OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
+        OnPropertyChanged(nameof(ConversionReadinessEmptyText));
+    }
+
+    private void RaiseModalStatePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(IsAnyModalOpen));
+        OnPropertyChanged(nameof(ModalOverlayVisibility));
+        OnPropertyChanged(nameof(ActiveModalTitleText));
+        OnPropertyChanged(nameof(TechnicalDetailsModalContentVisibility));
+        OnPropertyChanged(nameof(ReplaceVideoConfirmationModalContentVisibility));
     }
 
     private void RaiseConversionReadinessPropertiesChanged()
@@ -1464,10 +1736,12 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionReadinessMissingRequirementsTitle));
         OnPropertyChanged(nameof(ConversionReadinessStatusText));
         OnPropertyChanged(nameof(ConversionReadinessIssuesText));
+        OnPropertyChanged(nameof(ConversionReadinessMissingComponentsSummaryText));
         OnPropertyChanged(nameof(ConversionReadinessRequiredComponentsText));
         OnPropertyChanged(nameof(ConversionBlockedReasonText));
         OnPropertyChanged(nameof(CanStartConversion));
         OnPropertyChanged(nameof(StartConversionText));
+        RaiseSystemStatusPropertiesChanged();
         StartConversionCommand.RaiseCanExecuteChanged();
     }
 

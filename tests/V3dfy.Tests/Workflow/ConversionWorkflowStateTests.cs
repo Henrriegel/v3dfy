@@ -11,9 +11,13 @@ public sealed class ConversionWorkflowStateTests
         var state = new ConversionWorkflowState();
 
         Assert.Equal(0, state.SelectedTabIndex);
+        Assert.Equal(
+            ConversionWorkflowState.SystemStatusToolsTabIndex,
+            state.SelectedSystemStatusTabIndex);
         Assert.False(state.HasCompletedAnalysis);
         Assert.False(state.CanOpenRecommendedSetupTab);
         Assert.False(state.CanOpenConversionPlanTab);
+        Assert.False(state.CanOpenSystemStatusConversionTab);
     }
 
     [Fact]
@@ -30,6 +34,10 @@ public sealed class ConversionWorkflowStateTests
         Assert.True(state.HasCompletedAnalysis);
         Assert.True(state.CanOpenRecommendedSetupTab);
         Assert.True(state.CanOpenConversionPlanTab);
+        Assert.True(state.CanOpenSystemStatusConversionTab);
+        Assert.Equal(
+            ConversionWorkflowState.SystemStatusConversionTabIndex,
+            state.SelectedSystemStatusTabIndex);
     }
 
     [Fact]
@@ -47,6 +55,39 @@ public sealed class ConversionWorkflowStateTests
         Assert.True(selectedTabIndexChanged);
         Assert.False(state.HasCompletedAnalysis);
         Assert.Equal(0, state.SelectedTabIndex);
+        Assert.Equal(
+            ConversionWorkflowState.SystemStatusToolsTabIndex,
+            state.SelectedSystemStatusTabIndex);
+    }
+
+    [Fact]
+    public void SetSelectedSystemStatusTabIndex_ConversionBeforeAnalysis_KeepsToolsTab()
+    {
+        var state = new ConversionWorkflowState();
+
+        var changed = state.SetSelectedSystemStatusTabIndex(
+            ConversionWorkflowState.SystemStatusConversionTabIndex);
+
+        Assert.False(changed);
+        Assert.Equal(
+            ConversionWorkflowState.SystemStatusToolsTabIndex,
+            state.SelectedSystemStatusTabIndex);
+    }
+
+    [Fact]
+    public void SetSelectedSystemStatusTabIndex_ConversionAfterAnalysis_SelectsConversionTab()
+    {
+        var state = new ConversionWorkflowState();
+        state.SetHasCompletedAnalysis(true, out _);
+        state.SetSelectedSystemStatusTabIndex(ConversionWorkflowState.SystemStatusToolsTabIndex);
+
+        var changed = state.SetSelectedSystemStatusTabIndex(
+            ConversionWorkflowState.SystemStatusConversionTabIndex);
+
+        Assert.True(changed);
+        Assert.Equal(
+            ConversionWorkflowState.SystemStatusConversionTabIndex,
+            state.SelectedSystemStatusTabIndex);
     }
 
     [Fact]

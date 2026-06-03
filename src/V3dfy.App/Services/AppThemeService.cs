@@ -26,6 +26,7 @@ public sealed class AppThemeService
         SetBrush("ComboBoxBackgroundBrush", isDark ? "#263544" : "#FFFFFF");
         SetBrush("ComboBoxBorderBrush", isDark ? "#60758A" : "#AFC0D0");
         SetBrush("ComboBoxHoverBrush", isDark ? "#34495D" : "#E8F1FB");
+        SetBrush("ModalOverlayBrush", isDark ? "#99000000" : "#80000000");
         SetBrush("ScrollBarTrackBrush", isDark ? "#111922" : "#E5EBF1");
         SetBrush("ScrollBarThumbBrush", isDark ? "#526779" : "#9AABBA");
         SetBrush("ScrollBarThumbHoverBrush", isDark ? "#6B8296" : "#7E93A5");

@@ -474,8 +474,8 @@
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="18" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition Height="12" />
+                    <RowDefinition Height="*" MinHeight="170" />
                 </Grid.RowDefinitions>
 
                 <StackPanel>
@@ -530,84 +530,102 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Margin="0,0,0,18"
-                            Style="{StaticResource CardStyle}"
-                            Visibility="{Binding ConversionReadinessVisibility}">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                       Text="{Binding ConversionReadinessTitle}" />
-                            <TextBlock Text="{Binding ConversionReadinessStatusLabel}"
-                                       Style="{StaticResource MutedTextStyle}" />
-                            <TextBlock Margin="0,2,0,8"
-                                       Text="{Binding ConversionReadinessStatusText}"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Text="{Binding ConversionReadinessMissingRequirementsTitle}"
-                                       Style="{StaticResource MutedTextStyle}" />
-                            <TextBlock Margin="0,2,0,8"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       Text="{Binding ConversionReadinessIssuesText}"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Margin="0,0,0,10"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       Text="{Binding ConversionReadinessRequiredComponentsText}"
-                                       TextWrapping="Wrap" />
-                            <TextBlock Margin="0,0,0,10"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       Text="{Binding ConversionBlockedReasonText}"
-                                       TextWrapping="Wrap" />
-                            <Button HorizontalAlignment="Left"
-                                    Command="{Binding StartConversionCommand}"
-                                    Content="{Binding StartConversionText}" />
-                        </StackPanel>
-                    </Border>
-
                     <Border Style="{StaticResource CardStyle}">
                         <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                       Text="{Binding ToolStatusTitle}" />
-                            <Button Grid.Column="1"
-                                    Margin="0,0,0,8"
-                                    Padding="10,5"
-                                    Command="{Binding RefreshEngineStatusCommand}"
-                                    Content="{Binding RefreshText}" />
-                        </Grid>
-                        <ItemsControl ItemsSource="{Binding ToolStatuses}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="0,4">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="{Binding Name}" />
-                                        <TextBlock Grid.Column="1"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding StatusText}" />
-                                        <TextBlock Grid.Row="1"
-                                                   Grid.ColumnSpan="2"
-                                                   Margin="0,2,0,0"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding DetailText}"
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="{Binding SystemStatusTitle}" />
+                                <StackPanel Grid.Column="1"
+                                            Margin="0,0,0,8"
+                                            Orientation="Horizontal">
+                                    <Button Margin="0,0,8,0"
+                                            AutomationProperties.AutomationId="ShowTechnicalDetailsButton"
+                                            Command="{Binding ShowTechnicalDetailsCommand}"
+                                            Content="{Binding SystemStatusDetailsButtonText}"
+                                            Style="{StaticResource SecondaryButtonStyle}" />
+                                    <Button Padding="10,5"
+                                            Command="{Binding RefreshEngineStatusCommand}"
+                                            Content="{Binding RefreshText}" />
+                                </StackPanel>
+                            </Grid>
+                            <TabControl SelectedIndex="{Binding SelectedSystemStatusTabIndex,
+                                                                Mode=TwoWay}"
+                                        Style="{StaticResource WorkflowTabControlStyle}">
+                                <TabItem Header="{Binding SystemStatusToolsTabTitle}"
+                                         Style="{StaticResource WorkflowTabItemStyle}">
+                                    <StackPanel>
+                                        <ItemsControl ItemsSource="{Binding ToolStatuses}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,4"
+                                                          ToolTip="{Binding DetailText}">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontWeight="SemiBold"
+                                                                   Text="{Binding Name}" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Margin="8,0,0,0"
+                                                                   FontWeight="SemiBold"
+                                                                   Text="{Binding StatusText}" />
+                                                        <TextBlock Grid.Row="1"
+                                                                   Grid.ColumnSpan="2"
+                                                                   Margin="0,2,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ReasonText}"
+                                                                   TextWrapping="Wrap" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </TabItem>
+                                <TabItem Header="{Binding SystemStatusConversionTabTitle}"
+                                         IsEnabled="{Binding CanOpenSystemStatusConversionTab}"
+                                         Style="{StaticResource WorkflowTabItemStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding ConversionReadinessStatusLabel}"
+                                                   Style="{StaticResource MutedTextStyle}" />
+                                        <TextBlock Margin="0,2,0,8"
+                                                   Text="{Binding ConversionReadinessStatusText}"
                                                    TextWrapping="Wrap" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                                        <TextBlock Text="{Binding ConversionReadinessMissingRequirementsTitle}"
+                                                   Style="{StaticResource MutedTextStyle}" />
+                                        <TextBlock Margin="0,2,0,8"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding ConversionReadinessMissingComponentsSummaryText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,0,0,10"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding ConversionReadinessRequiredComponentsText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,0,0,10"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding ConversionBlockedReasonText}"
+                                                   TextWrapping="Wrap" />
+                                        <Button HorizontalAlignment="Stretch"
+                                                AutomationProperties.AutomationId="StartConversionButton"
+                                                Command="{Binding StartConversionCommand}"
+                                                Content="{Binding StartConversionText}"
+                                                Style="{StaticResource PrimaryCtaButtonStyle}" />
+                                    </StackPanel>
+                                </TabItem>
+                            </TabControl>
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <Border Grid.Row="2"
-                        MinHeight="160"
+                        MinHeight="170"
                         Style="{StaticResource CardStyle}">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -670,6 +688,75 @@
                 </Border>
 
             </Grid>
+        </Grid>
+
+        <Grid Grid.RowSpan="2"
+              Panel.ZIndex="10"
+              Style="{StaticResource V3dfyModalOverlayStyle}"
+              Visibility="{Binding ModalOverlayVisibility}">
+            <Border Width="680"
+                    MaxHeight="520"
+                    MinHeight="360"
+                    Margin="24"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource V3dfyModalCardStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="16" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Style="{StaticResource V3dfyModalTitleTextStyle}"
+                               Text="{Binding ActiveModalTitleText}" />
+
+                    <TextBox Grid.Row="1"
+                             MinHeight="220"
+                             AcceptsReturn="True"
+                             Background="{DynamicResource LogBackgroundBrush}"
+                             BorderBrush="{DynamicResource CardBorderBrush}"
+                             FontFamily="Consolas"
+                             FontSize="12"
+                             HorizontalScrollBarVisibility="Disabled"
+                             IsReadOnly="True"
+                             Text="{Binding TechnicalDetailsBodyText, Mode=OneWay}"
+                             TextWrapping="Wrap"
+                             VerticalScrollBarVisibility="Auto"
+                             Visibility="{Binding TechnicalDetailsModalContentVisibility}">
+                        <TextBox.Resources>
+                            <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                                   TargetType="ScrollBar" />
+                        </TextBox.Resources>
+                    </TextBox>
+
+                    <TextBlock Grid.Row="1"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="{Binding ReplaceSelectedVideoBodyText}"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding ReplaceVideoConfirmationModalContentVisibility}" />
+
+                    <StackPanel Grid.Row="3"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                        <Button AutomationProperties.AutomationId="CancelReplaceVideoButton"
+                                Command="{Binding CancelReplaceVideoCommand}"
+                                Content="{Binding CancelDialogText}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding ReplaceVideoConfirmationModalContentVisibility}" />
+                        <Button Margin="8,0,0,0"
+                                AutomationProperties.AutomationId="ConfirmReplaceVideoButton"
+                                Command="{Binding ConfirmReplaceVideoCommand}"
+                                Content="{Binding ReplaceVideoConfirmText}"
+                                Visibility="{Binding ReplaceVideoConfirmationModalContentVisibility}" />
+                        <Button AutomationProperties.AutomationId="CloseTechnicalDetailsButton"
+                                Command="{Binding CloseTechnicalDetailsCommand}"
+                                Content="{Binding CloseDialogText}"
+                                Visibility="{Binding TechnicalDetailsModalContentVisibility}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </Window>

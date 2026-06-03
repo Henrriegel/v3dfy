@@ -4,13 +4,21 @@ namespace V3dfy.Core.Workflow;
 
 public sealed class ConversionWorkflowState
 {
+    public const int SystemStatusToolsTabIndex = 0;
+
+    public const int SystemStatusConversionTabIndex = 1;
+
     public int SelectedTabIndex { get; private set; }
+
+    public int SelectedSystemStatusTabIndex { get; private set; } = SystemStatusToolsTabIndex;
 
     public bool HasCompletedAnalysis { get; private set; }
 
     public bool CanOpenRecommendedSetupTab => HasCompletedAnalysis;
 
     public bool CanOpenConversionPlanTab => HasCompletedAnalysis;
+
+    public bool CanOpenSystemStatusConversionTab => HasCompletedAnalysis;
 
     public bool SetSelectedTabIndex(int value)
     {
@@ -20,6 +28,22 @@ public sealed class ConversionWorkflowState
         }
 
         SelectedTabIndex = value;
+        return true;
+    }
+
+    public bool SetSelectedSystemStatusTabIndex(int value)
+    {
+        var normalizedValue = value == SystemStatusConversionTabIndex &&
+            CanOpenSystemStatusConversionTab
+                ? SystemStatusConversionTabIndex
+                : SystemStatusToolsTabIndex;
+
+        if (SelectedSystemStatusTabIndex == normalizedValue)
+        {
+            return false;
+        }
+
+        SelectedSystemStatusTabIndex = normalizedValue;
         return true;
     }
 
@@ -35,6 +59,10 @@ public sealed class ConversionWorkflowState
         }
 
         HasCompletedAnalysis = value;
+        SelectedSystemStatusTabIndex = value
+            ? SystemStatusConversionTabIndex
+            : SystemStatusToolsTabIndex;
+
         if (!value && SelectedTabIndex != 0)
         {
             SelectedTabIndex = 0;
