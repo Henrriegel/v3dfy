@@ -12,6 +12,7 @@ using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
 using V3dfy.Core.Recommendations;
 using V3dfy.Core.Readiness;
+using V3dfy.Core.Workflow;
 using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
 using V3dfy.Infrastructure.Health;
@@ -40,7 +41,9 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly VideoConversionPlanService _conversionPlanService;
     private readonly ConversionReadinessService _conversionReadinessService;
     private readonly ConversionExecutionFeatureGate _conversionExecutionFeatureGate;
+    private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
+    private readonly ConversionWorkflowState _workflowState = new();
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
@@ -52,14 +55,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private ConversionExecutionState _conversionExecutionState = ConversionExecutionState.NotStarted();
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private string _outputPathText = string.Empty;
-    private OutputContainer _selectedOutputContainer = OutputContainer.MP4;
-    private AiQualityPreset _selectedQualityPreset = AiQualityPreset.Balanced;
-    private ThreeDIntensity _selectedThreeDIntensity = ThreeDIntensity.Medium;
-    private ThreeDOutputFormat _selectedThreeDOutputFormat = ThreeDOutputFormat.HalfTopBottom;
-    private bool _hasCustomizedPlanOptions;
     private bool _isUpdatingOutputPathText;
-    private int _selectedWorkflowTabIndex;
-    private bool _hasCompletedAnalysis;
     private bool _isAnalyzing;
 
     public MainWindowViewModel()
@@ -116,14 +112,15 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool HasCompletedAnalysis
     {
-        get => _hasCompletedAnalysis;
+        get => _workflowState.HasCompletedAnalysis;
         private set
         {
-            if (SetProperty(ref _hasCompletedAnalysis, value))
+            if (_workflowState.SetHasCompletedAnalysis(value, out var selectedTabIndexChanged))
             {
-                if (!value)
+                OnPropertyChanged();
+                if (selectedTabIndexChanged)
                 {
-                    SelectedWorkflowTabIndex = 0;
+                    OnPropertyChanged(nameof(SelectedWorkflowTabIndex));
                 }
 
                 RaiseWorkflowAvailabilityPropertiesChanged();
@@ -243,11 +240,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public OutputContainer SelectedOutputContainer
     {
-        get => _selectedOutputContainer;
+        get => _planOptionState.OutputContainer;
         set
         {
-            if (SetProperty(ref _selectedOutputContainer, value))
+            if (_planOptionState.SetOutputContainer(value))
             {
+                OnPropertyChanged();
                 PlanOptionChanged(
                     $"Output container changed to {value}.",
                     $"Contenedor de salida cambiado a {value}.");
@@ -257,11 +255,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public AiQualityPreset SelectedQualityPreset
     {
-        get => _selectedQualityPreset;
+        get => _planOptionState.QualityPreset;
         set
         {
-            if (SetProperty(ref _selectedQualityPreset, value))
+            if (_planOptionState.SetQualityPreset(value))
             {
+                OnPropertyChanged();
                 PlanOptionChanged(
                     $"Quality changed to {QualityPresetText(value, useSpanish: false)}.",
                     $"Calidad cambiada a {QualityPresetText(value, useSpanish: true)}.");
@@ -271,11 +270,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public ThreeDIntensity SelectedThreeDIntensity
     {
-        get => _selectedThreeDIntensity;
+        get => _planOptionState.Intensity;
         set
         {
-            if (SetProperty(ref _selectedThreeDIntensity, value))
+            if (_planOptionState.SetIntensity(value))
             {
+                OnPropertyChanged();
                 PlanOptionChanged(
                     $"3D intensity changed to {ThreeDIntensityText(value, useSpanish: false)}.",
                     $"Intensidad 3D cambiada a {ThreeDIntensityText(value, useSpanish: true)}.");
@@ -285,11 +285,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public ThreeDOutputFormat SelectedThreeDOutputFormat
     {
-        get => _selectedThreeDOutputFormat;
+        get => _planOptionState.ThreeDOutputFormat;
         set
         {
-            if (SetProperty(ref _selectedThreeDOutputFormat, value))
+            if (_planOptionState.SetThreeDOutputFormat(value))
             {
+                OnPropertyChanged();
                 PlanOptionChanged(
                     $"3D layout changed to {ThreeDOutputFormatText(value, useSpanish: false)}.",
                     $"Diseño 3D cambiado a {ThreeDOutputFormatText(value, useSpanish: true)}.");
@@ -299,8 +300,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public int SelectedWorkflowTabIndex
     {
-        get => _selectedWorkflowTabIndex;
-        set => SetProperty(ref _selectedWorkflowTabIndex, value);
+        get => _workflowState.SelectedTabIndex;
+        set
+        {
+            if (_workflowState.SetSelectedTabIndex(value))
+            {
+                OnPropertyChanged();
+            }
+        }
     }
 
     public bool IsAnalyzing
@@ -385,7 +392,7 @@ public sealed class MainWindowViewModel : ObservableObject
         "Recommended 3D setup",
         "Configuración 3D recomendada");
 
-    public bool CanOpenRecommendedSetupTab => HasCompletedAnalysis;
+    public bool CanOpenRecommendedSetupTab => _workflowState.CanOpenRecommendedSetupTab;
 
     public string RecommendedSetupStatusText => _conversionRecommendation is null
         ? Text("No recommended setup yet.", "Aún no hay configuración recomendada.")
@@ -451,7 +458,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ConversionPlanTitle => Text("Conversion plan", "Plan de conversión");
 
-    public bool CanOpenConversionPlanTab => HasCompletedAnalysis;
+    public bool CanOpenConversionPlanTab => _workflowState.CanOpenConversionPlanTab;
 
     public string PlanOptionsTitle => Text("Plan options", "Opciones del plan");
 
@@ -604,19 +611,13 @@ public sealed class MainWindowViewModel : ObservableObject
         "Estado de conversión");
 
     public bool ShowConversionReadinessCard =>
-        HasCompletedAnalysis &&
-        (_conversionExecutionState.Status == ConversionExecutionStatus.NotStarted ||
-         _conversionExecutionState.Status == ConversionExecutionStatus.Ready);
+        _workflowState.ShowConversionReadinessCard(_conversionExecutionState.Status);
 
     public Visibility ConversionReadinessVisibility =>
         ShowConversionReadinessCard ? Visibility.Visible : Visibility.Collapsed;
 
-    public bool ShowConversionProgressCard => _conversionExecutionState.Status is
-        ConversionExecutionStatus.Running or
-        ConversionExecutionStatus.Canceling or
-        ConversionExecutionStatus.Canceled or
-        ConversionExecutionStatus.Failed or
-        ConversionExecutionStatus.Completed;
+    public bool ShowConversionProgressCard =>
+        ConversionWorkflowState.ShowConversionProgressCard(_conversionExecutionState.Status);
 
     public Visibility ConversionProgressVisibility =>
         ShowConversionProgressCard ? Visibility.Visible : Visibility.Collapsed;
@@ -1018,7 +1019,6 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void PlanOptionChanged(string englishMessage, string spanishMessage)
     {
-        _hasCustomizedPlanOptions = true;
         ResetConversionExecutionState();
 
         if (RegenerateConversionPlan())
@@ -1155,38 +1155,19 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ApplyRecommendationDefaultsIfNeeded(
         VideoConversionSetupRecommendation recommendation)
     {
-        if (_hasCustomizedPlanOptions)
+        if (_planOptionState.ApplyRecommendationDefaultsIfNeeded(recommendation))
         {
-            return;
+            RaisePlanOptionSelectionPropertiesChanged();
         }
-
-        SetProperty(
-            ref _selectedOutputContainer,
-            recommendation.OutputContainer,
-            nameof(SelectedOutputContainer));
-        SetProperty(
-            ref _selectedQualityPreset,
-            recommendation.QualityPreset,
-            nameof(SelectedQualityPreset));
-        SetProperty(
-            ref _selectedThreeDIntensity,
-            recommendation.Intensity,
-            nameof(SelectedThreeDIntensity));
-        SetProperty(
-            ref _selectedThreeDOutputFormat,
-            recommendation.ThreeDOutputFormat,
-            nameof(SelectedThreeDOutputFormat));
     }
 
     private void ApplyPresetDefaults(TargetDevicePreset preset)
     {
-        var recommendation = preset.Recommendation;
-        _hasCustomizedPlanOptions = false;
         ResetConversionExecutionState();
-        SetProperty(ref _selectedOutputContainer, recommendation.OutputContainer, nameof(SelectedOutputContainer));
-        SetProperty(ref _selectedQualityPreset, AiQualityPreset.Balanced, nameof(SelectedQualityPreset));
-        SetProperty(ref _selectedThreeDIntensity, ThreeDIntensity.Medium, nameof(SelectedThreeDIntensity));
-        SetProperty(ref _selectedThreeDOutputFormat, recommendation.ThreeDOutputFormat, nameof(SelectedThreeDOutputFormat));
+        if (_planOptionState.ApplyPresetDefaults(preset))
+        {
+            RaisePlanOptionSelectionPropertiesChanged();
+        }
     }
 
     private void RegenerateRecommendationAndPlan()
@@ -1212,14 +1193,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _analysis,
             _conversionRecommendation,
             SelectedOutputPreset,
-            new VideoConversionPlanOptions(
-                SelectedOutputContainer,
-                SelectedQualityPreset,
-                SelectedThreeDIntensity,
-                SelectedThreeDOutputFormat,
-                // Manual paths are preserved exactly across option changes.
-                // Use Reset to return to automatic suffix and extension naming.
-                _outputPathState.CustomOutputPath),
+            _planOptionState.CreatePlanOptions(_outputPathState.CustomOutputPath),
             _toolPaths,
             _toolHealth ?? _healthChecker.Check(_toolPaths));
         RaiseConversionPlanPropertiesChanged();
@@ -1383,6 +1357,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private string RecommendationLabelValue(string englishLabel, string spanishLabel, string? value) =>
         $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
+
+    private void RaisePlanOptionSelectionPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedOutputContainer));
+        OnPropertyChanged(nameof(SelectedQualityPreset));
+        OnPropertyChanged(nameof(SelectedThreeDIntensity));
+        OnPropertyChanged(nameof(SelectedThreeDOutputFormat));
+    }
 
     private void RaiseConversionPlanPropertiesChanged()
     {
