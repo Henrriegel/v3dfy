@@ -35,18 +35,36 @@ public sealed class InternalToolsHealthChecker
         }
 
         var manifestPath = Path.Combine(path, "ENGINE_MANIFEST.json");
-        if (HasNonPlaceholderManifest(manifestPath))
+        var hasNonPlaceholderManifest = HasNonPlaceholderManifest(manifestPath);
+        var hasRequiredEntryFile = Iw3EngineBundleContract.EngineEntryRelativePaths
+            .Any(relativePath => File.Exists(Path.Combine(
+                [path, .. SplitRelativePath(relativePath)])));
+
+        if (hasNonPlaceholderManifest && hasRequiredEntryFile)
         {
             return new(ToolHealthStatus.Found, ToolHealthDetailKind.EngineBundleFound, path);
         }
 
-        var hasEngineFile = Directory
-            .EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Any(file => IsPlausibleEngineFile(path, file));
+        if (hasNonPlaceholderManifest)
+        {
+            return new(ToolHealthStatus.Missing, ToolHealthDetailKind.EngineEntryFilesMissing, path);
+        }
 
-        return hasEngineFile
-            ? new(ToolHealthStatus.Found, ToolHealthDetailKind.EngineBundleFound, path)
-            : new(ToolHealthStatus.Missing, ToolHealthDetailKind.EnginePlaceholderOnly, path);
+        if (hasRequiredEntryFile)
+        {
+            return new(ToolHealthStatus.Missing, ToolHealthDetailKind.EngineManifestMissing, path);
+        }
+
+        var hasNonPlaceholderContent = Directory
+            .EnumerateFiles(path, "*", SearchOption.AllDirectories)
+            .Any(file => IsNonPlaceholderEngineContent(path, file));
+
+        if (!hasNonPlaceholderContent)
+        {
+            return new(ToolHealthStatus.Missing, ToolHealthDetailKind.EnginePlaceholderOnly, path);
+        }
+
+        return new(ToolHealthStatus.Missing, ToolHealthDetailKind.EngineManifestMissing, path);
     }
 
     private static ToolDependencyHealth GetModelsHealth(string path)
@@ -61,7 +79,7 @@ public sealed class InternalToolsHealthChecker
 
         var hasModelFile = Directory
             .EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Any(file => ModelExtensions.Contains(
+            .Any(file => Iw3EngineBundleContract.SupportedModelExtensions.Contains(
                 Path.GetExtension(file),
                 StringComparer.OrdinalIgnoreCase));
 
@@ -70,7 +88,7 @@ public sealed class InternalToolsHealthChecker
             : new(ToolHealthStatus.Missing, ToolHealthDetailKind.ModelFilesMissing, path);
     }
 
-    private static bool IsPlausibleEngineFile(string engineDirectory, string file)
+    private static bool IsNonPlaceholderEngineContent(string engineDirectory, string file)
     {
         var relativePath = Path.GetRelativePath(engineDirectory, file);
         var firstSegment = relativePath.Split(
@@ -84,15 +102,20 @@ public sealed class InternalToolsHealthChecker
         }
 
         var fileName = Path.GetFileName(file);
-        if (string.Equals(fileName, "README.md", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(fileName, "ENGINE_MANIFEST.json", StringComparison.OrdinalIgnoreCase))
+        if (Iw3EngineBundleContract.PlaceholderOrContractFileNames.Contains(
+            fileName,
+            StringComparer.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        return string.Equals(Path.GetExtension(file), ".py", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(Path.GetExtension(file), ".md", StringComparison.OrdinalIgnoreCase);
+        return true;
     }
+
+    private static string[] SplitRelativePath(string relativePath) =>
+        relativePath.Split(
+            ['/', '\\'],
+            StringSplitOptions.RemoveEmptyEntries);
 
     private static bool HasNonPlaceholderManifest(string path)
     {
@@ -117,13 +140,4 @@ public sealed class InternalToolsHealthChecker
         }
     }
 
-    private static readonly string[] ModelExtensions =
-    [
-        ".pth",
-        ".pt",
-        ".onnx",
-        ".safetensors",
-        ".ckpt",
-        ".bin",
-    ];
 }

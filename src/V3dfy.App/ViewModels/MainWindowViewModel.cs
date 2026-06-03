@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
@@ -32,6 +33,14 @@ public sealed class MainWindowViewModel : ObservableObject
         ".m4v",
         ".webm",
     ];
+
+    private enum ToolStatusComponent
+    {
+        BundledTool,
+        EmbeddedPython,
+        Iw3Engine,
+        Models,
+    }
 
     private readonly InternalToolPaths _toolPaths;
     private readonly InternalToolsHealthChecker _healthChecker;
@@ -82,6 +91,7 @@ public sealed class MainWindowViewModel : ObservableObject
         SelectVideoCommand = new RelayCommand(SelectVideo);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
         RefreshEngineStatusCommand = new RelayCommand(RefreshEngineStatus);
+        OpenEngineFolderCommand = new RelayCommand(OpenEngineFolder);
         ClearLogsCommand = new RelayCommand(Logs.Clear);
         BrowseOutputFolderCommand = new RelayCommand(BrowseOutputFolder);
         ResetOutputPathCommand = new RelayCommand(ResetOutputPath);
@@ -786,6 +796,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string RefreshText => Text("Refresh", "Actualizar");
 
+    public string OpenEngineFolderText => Text(
+        "Open engine folder",
+        "Abrir carpeta del motor");
+
     public string ActivityLogTitle => Text("Activity log", "Registro de actividad");
 
     public string ClearText => Text("Clear", "Limpiar");
@@ -848,6 +862,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public AsyncRelayCommand AnalyzeCommand { get; }
 
     public RelayCommand RefreshEngineStatusCommand { get; }
+
+    public RelayCommand OpenEngineFolderCommand { get; }
 
     public RelayCommand ClearLogsCommand { get; }
 
@@ -1021,6 +1037,32 @@ public sealed class MainWindowViewModel : ObservableObject
             "Estado de herramientas internas actualizado.");
     }
 
+    private void OpenEngineFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(_toolPaths.Iw3EngineDirectory);
+            Directory.CreateDirectory(Path.GetDirectoryName(_toolPaths.PythonExecutable)!);
+            Directory.CreateDirectory(_toolPaths.ModelsDirectory);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _toolPaths.Iw3EngineDirectory,
+                UseShellExecute = true,
+            });
+
+            AddLog(
+                $"Opened expected engine folder: {_toolPaths.Iw3EngineDirectory}",
+                $"Carpeta esperada del motor abierta: {_toolPaths.Iw3EngineDirectory}");
+        }
+        catch (Exception exception)
+        {
+            AddLog(
+                $"Could not open expected engine folder: {exception.Message}",
+                $"No se pudo abrir la carpeta esperada del motor: {exception.Message}");
+        }
+    }
+
     private void ShowTechnicalDetails()
     {
         if (IsReplaceVideoConfirmationModalOpen)
@@ -1073,42 +1115,88 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         ToolStatuses.Clear();
-        ToolStatuses.Add(CreateToolStatus("FFmpeg", "FFmpeg", _dependencyHealth.Ffmpeg));
-        ToolStatuses.Add(CreateToolStatus("FFprobe", "FFprobe", _dependencyHealth.Ffprobe));
-        ToolStatuses.Add(CreateToolStatus("Python", "Python", _dependencyHealth.Python));
-        ToolStatuses.Add(CreateToolStatus("iw3 engine", "Motor iw3", _dependencyHealth.Iw3EngineDirectory));
-        ToolStatuses.Add(CreateToolStatus("3D models", "modelos 3D", _dependencyHealth.ModelsDirectory));
+        ToolStatuses.Add(CreateToolStatus(
+            "FFmpeg",
+            "FFmpeg",
+            _dependencyHealth.Ffmpeg,
+            ToolStatusComponent.BundledTool));
+        ToolStatuses.Add(CreateToolStatus(
+            "FFprobe",
+            "FFprobe",
+            _dependencyHealth.Ffprobe,
+            ToolStatusComponent.BundledTool));
+        ToolStatuses.Add(CreateToolStatus(
+            "Python",
+            "Python",
+            _dependencyHealth.Python,
+            ToolStatusComponent.EmbeddedPython));
+        ToolStatuses.Add(CreateToolStatus(
+            "iw3 engine",
+            "Motor iw3",
+            _dependencyHealth.Iw3EngineDirectory,
+            ToolStatusComponent.Iw3Engine));
+        ToolStatuses.Add(CreateToolStatus(
+            "3D models",
+            "modelos 3D",
+            _dependencyHealth.ModelsDirectory,
+            ToolStatusComponent.Models));
     }
 
     private ToolStatusItemViewModel CreateToolStatus(
         string englishName,
         string spanishName,
-        ToolDependencyHealth dependencyHealth) => new(
+        ToolDependencyHealth dependencyHealth,
+        ToolStatusComponent component) => new(
         Name: Text(englishName, spanishName),
         StatusText: dependencyHealth.Status == ToolHealthStatus.Found
             ? Text("Found", "Encontrado")
             : Text("Missing", "Faltante"),
-        ReasonText: ToolStatusReasonText(dependencyHealth),
-        DetailText: ToolStatusDetailText(dependencyHealth));
+        ReasonText: ToolStatusReasonText(dependencyHealth, component),
+        DetailText: ToolStatusDetailText(dependencyHealth, component),
+        ContextActionText: component == ToolStatusComponent.Iw3Engine
+            ? Text("Open", "Abrir")
+            : string.Empty,
+        ContextActionToolTip: component == ToolStatusComponent.Iw3Engine
+            ? OpenEngineFolderText
+            : string.Empty,
+        ContextActionVisibility: component == ToolStatusComponent.Iw3Engine
+            ? Visibility.Visible
+            : Visibility.Collapsed);
 
-    private string ToolStatusReasonText(ToolDependencyHealth dependencyHealth) =>
+    private string ToolStatusReasonText(
+        ToolDependencyHealth dependencyHealth,
+        ToolStatusComponent component) =>
         dependencyHealth.DetailKind switch
         {
             ToolHealthDetailKind.BundledFileFound => Text(
-                "Bundled executable found",
-                "Ejecutable incluido encontrado"),
+                component == ToolStatusComponent.EmbeddedPython
+                    ? "Embedded Python executable found"
+                    : "Bundled executable found",
+                component == ToolStatusComponent.EmbeddedPython
+                    ? "Ejecutable de Python embebido encontrado"
+                    : "Ejecutable incluido encontrado"),
             ToolHealthDetailKind.BundledFileMissing => Text(
-                "Bundled executable not found",
-                "Ejecutable incluido no encontrado"),
+                component == ToolStatusComponent.EmbeddedPython
+                    ? "Embedded Python executable missing"
+                    : "Bundled executable not found",
+                component == ToolStatusComponent.EmbeddedPython
+                    ? "Falta el ejecutable de Python embebido"
+                    : "Ejecutable incluido no encontrado"),
             ToolHealthDetailKind.EngineBundleFound => Text(
-                "Engine files found",
-                "Archivos del motor encontrados"),
+                "Required manifest and iw3 entry found",
+                "Manifiesto requerido y entrada iw3 encontrados"),
             ToolHealthDetailKind.EngineDirectoryMissing => Text(
                 "Engine folder not found",
                 "Carpeta del motor no encontrada"),
             ToolHealthDetailKind.EnginePlaceholderOnly => Text(
-                "Engine folder only contains placeholders",
-                "La carpeta del motor solo contiene marcadores"),
+                "Only placeholder or contract files found",
+                "Solo se encontraron marcadores o archivos de contrato"),
+            ToolHealthDetailKind.EngineManifestMissing => Text(
+                "Engine manifest missing or placeholder",
+                "El manifiesto del motor falta o es marcador"),
+            ToolHealthDetailKind.EngineEntryFilesMissing => Text(
+                "Required iw3 entry file missing",
+                "Falta el archivo de entrada iw3 requerido"),
             ToolHealthDetailKind.ModelFilesFound => Text(
                 "Compatible model files found",
                 "Modelos compatibles encontrados"),
@@ -1121,24 +1209,40 @@ public sealed class MainWindowViewModel : ObservableObject
             _ => Text("Local dependency checked", "Dependencia local revisada"),
         };
 
-    private string ToolStatusDetailText(ToolDependencyHealth dependencyHealth) =>
+    private string ToolStatusDetailText(
+        ToolDependencyHealth dependencyHealth,
+        ToolStatusComponent component) =>
         dependencyHealth.DetailKind switch
         {
             ToolHealthDetailKind.BundledFileFound => Text(
-                $"Bundled executable found: {dependencyHealth.ExpectedPath}",
-                $"Ejecutable incluido encontrado: {dependencyHealth.ExpectedPath}"),
+                component == ToolStatusComponent.EmbeddedPython
+                    ? $"Embedded Python executable found: {dependencyHealth.ExpectedPath}"
+                    : $"Bundled executable found: {dependencyHealth.ExpectedPath}",
+                component == ToolStatusComponent.EmbeddedPython
+                    ? $"Ejecutable de Python embebido encontrado: {dependencyHealth.ExpectedPath}"
+                    : $"Ejecutable incluido encontrado: {dependencyHealth.ExpectedPath}"),
             ToolHealthDetailKind.BundledFileMissing => Text(
-                $"Missing bundled executable: {dependencyHealth.ExpectedPath}",
-                $"Falta el ejecutable incluido: {dependencyHealth.ExpectedPath}"),
+                component == ToolStatusComponent.EmbeddedPython
+                    ? $"Expected embedded Python executable: {dependencyHealth.ExpectedPath}"
+                    : $"Missing bundled executable: {dependencyHealth.ExpectedPath}",
+                component == ToolStatusComponent.EmbeddedPython
+                    ? $"Ejecutable esperado de Python embebido: {dependencyHealth.ExpectedPath}"
+                    : $"Falta el ejecutable incluido: {dependencyHealth.ExpectedPath}"),
             ToolHealthDetailKind.EngineBundleFound => Text(
-                $"Local iw3 engine files found under: {dependencyHealth.ExpectedPath}",
-                $"Archivos del motor iw3 local encontrados en: {dependencyHealth.ExpectedPath}"),
+                $"Local iw3 bundle found under: {dependencyHealth.ExpectedPath}. Required: non-placeholder ENGINE_MANIFEST.json and iw3.py or iw3/__main__.py.",
+                $"Bundle local de iw3 encontrado en: {dependencyHealth.ExpectedPath}. Requerido: ENGINE_MANIFEST.json que no sea marcador e iw3.py o iw3/__main__.py."),
             ToolHealthDetailKind.EngineDirectoryMissing => Text(
-                $"Expected local iw3 engine folder: {dependencyHealth.ExpectedPath}",
-                $"Carpeta esperada del motor iw3 local: {dependencyHealth.ExpectedPath}"),
+                $"Expected local iw3 engine folder: {dependencyHealth.ExpectedPath}. Required layout: ENGINE_MANIFEST.json, python/python.exe, iw3.py or iw3/__main__.py, and models.",
+                $"Carpeta esperada del motor iw3 local: {dependencyHealth.ExpectedPath}. Estructura requerida: ENGINE_MANIFEST.json, python/python.exe, iw3.py o iw3/__main__.py y modelos."),
             ToolHealthDetailKind.EnginePlaceholderOnly => Text(
-                $"Engine folder exists, but only placeholder files were detected: {dependencyHealth.ExpectedPath}",
-                $"La carpeta del motor existe, pero solo contiene marcadores: {dependencyHealth.ExpectedPath}"),
+                $"Engine folder exists, but only placeholder or contract files were detected: {dependencyHealth.ExpectedPath}. Add a real iw3 bundle with a non-placeholder ENGINE_MANIFEST.json and iw3.py or iw3/__main__.py.",
+                $"La carpeta del motor existe, pero solo contiene marcadores o archivos de contrato: {dependencyHealth.ExpectedPath}. Agrega un bundle real de iw3 con ENGINE_MANIFEST.json que no sea marcador e iw3.py o iw3/__main__.py."),
+            ToolHealthDetailKind.EngineManifestMissing => Text(
+                $"Engine content exists, but ENGINE_MANIFEST.json is missing or still has version=placeholder: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}",
+                $"Hay contenido del motor, pero ENGINE_MANIFEST.json falta o aÃºn tiene version=placeholder: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}"),
+            ToolHealthDetailKind.EngineEntryFilesMissing => Text(
+                $"Engine manifest exists, but no supported iw3 entry file was found. Expected iw3.py or iw3/__main__.py under: {dependencyHealth.ExpectedPath}",
+                $"El manifiesto del motor existe, pero no se encontrÃ³ un archivo de entrada iw3 compatible. Se esperaba iw3.py o iw3/__main__.py en: {dependencyHealth.ExpectedPath}"),
             ToolHealthDetailKind.ModelFilesFound => Text(
                 $"Local 3D model files found under: {dependencyHealth.ExpectedPath}",
                 $"Modelos 3D locales encontrados en: {dependencyHealth.ExpectedPath}"),
@@ -1155,6 +1259,15 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         var lines = new List<string>
         {
+            Text("Expected local iw3 bundle layout", "Estructura esperada del bundle local iw3"),
+            Text(Iw3EngineBundleContract.EngineDirectoryRelativePath, Iw3EngineBundleContract.EngineDirectoryRelativePath),
+            Text($"  {Path.GetFileName(Iw3EngineBundleContract.ManifestRelativePath)} (version must not be placeholder)",
+                $"  {Path.GetFileName(Iw3EngineBundleContract.ManifestRelativePath)} (version no debe ser placeholder)"),
+            Text("  python/python.exe", "  python/python.exe"),
+            Text("  iw3.py or iw3/__main__.py", "  iw3.py o iw3/__main__.py"),
+            Text("  models/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions),
+                "  models/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions)),
+            string.Empty,
             SystemStatusToolsTabTitle,
             string.Empty,
         };
@@ -1577,6 +1690,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseSystemStatusPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
+        OnPropertyChanged(nameof(OpenEngineFolderText));
         OnPropertyChanged(nameof(ActivityLogTitle));
         OnPropertyChanged(nameof(ClearText));
         RaisePresetPropertiesChanged();

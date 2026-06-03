@@ -101,12 +101,52 @@ public sealed class ConversionReadinessServiceTests
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
-                "Engine directory exists but only placeholder files were detected",
+                "Engine directory exists but only placeholder or contract files were detected",
                 StringComparison.Ordinal));
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
                 @"C:\v3dfy\engine\iw3\models",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Evaluate_DetailedHealth_ExplainsIncompleteEngineContract()
+    {
+        var readiness = _service.Evaluate(new EngineDependencyHealth(
+            Ffmpeg: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe"),
+            Ffprobe: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe"),
+            Python: FoundDependency(@"C:\v3dfy\engine\iw3\python\python.exe"),
+            Iw3EngineDirectory: MissingDependency(
+                ToolHealthDetailKind.EngineEntryFilesMissing,
+                @"C:\v3dfy\engine\iw3"),
+            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\models")));
+
+        Assert.False(readiness.CanConvert);
+        Assert.Contains(
+            readiness.Issues,
+            issue => issue.EnglishMessage.Contains(
+                "Expected an iw3 entry file",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Evaluate_DetailedHealth_ExplainsMissingEngineManifest()
+    {
+        var readiness = _service.Evaluate(new EngineDependencyHealth(
+            Ffmpeg: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe"),
+            Ffprobe: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe"),
+            Python: FoundDependency(@"C:\v3dfy\engine\iw3\python\python.exe"),
+            Iw3EngineDirectory: MissingDependency(
+                ToolHealthDetailKind.EngineManifestMissing,
+                @"C:\v3dfy\engine\iw3"),
+            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\models")));
+
+        Assert.False(readiness.CanConvert);
+        Assert.Contains(
+            readiness.Issues,
+            issue => issue.EnglishMessage.Contains(
+                @"C:\v3dfy\engine\iw3\ENGINE_MANIFEST.json",
                 StringComparison.Ordinal));
     }
 

@@ -39,22 +39,46 @@ function Test-Iw3Engine {
     $enginePath = Join-Path $repoRoot 'engine\iw3'
     if (-not (Test-Path -LiteralPath $enginePath -PathType Container)) {
         Write-Check WARN 'Bundled iw3 engine is not bundled yet: engine\iw3'
+        Write-Check WARN 'Expected iw3 layout: engine\iw3\ENGINE_MANIFEST.json, engine\iw3\python\python.exe, engine\iw3\iw3.py or engine\iw3\iw3\__main__.py, engine\iw3\models'
         return
     }
 
+    $hasNonPlaceholderManifest = $false
     $manifestPath = Join-Path $enginePath 'ENGINE_MANIFEST.json'
     if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         try {
             $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
             if ($manifest.version -and $manifest.version -ne 'placeholder') {
-                Write-Check OK 'Bundled iw3 engine found: engine\iw3'
-                return
+                $hasNonPlaceholderManifest = $true
             }
         }
         catch {
         }
     }
 
+    $engineEntryPaths = @(
+        (Join-Path $enginePath 'iw3.py'),
+        (Join-Path $enginePath 'iw3\__main__.py')
+    )
+    $hasEngineEntry = @($engineEntryPaths |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count -gt 0
+
+    if ($hasNonPlaceholderManifest -and $hasEngineEntry) {
+        Write-Check OK 'Bundled iw3 engine found: engine\iw3'
+        return
+    }
+
+    if ($hasNonPlaceholderManifest) {
+        Write-Check WARN 'Bundled iw3 engine is incomplete. Missing entry file: engine\iw3\iw3.py or engine\iw3\iw3\__main__.py'
+        return
+    }
+
+    if ($hasEngineEntry) {
+        Write-Check WARN 'Bundled iw3 engine is incomplete. Missing non-placeholder manifest: engine\iw3\ENGINE_MANIFEST.json'
+        return
+    }
+
+    $placeholderOrContractFiles = @('README.md', 'ENGINE_MANIFEST.json', 'ENGINE_BUNDLE_CONTRACT.md')
     $engineFiles = @(Get-ChildItem -LiteralPath $enginePath -File -Recurse |
         Where-Object {
             $relativePath = $_.FullName.Substring($enginePath.Length).TrimStart('\', '/')
@@ -64,15 +88,14 @@ function Test-Iw3Engine {
             )[0]
 
             $firstSegment -notin @('models', 'python') -and
-                $_.Name -notin @('README.md', 'ENGINE_MANIFEST.json') -and
-                ($_.Extension -eq '.py' -or $_.Extension -ne '.md')
+                $_.Name -notin $placeholderOrContractFiles
         })
 
-    if ($engineFiles.Count -gt 0) {
-        Write-Check OK 'Bundled iw3 engine found: engine\iw3'
+    if ($engineFiles.Count -eq 0) {
+        Write-Check WARN 'Bundled iw3 engine contains placeholders or contract files only: engine\iw3'
     }
     else {
-        Write-Check WARN 'Bundled iw3 engine contains placeholders only: engine\iw3'
+        Write-Check WARN 'Bundled iw3 engine is incomplete. Missing non-placeholder manifest: engine\iw3\ENGINE_MANIFEST.json'
     }
 }
 

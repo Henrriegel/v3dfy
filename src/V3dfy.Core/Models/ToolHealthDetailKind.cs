@@ -7,6 +7,8 @@ public enum ToolHealthDetailKind
     EngineBundleFound,
     EngineDirectoryMissing,
     EnginePlaceholderOnly,
+    EngineManifestMissing,
+    EngineEntryFilesMissing,
     ModelFilesFound,
     ModelsDirectoryMissing,
     ModelFilesMissing,

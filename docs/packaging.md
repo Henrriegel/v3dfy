@@ -12,6 +12,12 @@ The script publishes `src/V3dfy.App/V3dfy.App.csproj` to
 `artifacts/publish/v3dfy-win-x64` and copies `tools`, `engine`, and `licenses`
 next to the app when those directories exist.
 
+The expected local engine bundle contract is documented in `docs/engine.md`.
+Packaging must preserve that inspectable layout, including
+`engine/iw3/ENGINE_MANIFEST.json`, `engine/iw3/python/python.exe`, an iw3 entry
+file at `engine/iw3/iw3.py` or `engine/iw3/iw3/__main__.py`, and
+`engine/iw3/models`.
+
 ## Why PublishSingleFile is disabled
 
 `PublishSingleFile` is intentionally not enabled by default. The local engine,

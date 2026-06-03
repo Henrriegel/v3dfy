@@ -63,6 +63,10 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.Iw3EngineDirectory);
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "README.md"), "placeholder");
+        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "ENGINE_BUNDLE_CONTRACT.md"), "contract");
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"placeholder"}""");
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "README.md"), "placeholder");
 
         var status = new InternalToolsHealthChecker().Check(paths);
@@ -78,6 +82,10 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.Iw3EngineDirectory);
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "README.md"), "placeholder");
+        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "ENGINE_BUNDLE_CONTRACT.md"), "contract");
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"placeholder"}""");
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "README.md"), "placeholder");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
@@ -91,7 +99,7 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
-    public void HealthCheck_MarksEngineFound_WhenPythonModuleExists()
+    public void HealthCheck_MarksEngineMissing_WhenEntryExistsWithoutManifest()
     {
         var paths = CreateToolLayout();
         Directory.CreateDirectory(paths.Iw3EngineDirectory);
@@ -99,17 +107,63 @@ public sealed class InternalToolsTests
 
         var status = new InternalToolsHealthChecker().Check(paths);
 
-        Assert.Equal(ToolHealthStatus.Found, status.Iw3EngineDirectory);
+        Assert.Equal(ToolHealthStatus.Missing, status.Iw3EngineDirectory);
     }
 
     [Fact]
-    public void DetailedHealthCheck_MarksEngineFound_WhenNonPlaceholderManifestExists()
+    public void DetailedHealthCheck_ReportsEntryFilesMissing_WhenManifestExistsWithoutEntry()
     {
         var paths = CreateToolLayout();
         Directory.CreateDirectory(paths.Iw3EngineDirectory);
         File.WriteAllText(
             Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
             """{"version":"1.0.0"}""");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.EngineEntryFilesMissing, health.Iw3EngineDirectory.DetailKind);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_ReportsManifestMissing_WhenEntryExistsWithoutManifest()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "iw3.py"), "# entrypoint");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.EngineManifestMissing, health.Iw3EngineDirectory.DetailKind);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_MarksEngineFound_WhenManifestAndEntryExist()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"1.0.0"}""");
+        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "iw3.py"), "# entrypoint");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.EngineBundleFound, health.Iw3EngineDirectory.DetailKind);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_MarksEngineFound_WhenPackageMainAndManifestExist()
+    {
+        var paths = CreateToolLayout();
+        var packageDirectory = Path.Combine(paths.Iw3EngineDirectory, "iw3");
+        Directory.CreateDirectory(packageDirectory);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"1.0.0"}""");
+        File.WriteAllText(Path.Combine(packageDirectory, "__main__.py"), "# entrypoint");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
 

@@ -1,0 +1,32 @@
+namespace V3dfy.Core.Models;
+
+public static class Iw3EngineBundleContract
+{
+    public const string EngineDirectoryRelativePath = "engine/iw3";
+    public const string ManifestRelativePath = "engine/iw3/ENGINE_MANIFEST.json";
+    public const string PythonExecutableRelativePath = "engine/iw3/python/python.exe";
+    public const string ModelsDirectoryRelativePath = "engine/iw3/models";
+
+    public static readonly IReadOnlyList<string> EngineEntryRelativePaths =
+    [
+        "iw3.py",
+        "iw3/__main__.py",
+    ];
+
+    public static readonly IReadOnlyList<string> PlaceholderOrContractFileNames =
+    [
+        "README.md",
+        "ENGINE_MANIFEST.json",
+        "ENGINE_BUNDLE_CONTRACT.md",
+    ];
+
+    public static readonly IReadOnlyList<string> SupportedModelExtensions =
+    [
+        ".pth",
+        ".pt",
+        ".onnx",
+        ".safetensors",
+        ".ckpt",
+        ".bin",
+    ];
+}
