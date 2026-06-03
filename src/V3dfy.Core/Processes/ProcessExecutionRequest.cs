@@ -6,4 +6,5 @@ public sealed record ProcessExecutionRequest(
     string? WorkingDirectory = null,
     IReadOnlyDictionary<string, string?>? EnvironmentVariables = null,
     TimeSpan? Timeout = null,
-    bool CaptureStandardError = true);
+    bool CaptureStandardError = true,
+    string? AllowedRootDirectory = null);

@@ -59,23 +59,7 @@ public sealed class LocalProcessRunner : ILocalProcessRunner
 
     private static void Validate(ProcessExecutionRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.ExecutablePath);
-        ArgumentNullException.ThrowIfNull(request.Arguments);
-
-        if (!Path.IsPathFullyQualified(request.ExecutablePath))
-        {
-            throw new ArgumentException(
-                "Executable path must be fully qualified. PATH lookup is not allowed.",
-                nameof(request));
-        }
-
-        if (request.Timeout is { } timeout && timeout <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(request),
-                "Timeout must be greater than zero.");
-        }
+        ProcessExecutionRequestValidator.ValidateBundledToolRequest(request);
     }
 
     private static ProcessStartInfo CreateStartInfo(ProcessExecutionRequest request)
