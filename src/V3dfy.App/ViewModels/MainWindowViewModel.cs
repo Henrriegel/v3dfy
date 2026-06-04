@@ -7,6 +7,7 @@ using Forms = System.Windows.Forms;
 using V3dfy.App.Mvvm;
 using V3dfy.App.Services;
 using V3dfy.Core.Analysis;
+using V3dfy.Core.Diagnostics;
 using V3dfy.Core.Execution;
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
@@ -1367,6 +1368,11 @@ public sealed class MainWindowViewModel : ObservableObject
         };
 
         lines.AddRange(CreateModelInventoryTechnicalDetailsLines());
+        lines.Add(string.Empty);
+        lines.AddRange(Iw3CliCapabilitiesDetailsFormatter.CreateLines(
+            _dependencyHealth?.Iw3CliCapabilities ??
+            Iw3CliCapabilitiesManifest.Missing(_toolPaths.Iw3CliCapabilitiesFile),
+            IsSpanish));
         lines.Add(string.Empty);
         lines.Add(SystemStatusToolsTabTitle);
         lines.Add(string.Empty);
