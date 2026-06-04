@@ -6,6 +6,8 @@ public static class Iw3EngineBundleContract
     public const string ManifestRelativePath = "engine/iw3/ENGINE_MANIFEST.json";
     public const string PythonExecutableRelativePath = "engine/iw3/python/python.exe";
     public const string ModelsDirectoryRelativePath = "engine/iw3/models";
+    public const string ModelCatalogFileName = "MODEL_CATALOG.json";
+    public const string ModelCatalogRelativePath = "engine/iw3/models/MODEL_CATALOG.json";
 
     public static readonly IReadOnlyList<string> EngineEntryRelativePaths =
     [
@@ -18,6 +20,7 @@ public static class Iw3EngineBundleContract
         "README.md",
         "ENGINE_MANIFEST.json",
         "ENGINE_BUNDLE_CONTRACT.md",
+        ModelCatalogFileName,
     ];
 
     public static readonly IReadOnlyList<string> SupportedModelExtensions =

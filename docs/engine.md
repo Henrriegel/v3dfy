@@ -13,6 +13,7 @@ engine/iw3/
   iw3/
     __main__.py          # alternate supported entry option
   models/
+    MODEL_CATALOG.json   # optional local metadata
     <approved model files>
 tools/ffmpeg/win-x64/
   ffmpeg.exe
@@ -30,6 +31,37 @@ models, or runtimes are included yet.
 Placeholder files, README files, and contract files are only documentation. They
 must not be treated as a prepared engine bundle and must not enable conversion
 readiness.
+
+`MODEL_CATALOG.json` is optional metadata for locally bundled models. It must
+not download, load, or execute models, and it does not make conversion ready by
+itself. Compatible model files still must exist under `engine/iw3/models`.
+
+Example catalog shape:
+
+```json
+{
+  "models": [
+    {
+      "id": "depth-default",
+      "displayName": "Default depth model",
+      "file": "depth-default.onnx",
+      "modelType": "depth-estimation",
+      "purpose": "2D to 3D depth generation",
+      "notes": "Optional local metadata."
+    }
+  ]
+}
+```
+
+When the catalog is missing, compatible model files are treated as unmanaged
+local models. Invalid or placeholder catalogs are reported for diagnostics but
+must not enable model readiness.
+
+Local model selection candidates are derived from compatible files only:
+catalog entries with existing compatible files can provide friendly names, and
+compatible files not listed in the catalog remain selectable as unmanaged local
+models. Building this selection list must not read model binary contents or
+load/run model frameworks.
 
 ## Directories
 

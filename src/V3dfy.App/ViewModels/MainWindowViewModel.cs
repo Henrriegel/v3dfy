@@ -63,6 +63,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoConversionPlan? _conversionPlan;
     private ConversionReadiness? _conversionReadiness;
     private ConversionExecutionState _conversionExecutionState = ConversionExecutionState.NotStarted();
+    private LocalModelSelectionCandidate? _selectedLocalModelCandidate;
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private string _outputPathText = string.Empty;
     private string _technicalDetailsBodyText = string.Empty;
@@ -508,6 +509,28 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string OutputLocationTitle => Text("Output location", "Ubicación de salida");
 
+    public string LocalModelSelectionLabel => Text("Local 3D/depth model", "Modelo local 3D/profundidad");
+
+    public bool HasLocalModelSelectionCandidates => LocalModelCandidates.Count > 0;
+
+    public LocalModelSelectionCandidate? SelectedLocalModelCandidate
+    {
+        get => _selectedLocalModelCandidate;
+        set
+        {
+            if (SetProperty(ref _selectedLocalModelCandidate, value))
+            {
+                OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+            }
+        }
+    }
+
+    public string LocalModelSelectionStatusText => SelectedLocalModelCandidate is null
+        ? Text("No local models detected yet.", "A\u00fan no se detectan modelos locales.")
+        : Text(
+            $"Selected local model: {SelectedLocalModelCandidate.DisplayName}",
+            $"Modelo local seleccionado: {SelectedLocalModelCandidate.DisplayName}");
+
     public string OutputPathLabel => Text("Output path", "Ruta de salida");
 
     public string BrowseOutputFolderText => Text("Browse...", "Examinar...");
@@ -867,6 +890,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public ObservableCollection<LogEntryViewModel> Logs { get; } = [];
 
+    public ObservableCollection<LocalModelSelectionCandidate> LocalModelCandidates { get; } = [];
+
     public RelayCommand SelectVideoCommand { get; }
 
     public AsyncRelayCommand AnalyzeCommand { get; }
@@ -1040,6 +1065,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         _dependencyHealth = _healthChecker.CheckDetailed(_toolPaths);
         _toolHealth = _dependencyHealth.Summary;
+        UpdateLocalModelSelectionCandidates();
         UpdateToolStatuses();
         UpdateConversionReadiness();
         AddLog(
@@ -1115,6 +1141,38 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _conversionReadiness = _conversionReadinessService.Evaluate(_dependencyHealth);
         RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void UpdateLocalModelSelectionCandidates()
+    {
+        var previouslySelectedPath = SelectedLocalModelCandidate?.RelativePath;
+        var candidates = _dependencyHealth?.ModelInventory.SelectionCandidates ?? [];
+
+        LocalModelCandidates.Clear();
+        foreach (var candidate in candidates)
+        {
+            LocalModelCandidates.Add(candidate);
+        }
+
+        var selectedCandidate = !string.IsNullOrWhiteSpace(previouslySelectedPath)
+            ? LocalModelCandidates.FirstOrDefault(candidate => string.Equals(
+                candidate.RelativePath,
+                previouslySelectedPath,
+                StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        SetSelectedLocalModelCandidateFromInventory(
+            selectedCandidate ?? LocalModelCandidates.FirstOrDefault());
+
+        OnPropertyChanged(nameof(HasLocalModelSelectionCandidates));
+    }
+
+    private void SetSelectedLocalModelCandidateFromInventory(
+        LocalModelSelectionCandidate? candidate)
+    {
+        _selectedLocalModelCandidate = candidate;
+        OnPropertyChanged(nameof(SelectedLocalModelCandidate));
+        OnPropertyChanged(nameof(LocalModelSelectionStatusText));
     }
 
     private ConversionExecutionStartGateResult EvaluateConversionStartGate() =>
@@ -1284,9 +1342,12 @@ public sealed class MainWindowViewModel : ObservableObject
             Text("  models/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions),
                 "  models/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions)),
             string.Empty,
-            SystemStatusToolsTabTitle,
-            string.Empty,
         };
+
+        lines.AddRange(CreateModelInventoryTechnicalDetailsLines());
+        lines.Add(string.Empty);
+        lines.Add(SystemStatusToolsTabTitle);
+        lines.Add(string.Empty);
 
         foreach (var toolStatus in ToolStatuses)
         {
@@ -1316,6 +1377,167 @@ public sealed class MainWindowViewModel : ObservableObject
 
         return string.Join(Environment.NewLine, lines);
     }
+
+    private IReadOnlyList<string> CreateModelInventoryTechnicalDetailsLines()
+    {
+        var inventory = _dependencyHealth?.ModelInventory ??
+            LocalModelInventory.Empty(_toolPaths.ModelsDirectory);
+        var lines = new List<string>
+        {
+            Text("Local model inventory", "Inventario local de modelos"),
+            Text(
+                $"Models directory: {inventory.ModelsDirectory}",
+                $"Carpeta de modelos: {inventory.ModelsDirectory}"),
+            Text(
+                $"Supported extensions: {string.Join(", ", inventory.SupportedExtensions)}",
+                $"Extensiones compatibles: {string.Join(", ", inventory.SupportedExtensions)}"),
+            Text(
+                $"Compatible model count: {inventory.CompatibleModelCount}",
+                $"Cantidad de modelos compatibles: {inventory.CompatibleModelCount}"),
+            Text(
+                $"Catalog path: {inventory.Catalog.CatalogPath}",
+                $"Ruta del catalogo: {inventory.Catalog.CatalogPath}"),
+            Text(
+                $"Catalog status: {CatalogStatusText(inventory.Catalog.Status, useSpanish: false)}",
+                $"Estado del catalogo: {CatalogStatusText(inventory.Catalog.Status, useSpanish: true)}"),
+            Text(
+                $"Catalog entries: {inventory.Catalog.EntryCount}",
+                $"Entradas del catalogo: {inventory.Catalog.EntryCount}"),
+            Text(
+                $"Entries with existing compatible files: {inventory.Catalog.EntriesWithExistingCompatibleFiles.Count}",
+                $"Entradas con archivos compatibles existentes: {inventory.Catalog.EntriesWithExistingCompatibleFiles.Count}"),
+            Text(
+                $"Entries referencing missing or unsupported files: {inventory.Catalog.EntriesWithMissingFiles.Count}",
+                $"Entradas con archivos faltantes o no compatibles: {inventory.Catalog.EntriesWithMissingFiles.Count}"),
+            Text(
+                $"Unmanaged compatible model files: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}",
+                $"Modelos compatibles no listados en el catalogo: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}"),
+        };
+
+        AddModelCatalogStatusDetailLines(lines, inventory.Catalog);
+
+        if (!inventory.DirectoryExists)
+        {
+            lines.Add(Text(
+                "Models directory was not found.",
+                "No se encontro la carpeta de modelos."));
+            return lines;
+        }
+
+        if (!inventory.HasCompatibleModels)
+        {
+            lines.Add(Text(
+                "No compatible model files were found.",
+                "No se encontraron modelos compatibles."));
+            return lines;
+        }
+
+        lines.Add(Text(
+            "Compatible model files:",
+            "Archivos de modelo compatibles:"));
+        foreach (var modelFile in inventory.CompatibleModelFiles)
+        {
+            lines.Add($"- {modelFile.RelativePath}");
+        }
+
+        return lines;
+    }
+
+    private void AddModelCatalogStatusDetailLines(
+        ICollection<string> lines,
+        LocalModelCatalog catalog)
+    {
+        switch (catalog.Status)
+        {
+            case LocalModelCatalogStatus.Missing:
+                lines.Add(Text(
+                    "Model catalog not found. Compatible files are treated as unmanaged local models.",
+                    "No se encontro el catalogo de modelos. Los archivos compatibles se tratan como modelos locales no administrados."));
+                return;
+            case LocalModelCatalogStatus.Invalid:
+                lines.Add(Text(
+                    $"Model catalog is invalid: {catalog.ErrorMessage}",
+                    $"El catalogo de modelos no es valido: {catalog.ErrorMessage}"));
+                lines.Add(Text(
+                    "Compatible files are treated as unmanaged local models.",
+                    "Los archivos compatibles se tratan como modelos locales no administrados."));
+                return;
+            case LocalModelCatalogStatus.Placeholder:
+                lines.Add(Text(
+                    "Model catalog is a placeholder and is ignored.",
+                    "El catalogo de modelos es un marcador y se ignora."));
+                lines.Add(Text(
+                    "Compatible files are treated as unmanaged local models.",
+                    "Los archivos compatibles se tratan como modelos locales no administrados."));
+                return;
+        }
+
+        if (catalog.EntriesWithExistingCompatibleFiles.Count > 0)
+        {
+            lines.Add(Text(
+                "Catalog entries with existing compatible files:",
+                "Entradas del catalogo con archivos compatibles existentes:"));
+            foreach (var entry in catalog.EntriesWithExistingCompatibleFiles)
+            {
+                lines.Add($"- {CatalogEntryDisplayText(entry)}");
+            }
+        }
+
+        if (catalog.EntriesWithMissingFiles.Count > 0)
+        {
+            lines.Add(Text(
+                "Catalog entries with missing or unsupported files:",
+                "Entradas del catalogo con archivos faltantes o no compatibles:"));
+            foreach (var entry in catalog.EntriesWithMissingFiles)
+            {
+                lines.Add($"- {CatalogEntryDisplayText(entry)}");
+            }
+        }
+
+        if (catalog.UnmanagedCompatibleModelFiles.Count > 0)
+        {
+            lines.Add(Text(
+                "Unmanaged compatible model files:",
+                "Archivos compatibles no listados en el catalogo:"));
+            foreach (var modelFile in catalog.UnmanagedCompatibleModelFiles)
+            {
+                lines.Add($"- {modelFile.RelativePath}");
+            }
+        }
+    }
+
+    private static string CatalogEntryDisplayText(LocalModelCatalogEntry entry)
+    {
+        var name = string.IsNullOrWhiteSpace(entry.DisplayName)
+            ? entry.Id
+            : entry.DisplayName;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = "(unnamed)";
+        }
+
+        var file = string.IsNullOrWhiteSpace(entry.File)
+            ? "(missing file field)"
+            : entry.File;
+        var type = string.IsNullOrWhiteSpace(entry.ModelType)
+            ? entry.Purpose
+            : entry.ModelType;
+
+        return string.IsNullOrWhiteSpace(type)
+            ? $"{name} -> {file}"
+            : $"{name} [{type}] -> {file}";
+    }
+
+    private static string CatalogStatusText(
+        LocalModelCatalogStatus status,
+        bool useSpanish) => status switch
+    {
+        LocalModelCatalogStatus.Missing => useSpanish ? "No encontrado" : "Missing",
+        LocalModelCatalogStatus.Invalid => useSpanish ? "No valido" : "Invalid",
+        LocalModelCatalogStatus.Placeholder => useSpanish ? "Marcador" : "Placeholder",
+        LocalModelCatalogStatus.Found => useSpanish ? "Encontrado" : "Found",
+        _ => status.ToString(),
+    };
 
     private string CreateMissingComponentsSummary()
     {
@@ -1783,6 +2005,10 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(QualityOptionLabel));
         OnPropertyChanged(nameof(ThreeDIntensityOptionLabel));
         OnPropertyChanged(nameof(ThreeDOutputFormatOptionLabel));
+        OnPropertyChanged(nameof(LocalModelSelectionLabel));
+        OnPropertyChanged(nameof(HasLocalModelSelectionCandidates));
+        OnPropertyChanged(nameof(SelectedLocalModelCandidate));
+        OnPropertyChanged(nameof(LocalModelSelectionStatusText));
         OnPropertyChanged(nameof(OutputLocationTitle));
         OnPropertyChanged(nameof(OutputPathLabel));
         OnPropertyChanged(nameof(BrowseOutputFolderText));

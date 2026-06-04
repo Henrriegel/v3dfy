@@ -199,6 +199,344 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
+    public void DetailedHealthCheck_EmptyModelsDirectory_ReportsNoCompatibleModels()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.ModelFilesMissing, health.ModelsDirectory.DetailKind);
+        Assert.True(health.ModelInventory.DirectoryExists);
+        Assert.Empty(health.ModelInventory.CompatibleModelFiles);
+        Assert.Equal(0, health.ModelInventory.CompatibleModelCount);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_IgnoresReadmePlaceholderAndContractModelFiles()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "README.md"), "placeholder");
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "ENGINE_BUNDLE_CONTRACT.md"), "contract");
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "placeholder.pth"), "placeholder");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.ModelFilesMissing, health.ModelsDirectory.DetailKind);
+        Assert.Empty(health.ModelInventory.CompatibleModelFiles);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_DetectsSupportedModelExtensions()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        foreach (var extension in Iw3EngineBundleContract.SupportedModelExtensions)
+        {
+            File.WriteAllText(
+                Path.Combine(paths.ModelsDirectory, $"depth-model{extension}"),
+                "model");
+        }
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
+        Assert.Equal(
+            Iw3EngineBundleContract.SupportedModelExtensions.Count,
+            health.ModelInventory.CompatibleModelCount);
+        Assert.All(
+            health.ModelInventory.CompatibleModelFiles,
+            modelFile => Assert.Contains(
+                modelFile.Extension,
+                Iw3EngineBundleContract.SupportedModelExtensions,
+                StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_IgnoresUnsupportedModelExtensions()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "notes.txt"), "not a model");
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "model.json"), "{}");
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "model.weights"), "not supported");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+        Assert.Empty(health.ModelInventory.CompatibleModelFiles);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_DetectsNestedModelFiles()
+    {
+        var paths = CreateToolLayout();
+        var nestedDirectory = Path.Combine(paths.ModelsDirectory, "stereo", "depth");
+        Directory.CreateDirectory(nestedDirectory);
+        File.WriteAllText(Path.Combine(nestedDirectory, "depth-model.onnx"), "model");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
+        var modelFile = Assert.Single(health.ModelInventory.CompatibleModelFiles);
+        Assert.Equal("depth-model.onnx", modelFile.FileName);
+        Assert.Equal("stereo/depth/depth-model.onnx", modelFile.RelativePath);
+        Assert.Equal(".onnx", modelFile.Extension);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_MissingModelCatalog_TreatsCompatibleFilesAsUnmanaged()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.onnx"), "model");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(LocalModelCatalogStatus.Missing, health.ModelInventory.Catalog.Status);
+        Assert.Equal(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            health.ModelInventory.Catalog.CatalogPath);
+        var unmanagedFile = Assert.Single(health.ModelInventory.Catalog.UnmanagedCompatibleModelFiles);
+        Assert.Equal("depth-model.onnx", unmanagedFile.RelativePath);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_InvalidModelCatalog_DoesNotCrash()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.onnx"), "model");
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            "{ invalid json");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(LocalModelCatalogStatus.Invalid, health.ModelInventory.Catalog.Status);
+        Assert.False(string.IsNullOrWhiteSpace(health.ModelInventory.Catalog.ErrorMessage));
+        Assert.Single(health.ModelInventory.Catalog.UnmanagedCompatibleModelFiles);
+        Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_ModelCatalogWithExistingCompatibleFile_ReportsManagedEntry()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.onnx"), "model");
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            """
+            {
+              "models": [
+                {
+                  "id": "depth",
+                  "displayName": "Depth model",
+                  "file": "depth-model.onnx",
+                  "modelType": "depth-estimation",
+                  "purpose": "2D to 3D depth"
+                }
+              ]
+            }
+            """);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(LocalModelCatalogStatus.Found, health.ModelInventory.Catalog.Status);
+        Assert.Equal(1, health.ModelInventory.Catalog.EntryCount);
+        var entry = Assert.Single(health.ModelInventory.Catalog.EntriesWithExistingCompatibleFiles);
+        Assert.Equal("depth", entry.Id);
+        Assert.True(entry.ReferencedFileExists);
+        Assert.True(entry.ReferencedFileIsCompatible);
+        Assert.Empty(health.ModelInventory.Catalog.EntriesWithMissingFiles);
+        Assert.Empty(health.ModelInventory.Catalog.UnmanagedCompatibleModelFiles);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_ModelCatalogEntryWithMissingFile_IsReported()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            """
+            {
+              "models": [
+                {
+                  "id": "missing-depth",
+                  "displayName": "Missing depth model",
+                  "file": "missing-depth.onnx",
+                  "purpose": "2D to 3D depth"
+                }
+              ]
+            }
+            """);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(LocalModelCatalogStatus.Found, health.ModelInventory.Catalog.Status);
+        var entry = Assert.Single(health.ModelInventory.Catalog.EntriesWithMissingFiles);
+        Assert.Equal("missing-depth", entry.Id);
+        Assert.False(entry.ReferencedFileExists);
+        Assert.False(entry.ReferencedFileIsCompatible);
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_CompatibleModelNotListedInCatalog_RemainsUnmanaged()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "unlisted-model.ckpt"), "model");
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            """{"models":[]}""");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(LocalModelCatalogStatus.Found, health.ModelInventory.Catalog.Status);
+        var unmanagedFile = Assert.Single(health.ModelInventory.Catalog.UnmanagedCompatibleModelFiles);
+        Assert.Equal("unlisted-model.ckpt", unmanagedFile.RelativePath);
+        Assert.Empty(health.ModelInventory.Catalog.Entries);
+        Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_ModelCatalogAndPlaceholderFiles_DoNotCountAsModels()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "placeholder.pt"), "placeholder");
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            """{"version":"placeholder","models":[]}""");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(LocalModelCatalogStatus.Placeholder, health.ModelInventory.Catalog.Status);
+        Assert.Empty(health.ModelInventory.CompatibleModelFiles);
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_ModelSelectionCandidatesAreEmpty_WhenNoCompatibleModelsExist()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Empty(health.ModelInventory.SelectionCandidates);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_CatalogManagedCompatibleModel_BecomesFriendlySelectionCandidate()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.onnx"), "model");
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            """
+            {
+              "models": [
+                {
+                  "id": "depth-default",
+                  "displayName": "Default depth model",
+                  "file": "depth-model.onnx",
+                  "modelType": "depth-estimation",
+                  "purpose": "2D to 3D depth"
+                }
+              ]
+            }
+            """);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        var candidate = Assert.Single(health.ModelInventory.SelectionCandidates);
+        Assert.True(candidate.IsCatalogManaged);
+        Assert.Equal("depth-default", candidate.Id);
+        Assert.Equal("Default depth model", candidate.DisplayName);
+        Assert.Equal("depth-model.onnx", candidate.RelativePath);
+        Assert.Equal("depth-estimation", candidate.ModelType);
+        Assert.Equal("2D to 3D depth", candidate.Purpose);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_UnmanagedCompatibleModel_BecomesSelectionCandidate()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "unmanaged-depth.safetensors"), "model");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        var candidate = Assert.Single(health.ModelInventory.SelectionCandidates);
+        Assert.False(candidate.IsCatalogManaged);
+        Assert.Equal("unmanaged-depth.safetensors", candidate.Id);
+        Assert.Equal("unmanaged-depth.safetensors", candidate.DisplayName);
+        Assert.Equal("unmanaged-depth.safetensors", candidate.RelativePath);
+        Assert.Equal(".safetensors", candidate.Extension);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_MissingUnsupportedAndUnsafeCatalogReferences_DoNotBecomeSelectionCandidates()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "notes.txt"), "not a supported model");
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            """
+            {
+              "models": [
+                {
+                  "id": "missing",
+                  "displayName": "Missing model",
+                  "file": "missing.onnx"
+                },
+                {
+                  "id": "unsupported",
+                  "displayName": "Unsupported file",
+                  "file": "notes.txt"
+                },
+                {
+                  "id": "unsafe",
+                  "displayName": "Unsafe file",
+                  "file": "../escape.onnx"
+                }
+              ]
+            }
+            """);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Empty(health.ModelInventory.SelectionCandidates);
+        Assert.Equal(3, health.ModelInventory.Catalog.EntriesWithMissingFiles.Count);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_PlaceholderFiles_DoNotBecomeSelectionCandidates()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "README.md"), "placeholder");
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "placeholder.onnx"), "placeholder");
+        File.WriteAllText(
+            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            """{"version":"placeholder","models":[]}""");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Empty(health.ModelInventory.CompatibleModelFiles);
+        Assert.Empty(health.ModelInventory.SelectionCandidates);
+    }
+
+    [Fact]
     public void HealthCheck_MarksExactExecutableFilesFound()
     {
         var paths = CreateToolLayout();
