@@ -236,24 +236,14 @@ function Test-EngineManifest {
 function Test-EngineEntry {
     param([string]$EngineRoot)
 
-    $scriptEntry = Join-Path $EngineRoot 'iw3.py'
-    $packageEntry = Join-Path $EngineRoot 'iw3\__main__.py'
-    $foundEntries = @()
-
-    if (Test-Path -LiteralPath $scriptEntry -PathType Leaf) {
-        $foundEntries += $scriptEntry
-    }
+    $packageEntry = Join-Path $EngineRoot 'nunif\iw3\__main__.py'
 
     if (Test-Path -LiteralPath $packageEntry -PathType Leaf) {
-        $foundEntries += $packageEntry
-    }
-
-    if ($foundEntries.Count -gt 0) {
-        Write-Check OK "iw3 entry file found: $($foundEntries -join ', ')"
+        Write-Check OK "iw3 package entry file found: $packageEntry"
         return
     }
 
-    Write-Failure "iw3 entry file is missing. Expected iw3.py or iw3\__main__.py under: $EngineRoot"
+    Write-Failure "iw3 package entry file is missing. Expected nunif\iw3\__main__.py under: $EngineRoot"
 }
 
 function Test-ModelFile {
@@ -277,13 +267,13 @@ function Test-ModelFile {
 function Test-ModelsDirectory {
     param([string]$EngineRoot)
 
-    $modelsPath = Join-Path $EngineRoot 'models'
+    $modelsPath = Join-Path $EngineRoot 'nunif\iw3\pretrained_models'
     if (-not (Test-Path -LiteralPath $modelsPath -PathType Container)) {
-        Write-Failure "models directory is missing: $modelsPath"
+        Write-Failure "pretrained models directory is missing: $modelsPath"
         return
     }
 
-    Write-Check OK "models directory found: $modelsPath"
+    Write-Check OK "pretrained models directory found: $modelsPath"
 
     $modelFiles = @(Get-ChildItem -LiteralPath $modelsPath -File -Recurse |
         Where-Object { Test-ModelFile $_ })
@@ -382,6 +372,7 @@ else {
     Write-Check OK "iw3 bundle root found: $bundlePath"
     Test-EngineManifest $bundlePath
     Test-RequiredFile (Join-Path $bundlePath 'python\python.exe') 'embedded Python executable' | Out-Null
+    Test-RequiredFile (Join-Path $bundlePath 'python\python312._pth') 'embedded Python path file' | Out-Null
     Test-EngineEntry $bundlePath
     Test-ModelsDirectory $bundlePath
     Test-CliCapabilities $bundlePath

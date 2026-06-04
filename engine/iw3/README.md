@@ -10,7 +10,8 @@ Expected readiness contract:
 
 - `ENGINE_MANIFEST.json` with a real version, not `placeholder`.
 - `python/python.exe` for the embedded Python runtime.
-- `iw3.py` or `iw3/__main__.py` as the local iw3 entry file.
-- Supported model files under `models`.
+- `python/python312._pth` preserving the sibling `..\nunif` import path.
+- `nunif/iw3/__main__.py` as the local iw3 package entry file.
+- Supported model files under `nunif/iw3/pretrained_models`.
 
 This README is documentation only and does not make the engine ready.

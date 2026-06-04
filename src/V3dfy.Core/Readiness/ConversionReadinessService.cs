@@ -143,9 +143,9 @@ public sealed class ConversionReadinessService
             ToolHealthDetailKind.EngineManifestMissing =>
                 $"Expected a non-placeholder engine manifest: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}",
             ToolHealthDetailKind.EngineEntryFilesMissing =>
-                $"Expected an iw3 entry file under: {dependencyHealth.ExpectedPath}",
+                $"Expected the iw3 package entry file: {ExpectedEngineEntryPath(dependencyHealth.ExpectedPath)}",
             ToolHealthDetailKind.ModelsDirectoryMissing =>
-                $"Expected models directory: {dependencyHealth.ExpectedPath}",
+                $"Expected pretrained models directory: {dependencyHealth.ExpectedPath}",
             ToolHealthDetailKind.ModelFilesMissing =>
                 $"No supported model files were found under: {dependencyHealth.ExpectedPath}",
             _ => $"Expected local path: {dependencyHealth.ExpectedPath}",
@@ -163,11 +163,20 @@ public sealed class ConversionReadinessService
             ToolHealthDetailKind.EngineManifestMissing =>
                 $"Se esperaba un manifiesto del motor que no fuera marcador: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}",
             ToolHealthDetailKind.EngineEntryFilesMissing =>
-                $"Se esperaba un archivo de entrada de iw3 en: {dependencyHealth.ExpectedPath}",
+                $"Se esperaba el archivo de entrada del paquete iw3: {ExpectedEngineEntryPath(dependencyHealth.ExpectedPath)}",
             ToolHealthDetailKind.ModelsDirectoryMissing =>
-                $"Carpeta esperada de modelos: {dependencyHealth.ExpectedPath}",
+                $"Carpeta esperada de modelos preentrenados: {dependencyHealth.ExpectedPath}",
             ToolHealthDetailKind.ModelFilesMissing =>
                 $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}",
             _ => $"Ruta local esperada: {dependencyHealth.ExpectedPath}",
         };
+
+    private static string ExpectedEngineEntryPath(string engineDirectory) =>
+        Path.Combine(
+            [engineDirectory, .. SplitRelativePath(Iw3EngineBundleContract.EngineEntryRelativePaths[0])]);
+
+    private static string[] SplitRelativePath(string relativePath) =>
+        relativePath.Split(
+            ['/', '\\'],
+            StringSplitOptions.RemoveEmptyEntries);
 }

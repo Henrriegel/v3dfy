@@ -15,7 +15,7 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
         PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
         Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\models");
+        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
 
     private readonly LocalIw3ProcessRequestBuilder _builder = new();
 
@@ -30,19 +30,23 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     }
 
     [Fact]
-    public void Build_UsesIw3EngineDirectoryAsWorkingDirectory()
+    public void Build_UsesNunifRootDirectoryAsWorkingDirectory()
     {
         var processRequest = _builder.Build(CreateRequest());
 
-        Assert.Equal(Paths.Iw3EngineDirectory, processRequest.WorkingDirectory);
+        Assert.Equal(Paths.NunifRootDirectory, processRequest.WorkingDirectory);
     }
 
     [Fact]
-    public void Build_SetsIw3EngineDirectoryAsAllowedRoot()
+    public void Build_SetsIw3EngineDirectoryAsAllowedRootForRealBundle()
     {
         var processRequest = _builder.Build(CreateRequest());
 
         Assert.Equal(Paths.Iw3EngineDirectory, processRequest.AllowedRootDirectory);
+        Assert.StartsWith(
+            Paths.Iw3EngineDirectory,
+            processRequest.WorkingDirectory,
+            StringComparison.OrdinalIgnoreCase);
         ProcessExecutionRequestValidator.ValidateBundledToolRequest(processRequest);
     }
 

@@ -34,7 +34,7 @@ public class LocalIw3ProcessRequestBuilder
         return new(
             ExecutablePath: command.ExecutablePath,
             Arguments: command.Arguments,
-            WorkingDirectory: request.ExpectedToolPaths.Iw3EngineDirectory,
+            WorkingDirectory: request.ExpectedToolPaths.NunifRootDirectory,
             AllowedRootDirectory: request.ExpectedToolPaths.Iw3EngineDirectory);
     }
 

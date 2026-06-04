@@ -10,8 +10,10 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $ffmpegDirectory = Join-Path $repoRoot 'tools\ffmpeg\win-x64'
 $iw3Directory = Join-Path $repoRoot 'engine\iw3'
-$modelsDirectory = Join-Path $iw3Directory 'models'
 $pythonDirectory = Join-Path $iw3Directory 'python'
+$nunifDirectory = Join-Path $iw3Directory 'nunif'
+$iw3PackageDirectory = Join-Path $nunifDirectory 'iw3'
+$modelsDirectory = Join-Path $iw3PackageDirectory 'pretrained_models'
 $licensesDirectory = Join-Path $repoRoot 'licenses'
 $licenseDirectories = @('ffmpeg', 'python', 'pytorch', 'nunif', 'models') |
     ForEach-Object { Join-Path $licensesDirectory $_ }
@@ -20,8 +22,10 @@ $manifestPath = Join-Path $iw3Directory 'ENGINE_MANIFEST.json'
 foreach ($directory in @(
     $ffmpegDirectory,
     $iw3Directory,
-    $modelsDirectory,
     $pythonDirectory,
+    $nunifDirectory,
+    $iw3PackageDirectory,
+    $modelsDirectory,
     $licensesDirectory,
     $licenseDirectories
 )) {

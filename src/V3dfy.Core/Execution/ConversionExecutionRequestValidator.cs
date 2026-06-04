@@ -163,10 +163,22 @@ public sealed class ConversionExecutionRequestValidator
             "carpeta del motor iw3",
             issues);
         ValidateExpectedToolPath(
+            paths.NunifRootDirectory,
+            nameof(paths.NunifRootDirectory),
+            "nunif root directory",
+            "carpeta raiz de nunif",
+            issues);
+        ValidateExpectedToolPath(
+            paths.Iw3PackageDirectory,
+            nameof(paths.Iw3PackageDirectory),
+            "iw3 package directory",
+            "carpeta del paquete iw3",
+            issues);
+        ValidateExpectedToolPath(
             paths.ModelsDirectory,
             nameof(paths.ModelsDirectory),
-            "models directory",
-            "carpeta de modelos",
+            "pretrained models directory",
+            "carpeta de modelos preentrenados",
             issues);
     }
 
@@ -252,8 +264,8 @@ public sealed class ConversionExecutionRequestValidator
                     issues,
                     ConversionExecutionRequestValidationIssueKind.SelectedModelPathMustBeRelative,
                     nameof(selectedModel.RelativePath),
-                    "Selected local model path must be relative to the models directory.",
-                    "La ruta del modelo local seleccionado debe ser relativa a la carpeta de modelos.");
+                    "Selected local model path must be relative to the pretrained models directory.",
+                    "La ruta del modelo local seleccionado debe ser relativa a la carpeta de modelos preentrenados.");
             }
 
             if (ContainsParentTraversal(selectedModel.RelativePath))

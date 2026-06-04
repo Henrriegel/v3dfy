@@ -164,7 +164,7 @@ public sealed class FfprobeVideoAnalysisServiceTests
         FfprobeExecutable: ffprobePath,
         PythonExecutable: @"C:\bundle\engine\iw3\python\python.exe",
         Iw3EngineDirectory: @"C:\bundle\engine\iw3",
-        ModelsDirectory: @"C:\bundle\engine\iw3\models");
+        ModelsDirectory: @"C:\bundle\engine\iw3\nunif\iw3\pretrained_models");
 
     private static string GetExistingSentinelPath() =>
         typeof(FfprobeVideoAnalysisServiceTests).Assembly.Location;

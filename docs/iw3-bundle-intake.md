@@ -82,9 +82,10 @@ CLI verification:
    version. Keep planning-only options in `unverifiedOptions` until each one is
    confirmed against the bundled CLI.
 
-8. Create `models/MODEL_CATALOG.json` if friendly model names or model-purpose
-   metadata are useful. The catalog is optional diagnostics and selection
-   metadata; model files still need to exist under `models`.
+8. Create `nunif/iw3/pretrained_models/MODEL_CATALOG.json` if friendly model
+   names or model-purpose metadata are useful. The catalog is optional
+   diagnostics and selection metadata; model files still need to exist under
+   `nunif/iw3/pretrained_models`.
 
 9. Review redistribution obligations before staging into a release bundle.
    Include license texts and notices for nunif/iw3, embedded Python, Python
@@ -118,24 +119,41 @@ CLI verification:
 
 ## Target Bundle Mapping
 
+The observed prepared nunif Windows package already maps naturally to the
+candidate bundle root: `python` and `nunif` are sibling folders. Preserve that
+relationship because `python/python312._pth` contains `..\nunif`.
+
+Observed prepared package facts:
+
+- nunif commit: `d23721f1b5f0a4c92c3ee1be013180bf298730c5`.
+- Approximate prepared size: `python` 6.15 GB, `nunif` 1.72 GB, iw3
+  `pretrained_models` 1.25 GB.
+- CLI entry: `nunif/iw3/__main__.py`.
+- Model root: `nunif/iw3/pretrained_models`.
+- Large detected model file:
+  `nunif/iw3/pretrained_models/hub/checkpoints/depth_anything_metric_depth_indoor.pt`.
+- No top-level `iw3.py` was found in the prepared tree.
+
 Map the prepared nunif installation into this candidate bundle layout:
 
 ```text
 candidate-iw3/
   ENGINE_MANIFEST.json
-  IW3_CLI_CAPABILITIES.json
+  IW3_CLI_CAPABILITIES.json # optional unless packaging requires it
   python/
     python.exe
+    python312._pth
     <embedded Python runtime files>
     <Python site-packages and dependency folders required by nunif/iw3>
-  iw3.py                 # if the prepared install uses a script entry
-  iw3/
-    __main__.py          # if the prepared install uses package execution
-    <nunif/iw3 package files required for python -m iw3>
-  models/
-    MODEL_CATALOG.json   # optional
-    <approved pretrained model files>
-  <other runtime config files required by nunif/iw3>
+  nunif/
+    iw3/
+      __main__.py
+      pretrained_models/
+        MODEL_CATALOG.json # optional v3dfy metadata
+        <approved pretrained model files>
+      <nunif/iw3 package files required for python -m iw3>
+    <other nunif repository files required at runtime>
+  <other runtime config files required by the prepared package>
   <license or notice files that must live beside the engine, if any>
 ```
 
@@ -148,8 +166,11 @@ The staged runtime layout under v3dfy is:
 Required v3dfy paths after staging:
 
 - `engine/iw3/python/python.exe`
-- `engine/iw3/iw3.py` or `engine/iw3/iw3/__main__.py`
-- `engine/iw3/models`
+- `engine/iw3/python/python312._pth`
+- `engine/iw3/nunif`
+- `engine/iw3/nunif/iw3`
+- `engine/iw3/nunif/iw3/__main__.py`
+- `engine/iw3/nunif/iw3/pretrained_models`
 - `engine/iw3/ENGINE_MANIFEST.json`
 - `engine/iw3/IW3_CLI_CAPABILITIES.json` for full capability-required
   packaging
@@ -169,15 +190,12 @@ Exclude these unless a later runtime verification proves they are required:
   contract files.
 - Any model file not selected for v3dfy's supported offline bundle.
 
-## Unknowns To Verify
+## Remaining Verification
 
-- The exact folder structure produced by the official nunif Windows package.
-- The exact location of the iw3 Python module or script entry in that prepared
-  installation.
-- The exact embedded Python layout and how its site-packages are made
-  importable without global environment variables.
-- The exact pretrained model file names, locations, formats, sizes, and which
-  ones are required for v3dfy's intended presets.
+- Reconfirm the prepared folder structure, embedded Python path file, iw3 entry,
+  and model set whenever the selected nunif package or commit changes.
+- Decide which pretrained model files are required for v3dfy's intended
+  presets.
 - Whether PyAV or other video-related Python packages bring additional binary
   dependency and license requirements beyond the separate FFmpeg executables
   bundled by v3dfy.

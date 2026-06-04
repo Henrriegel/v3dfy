@@ -1326,26 +1326,26 @@ public sealed class MainWindowViewModel : ObservableObject
                     ? $"Ejecutable esperado de Python embebido: {dependencyHealth.ExpectedPath}"
                     : $"Falta el ejecutable incluido: {dependencyHealth.ExpectedPath}"),
             ToolHealthDetailKind.EngineBundleFound => Text(
-                $"Local iw3 bundle found under: {dependencyHealth.ExpectedPath}. Required: non-placeholder ENGINE_MANIFEST.json and iw3.py or iw3/__main__.py.",
-                $"Bundle local de iw3 encontrado en: {dependencyHealth.ExpectedPath}. Requerido: ENGINE_MANIFEST.json que no sea marcador e iw3.py o iw3/__main__.py."),
+                $"Local iw3 bundle found under: {dependencyHealth.ExpectedPath}. Required: non-placeholder ENGINE_MANIFEST.json and nunif/iw3/__main__.py.",
+                $"Bundle local de iw3 encontrado en: {dependencyHealth.ExpectedPath}. Requerido: ENGINE_MANIFEST.json que no sea marcador y nunif/iw3/__main__.py."),
             ToolHealthDetailKind.EngineDirectoryMissing => Text(
-                $"Expected local iw3 engine folder: {dependencyHealth.ExpectedPath}. Required layout: ENGINE_MANIFEST.json, python/python.exe, iw3.py or iw3/__main__.py, and models.",
-                $"Carpeta esperada del motor iw3 local: {dependencyHealth.ExpectedPath}. Estructura requerida: ENGINE_MANIFEST.json, python/python.exe, iw3.py o iw3/__main__.py y modelos."),
+                $"Expected local iw3 engine folder: {dependencyHealth.ExpectedPath}. Required layout: ENGINE_MANIFEST.json, python/python.exe, nunif/iw3/__main__.py, and nunif/iw3/pretrained_models.",
+                $"Carpeta esperada del motor iw3 local: {dependencyHealth.ExpectedPath}. Estructura requerida: ENGINE_MANIFEST.json, python/python.exe, nunif/iw3/__main__.py y nunif/iw3/pretrained_models."),
             ToolHealthDetailKind.EnginePlaceholderOnly => Text(
-                $"Engine folder exists, but only placeholder or contract files were detected: {dependencyHealth.ExpectedPath}. Add a real iw3 bundle with a non-placeholder ENGINE_MANIFEST.json and iw3.py or iw3/__main__.py.",
-                $"La carpeta del motor existe, pero solo contiene marcadores o archivos de contrato: {dependencyHealth.ExpectedPath}. Agrega un bundle real de iw3 con ENGINE_MANIFEST.json que no sea marcador e iw3.py o iw3/__main__.py."),
+                $"Engine folder exists, but only placeholder or contract files were detected: {dependencyHealth.ExpectedPath}. Add a real nunif bundle with a non-placeholder ENGINE_MANIFEST.json and nunif/iw3/__main__.py.",
+                $"La carpeta del motor existe, pero solo contiene marcadores o archivos de contrato: {dependencyHealth.ExpectedPath}. Agrega un bundle real de nunif con ENGINE_MANIFEST.json que no sea marcador y nunif/iw3/__main__.py."),
             ToolHealthDetailKind.EngineManifestMissing => Text(
                 $"Engine content exists, but ENGINE_MANIFEST.json is missing or still has version=placeholder: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}",
                 $"Hay contenido del motor, pero ENGINE_MANIFEST.json falta o aÃºn tiene version=placeholder: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}"),
             ToolHealthDetailKind.EngineEntryFilesMissing => Text(
-                $"Engine manifest exists, but no supported iw3 entry file was found. Expected iw3.py or iw3/__main__.py under: {dependencyHealth.ExpectedPath}",
-                $"El manifiesto del motor existe, pero no se encontrÃ³ un archivo de entrada iw3 compatible. Se esperaba iw3.py o iw3/__main__.py en: {dependencyHealth.ExpectedPath}"),
+                $"Engine manifest exists, but no supported iw3 entry file was found. Expected nunif/iw3/__main__.py under: {dependencyHealth.ExpectedPath}",
+                $"El manifiesto del motor existe, pero no se encontrÃ³ un archivo de entrada iw3 compatible. Se esperaba nunif/iw3/__main__.py en: {dependencyHealth.ExpectedPath}"),
             ToolHealthDetailKind.ModelFilesFound => Text(
                 $"Local 3D model files found under: {dependencyHealth.ExpectedPath}",
                 $"Modelos 3D locales encontrados en: {dependencyHealth.ExpectedPath}"),
             ToolHealthDetailKind.ModelsDirectoryMissing => Text(
-                $"Expected local 3D models folder: {dependencyHealth.ExpectedPath}",
-                $"Carpeta esperada de modelos 3D locales: {dependencyHealth.ExpectedPath}"),
+                $"Expected local iw3 pretrained models folder: {dependencyHealth.ExpectedPath}",
+                $"Carpeta esperada de modelos preentrenados de iw3: {dependencyHealth.ExpectedPath}"),
             ToolHealthDetailKind.ModelFilesMissing => Text(
                 $"No supported model files found in: {dependencyHealth.ExpectedPath}",
                 $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}"),
@@ -1357,13 +1357,15 @@ public sealed class MainWindowViewModel : ObservableObject
         var lines = new List<string>
         {
             Text("Expected local iw3 bundle layout", "Estructura esperada del bundle local iw3"),
-            Text(Iw3EngineBundleContract.EngineDirectoryRelativePath, Iw3EngineBundleContract.EngineDirectoryRelativePath),
-            Text($"  {Path.GetFileName(Iw3EngineBundleContract.ManifestRelativePath)} (version must not be placeholder)",
-                $"  {Path.GetFileName(Iw3EngineBundleContract.ManifestRelativePath)} (version no debe ser placeholder)"),
-            Text("  python/python.exe", "  python/python.exe"),
-            Text("  iw3.py or iw3/__main__.py", "  iw3.py o iw3/__main__.py"),
-            Text("  models/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions),
-                "  models/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions)),
+            Text($"{Iw3EngineBundleContract.ManifestRelativePath} (version must not be placeholder)",
+                $"{Iw3EngineBundleContract.ManifestRelativePath} (version no debe ser placeholder)"),
+            Text(Iw3EngineBundleContract.PythonExecutableRelativePath, Iw3EngineBundleContract.PythonExecutableRelativePath),
+            Text(Iw3EngineBundleContract.PythonPathFileRelativePath, Iw3EngineBundleContract.PythonPathFileRelativePath),
+            Text(Iw3EngineBundleContract.Iw3PackageMainRelativePath, Iw3EngineBundleContract.Iw3PackageMainRelativePath),
+            Text(Iw3EngineBundleContract.ModelsDirectoryRelativePath + "/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions),
+                Iw3EngineBundleContract.ModelsDirectoryRelativePath + "/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions)),
+            Text($"{Iw3EngineBundleContract.CliCapabilitiesRelativePath} (optional)",
+                $"{Iw3EngineBundleContract.CliCapabilitiesRelativePath} (opcional)"),
             string.Empty,
         };
 

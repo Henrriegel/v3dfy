@@ -23,9 +23,14 @@ real iw3 bundle so the bundle is validated before it is copied.
 
 The expected local engine bundle contract is documented in `docs/engine.md`.
 Packaging must preserve that inspectable layout, including
-`engine/iw3/ENGINE_MANIFEST.json`, `engine/iw3/python/python.exe`, an iw3 entry
-file at `engine/iw3/iw3.py` or `engine/iw3/iw3/__main__.py`, and
-`engine/iw3/models`.
+`engine/iw3/ENGINE_MANIFEST.json`, `engine/iw3/python/python.exe`,
+`engine/iw3/python/python312._pth`, an iw3 entry file at
+`engine/iw3/nunif/iw3/__main__.py`, and
+`engine/iw3/nunif/iw3/pretrained_models`.
+
+The staged bundle root contains `python` and `nunif` as sibling folders. Keep
+that relationship intact because the embedded `python312._pth` uses
+`..\nunif`.
 
 Before packaging a local iw3 bundle, validate its structure without running the
 engine:

@@ -10,8 +10,11 @@ $runtimeDependencyPaths = [ordered]@{
     FfprobeExecutable = 'tools\ffmpeg\win-x64\ffprobe.exe'
     Iw3EngineRoot = 'engine\iw3'
     PythonExecutable = 'engine\iw3\python\python.exe'
-    ModelsDirectory = 'engine\iw3\models'
-    ModelCatalog = 'engine\iw3\models\MODEL_CATALOG.json'
+    PythonPathFile = 'engine\iw3\python\python312._pth'
+    NunifRootDirectory = 'engine\iw3\nunif'
+    Iw3PackageDirectory = 'engine\iw3\nunif\iw3'
+    ModelsDirectory = 'engine\iw3\nunif\iw3\pretrained_models'
+    ModelCatalog = 'engine\iw3\nunif\iw3\pretrained_models\MODEL_CATALOG.json'
     Iw3CliCapabilities = 'engine\iw3\IW3_CLI_CAPABILITIES.json'
     EngineManifest = 'engine\iw3\ENGINE_MANIFEST.json'
 }
@@ -84,7 +87,7 @@ function Test-Iw3Engine {
     $enginePath = Get-RuntimePath $runtimeDependencyPaths.Iw3EngineRoot
     if (-not (Test-Path -LiteralPath $enginePath -PathType Container)) {
         Write-Check WARN "Bundled iw3 engine is not bundled yet: $($runtimeDependencyPaths.Iw3EngineRoot)"
-        Write-Check WARN "Expected iw3 layout: $($runtimeDependencyPaths.EngineManifest), $($runtimeDependencyPaths.PythonExecutable), engine\iw3\iw3.py or engine\iw3\iw3\__main__.py, $($runtimeDependencyPaths.ModelsDirectory)"
+        Write-Check WARN "Expected iw3 layout: $($runtimeDependencyPaths.EngineManifest), $($runtimeDependencyPaths.PythonExecutable), $($runtimeDependencyPaths.PythonPathFile), engine\iw3\nunif\iw3\__main__.py, $($runtimeDependencyPaths.ModelsDirectory)"
         return
     }
 
@@ -102,8 +105,7 @@ function Test-Iw3Engine {
     }
 
     $engineEntryPaths = @(
-        (Join-Path $enginePath 'iw3.py'),
-        (Join-Path $enginePath 'iw3\__main__.py')
+        (Join-Path $enginePath 'nunif\iw3\__main__.py')
     )
     $hasEngineEntry = @($engineEntryPaths |
         Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count -gt 0
@@ -114,7 +116,7 @@ function Test-Iw3Engine {
     }
 
     if ($hasNonPlaceholderManifest) {
-        Write-Check WARN 'Bundled iw3 engine is incomplete. Missing entry file: engine\iw3\iw3.py or engine\iw3\iw3\__main__.py'
+        Write-Check WARN 'Bundled iw3 engine is incomplete. Missing entry file: engine\iw3\nunif\iw3\__main__.py'
         return
     }
 
@@ -176,7 +178,10 @@ function Test-RuntimeDependencyLayout {
     Test-RuntimeFile $runtimeDependencyPaths.FfprobeExecutable 'Bundled FFprobe executable'
     Test-RuntimeDirectory $runtimeDependencyPaths.Iw3EngineRoot 'Bundled iw3 engine root' | Out-Null
     Test-RuntimeFile $runtimeDependencyPaths.PythonExecutable 'Embedded Python executable'
-    Test-RuntimeDirectory $runtimeDependencyPaths.ModelsDirectory 'iw3 models directory' | Out-Null
+    Test-RuntimeFile $runtimeDependencyPaths.PythonPathFile 'Embedded Python path file'
+    Test-RuntimeDirectory $runtimeDependencyPaths.NunifRootDirectory 'nunif root directory' | Out-Null
+    Test-RuntimeDirectory $runtimeDependencyPaths.Iw3PackageDirectory 'iw3 package directory' | Out-Null
+    Test-RuntimeDirectory $runtimeDependencyPaths.ModelsDirectory 'iw3 pretrained models directory' | Out-Null
     Test-Iw3Engine
     Test-Iw3Models
 

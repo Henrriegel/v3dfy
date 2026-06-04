@@ -7,6 +7,15 @@ public sealed record InternalToolPaths(
     string Iw3EngineDirectory,
     string ModelsDirectory)
 {
+    public string NunifRootDirectory { get; init; } =
+        Path.Combine(Iw3EngineDirectory, Iw3EngineBundleContract.NunifDirectoryName);
+
+    public string Iw3PackageDirectory { get; init; } =
+        Path.Combine(
+            Iw3EngineDirectory,
+            Iw3EngineBundleContract.NunifDirectoryName,
+            Iw3EngineBundleContract.Iw3PackageDirectoryName);
+
     public string ModelCatalogFile { get; init; } =
         Path.Combine(ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName);
 

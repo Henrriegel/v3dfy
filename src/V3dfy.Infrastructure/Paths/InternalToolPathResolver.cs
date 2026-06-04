@@ -22,6 +22,8 @@ public sealed class InternalToolPathResolver
         Iw3EngineDirectory: ResolvePath(Iw3EngineBundleContract.EngineDirectoryRelativePath),
         ModelsDirectory: ResolvePath(Iw3EngineBundleContract.ModelsDirectoryRelativePath))
     {
+        NunifRootDirectory = ResolvePath(Iw3EngineBundleContract.NunifRootDirectoryRelativePath),
+        Iw3PackageDirectory = ResolvePath(Iw3EngineBundleContract.Iw3PackageDirectoryRelativePath),
         ModelCatalogFile = ResolvePath(Iw3EngineBundleContract.ModelCatalogRelativePath),
         Iw3CliCapabilitiesFile = ResolvePath(Iw3EngineBundleContract.CliCapabilitiesRelativePath),
     };

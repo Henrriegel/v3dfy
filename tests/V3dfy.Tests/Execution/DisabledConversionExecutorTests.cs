@@ -125,7 +125,7 @@ public sealed class DisabledConversionExecutorTests
         FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
         PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
         Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\models");
+        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
 
     private sealed class CapturingProgress : IProgress<ConversionExecutionProgressUpdate>
     {

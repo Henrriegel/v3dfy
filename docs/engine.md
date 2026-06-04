@@ -10,21 +10,28 @@ engine/iw3/
   IW3_CLI_CAPABILITIES.json # optional verified CLI metadata
   python/
     python.exe
-  iw3.py                 # one supported entry option
-  iw3/
-    __main__.py          # alternate supported entry option
-  models/
-    MODEL_CATALOG.json   # optional local metadata
-    <approved model files>
+    python312._pth
+  nunif/
+    iw3/
+      __main__.py
+      pretrained_models/
+        MODEL_CATALOG.json # optional v3dfy metadata
+        <approved model files>
 tools/ffmpeg/win-x64/
   ffmpeg.exe
   ffprobe.exe
 ```
 
-The iw3 engine entry can be either `engine/iw3/iw3.py` or
-`engine/iw3/iw3/__main__.py`. The manifest must include a real engine version;
-`"version": "placeholder"` is treated as missing. Supported model file
-extensions are `.pth`, `.pt`, `.onnx`, `.safetensors`, `.ckpt`, and `.bin`.
+The primary supported iw3 bundle is the prepared nunif Windows layout under
+`engine/iw3`: `python` and `nunif` are sibling folders. The embedded
+`python/python312._pth` uses `..\nunif`, so those sibling paths must be
+preserved when staging or packaging the bundle.
+
+The iw3 engine entry is `engine/iw3/nunif/iw3/__main__.py`. The manifest must
+include a real engine version; `"version": "placeholder"` is treated as
+missing. Supported model file extensions under
+`engine/iw3/nunif/iw3/pretrained_models` are `.pth`, `.pt`, `.onnx`,
+`.safetensors`, `.ckpt`, and `.bin`.
 
 ## Confirmed iw3 CLI contract
 
@@ -37,6 +44,9 @@ python -m iw3 -i <input file or directory> -o <output file or directory>
 v3dfy must use the bundled Python executable from `engine/iw3/python/python.exe`
 and pass `-m`, `iw3`, `-i`, and `-o` as structured process arguments. It must
 not rely on `PATH` or shell execution.
+
+Future local execution should run with working directory `engine/iw3/nunif`,
+matching the upstream `python -m iw3` usage from the nunif repository root.
 
 Other conversion controls are v3dfy planning metadata until they are verified
 against the exact bundled iw3 version. This includes selected model, 3D layout,
@@ -80,9 +90,10 @@ Placeholder files, README files, and contract files are only documentation. They
 must not be treated as a prepared engine bundle and must not enable conversion
 readiness.
 
-`MODEL_CATALOG.json` is optional metadata for locally bundled models. It must
-not download, load, or execute models, and it does not make conversion ready by
-itself. Compatible model files still must exist under `engine/iw3/models`.
+`MODEL_CATALOG.json` is optional v3dfy metadata for locally bundled models. It
+must not download, load, or execute models, and it does not make conversion
+ready by itself. Compatible model files still must exist under
+`engine/iw3/nunif/iw3/pretrained_models`.
 
 Example catalog shape:
 
@@ -124,13 +135,20 @@ Expected resolved runtime paths:
 - `tools/ffmpeg/win-x64/ffprobe.exe`: bundled FFprobe executable.
 - `engine/iw3`: bundled local/offline iw3 engine root.
 - `engine/iw3/python/python.exe`: embedded Python executable.
-- `engine/iw3/models`: approved pretrained models used by iw3.
-- `engine/iw3/models/MODEL_CATALOG.json`: optional local model metadata.
+- `engine/iw3/python/python312._pth`: embedded Python path file that keeps
+  `..\nunif` importable.
+- `engine/iw3/nunif`: prepared nunif repository root.
+- `engine/iw3/nunif/iw3`: iw3 Python package directory.
+- `engine/iw3/nunif/iw3/__main__.py`: iw3 module entry file.
+- `engine/iw3/nunif/iw3/pretrained_models`: approved pretrained models used by
+  iw3.
+- `engine/iw3/nunif/iw3/pretrained_models/MODEL_CATALOG.json`: optional local
+  model metadata.
 - `engine/iw3/IW3_CLI_CAPABILITIES.json`: optional verified CLI metadata.
 
 `MODEL_CATALOG.json` and `IW3_CLI_CAPABILITIES.json` are diagnostic metadata.
 They do not make the engine ready by themselves. Engine readiness still requires
-a valid non-placeholder manifest, an iw3 entry file, bundled Python, and
+a valid non-placeholder manifest, the nunif iw3 entry file, bundled Python, and
 compatible local model files where required by the health and readiness checks.
 
 ## End-user requirement

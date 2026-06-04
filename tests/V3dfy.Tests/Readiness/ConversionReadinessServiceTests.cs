@@ -90,7 +90,7 @@ public sealed class ConversionReadinessServiceTests
                 @"C:\v3dfy\engine\iw3"),
             ModelsDirectory: MissingDependency(
                 ToolHealthDetailKind.ModelFilesMissing,
-                @"C:\v3dfy\engine\iw3\models")));
+                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models")));
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(
@@ -106,7 +106,7 @@ public sealed class ConversionReadinessServiceTests
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
-                @"C:\v3dfy\engine\iw3\models",
+                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models",
                 StringComparison.Ordinal));
     }
 
@@ -120,13 +120,13 @@ public sealed class ConversionReadinessServiceTests
             Iw3EngineDirectory: MissingDependency(
                 ToolHealthDetailKind.EngineEntryFilesMissing,
                 @"C:\v3dfy\engine\iw3"),
-            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\models")));
+            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models")));
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
-                "Expected an iw3 entry file",
+                @"C:\v3dfy\engine\iw3\nunif\iw3\__main__.py",
                 StringComparison.Ordinal));
     }
 
@@ -140,7 +140,7 @@ public sealed class ConversionReadinessServiceTests
             Iw3EngineDirectory: MissingDependency(
                 ToolHealthDetailKind.EngineManifestMissing,
                 @"C:\v3dfy\engine\iw3"),
-            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\models")));
+            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models")));
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(

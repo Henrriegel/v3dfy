@@ -26,10 +26,16 @@ public sealed class InternalToolsTests
             Path.Combine(baseDirectory, "engine", "iw3"),
             paths.Iw3EngineDirectory);
         Assert.Equal(
-            Path.Combine(baseDirectory, "engine", "iw3", "models"),
+            Path.Combine(baseDirectory, "engine", "iw3", "nunif"),
+            paths.NunifRootDirectory);
+        Assert.Equal(
+            Path.Combine(baseDirectory, "engine", "iw3", "nunif", "iw3"),
+            paths.Iw3PackageDirectory);
+        Assert.Equal(
+            Path.Combine(baseDirectory, "engine", "iw3", "nunif", "iw3", "pretrained_models"),
             paths.ModelsDirectory);
         Assert.Equal(
-            Path.Combine(baseDirectory, "engine", "iw3", "models", "MODEL_CATALOG.json"),
+            Path.Combine(baseDirectory, "engine", "iw3", "nunif", "iw3", "pretrained_models", "MODEL_CATALOG.json"),
             paths.ModelCatalogFile);
         Assert.Equal(
             Path.Combine(baseDirectory, "engine", "iw3", "IW3_CLI_CAPABILITIES.json"),
@@ -50,7 +56,7 @@ public sealed class InternalToolsTests
             Path.Combine(normalizedBaseDirectory, "tools", "ffmpeg", "win-x64", "ffmpeg.exe"),
             paths.FfmpegExecutable);
         Assert.Equal(
-            Path.Combine(normalizedBaseDirectory, "engine", "iw3", "models", "MODEL_CATALOG.json"),
+            Path.Combine(normalizedBaseDirectory, "engine", "iw3", "nunif", "iw3", "pretrained_models", "MODEL_CATALOG.json"),
             paths.ModelCatalogFile);
         Assert.Equal(
             Path.Combine(normalizedBaseDirectory, "engine", "iw3", "IW3_CLI_CAPABILITIES.json"),
@@ -128,6 +134,32 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
+    public void DetailedHealthCheck_MarksRealNunifLayoutComplete_WhenRequiredFilesExist()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.FfmpegExecutable)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.PythonExecutable)!);
+        Directory.CreateDirectory(paths.Iw3PackageDirectory);
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(paths.FfmpegExecutable, "ffmpeg");
+        File.WriteAllText(paths.FfprobeExecutable, "ffprobe");
+        File.WriteAllText(paths.PythonExecutable, "python");
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"1.0.0"}""");
+        File.WriteAllText(Path.Combine(paths.Iw3PackageDirectory, "__main__.py"), "# entrypoint");
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.pt"), "model");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.True(health.IsComplete);
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
+        var model = Assert.Single(health.ModelInventory.CompatibleModelFiles);
+        Assert.Equal("depth-model.pt", model.RelativePath);
+    }
+
+    [Fact]
     public void DetailedHealthCheck_ReturnsExpectedPathsAndMissingFileReasons()
     {
         var paths = CreateToolLayout();
@@ -189,8 +221,8 @@ public sealed class InternalToolsTests
     public void HealthCheck_MarksEngineMissing_WhenEntryExistsWithoutManifest()
     {
         var paths = CreateToolLayout();
-        Directory.CreateDirectory(paths.Iw3EngineDirectory);
-        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "iw3.py"), "# entrypoint");
+        Directory.CreateDirectory(paths.Iw3PackageDirectory);
+        File.WriteAllText(Path.Combine(paths.Iw3PackageDirectory, "__main__.py"), "# entrypoint");
 
         var status = new InternalToolsHealthChecker().Check(paths);
 
@@ -216,8 +248,8 @@ public sealed class InternalToolsTests
     public void DetailedHealthCheck_ReportsManifestMissing_WhenEntryExistsWithoutManifest()
     {
         var paths = CreateToolLayout();
-        Directory.CreateDirectory(paths.Iw3EngineDirectory);
-        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "iw3.py"), "# entrypoint");
+        Directory.CreateDirectory(paths.Iw3PackageDirectory);
+        File.WriteAllText(Path.Combine(paths.Iw3PackageDirectory, "__main__.py"), "# entrypoint");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
 
@@ -226,31 +258,14 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
-    public void DetailedHealthCheck_MarksEngineFound_WhenManifestAndEntryExist()
+    public void DetailedHealthCheck_MarksEngineFound_WhenRealNunifLayoutEntryAndManifestExist()
     {
         var paths = CreateToolLayout();
-        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        Directory.CreateDirectory(paths.Iw3PackageDirectory);
         File.WriteAllText(
             Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
             """{"version":"1.0.0"}""");
-        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "iw3.py"), "# entrypoint");
-
-        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
-
-        Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
-        Assert.Equal(ToolHealthDetailKind.EngineBundleFound, health.Iw3EngineDirectory.DetailKind);
-    }
-
-    [Fact]
-    public void DetailedHealthCheck_MarksEngineFound_WhenPackageMainAndManifestExist()
-    {
-        var paths = CreateToolLayout();
-        var packageDirectory = Path.Combine(paths.Iw3EngineDirectory, "iw3");
-        Directory.CreateDirectory(packageDirectory);
-        File.WriteAllText(
-            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
-            """{"version":"1.0.0"}""");
-        File.WriteAllText(Path.Combine(packageDirectory, "__main__.py"), "# entrypoint");
+        File.WriteAllText(Path.Combine(paths.Iw3PackageDirectory, "__main__.py"), "# entrypoint");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
 
@@ -368,8 +383,38 @@ public sealed class InternalToolsTests
         Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
     }
 
+    [Fact]
+    public void DetailedHealthCheck_PlaceholderManifestDoesNotPassWithRealNunifLayoutEntry()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.Iw3PackageDirectory);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"placeholder"}""");
+        File.WriteAllText(Path.Combine(paths.Iw3PackageDirectory, "__main__.py"), "# entrypoint");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.EngineManifestMissing, health.Iw3EngineDirectory.DetailKind);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_ReportsMissingPretrainedModelsDirectory()
+    {
+        var paths = CreateToolLayout();
+        CreateReadyIw3Engine(paths);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.ModelsDirectoryMissing, health.ModelsDirectory.DetailKind);
+        Assert.Equal(paths.ModelsDirectory, health.ModelsDirectory.ExpectedPath);
+    }
+
     [Theory]
     [InlineData("depth-model.pth")]
+    [InlineData("depth-model.pt")]
     [InlineData("depth-model.onnx")]
     public void HealthCheck_MarksModelsFound_WhenModelFileExists(string fileName)
     {
@@ -762,10 +807,10 @@ public sealed class InternalToolsTests
 
     private static void CreateReadyIw3Engine(InternalToolPaths paths)
     {
-        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        Directory.CreateDirectory(paths.Iw3PackageDirectory);
         File.WriteAllText(
             Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
             """{"version":"1.0.0"}""");
-        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "iw3.py"), "# entrypoint");
+        File.WriteAllText(Path.Combine(paths.Iw3PackageDirectory, "__main__.py"), "# entrypoint");
     }
 }
