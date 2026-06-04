@@ -18,6 +18,17 @@ Packaging must preserve that inspectable layout, including
 file at `engine/iw3/iw3.py` or `engine/iw3/iw3/__main__.py`, and
 `engine/iw3/models`.
 
+Before packaging a local iw3 bundle, validate its structure without running the
+engine:
+
+```powershell
+.\scripts\validate-iw3-bundle.ps1
+.\scripts\validate-iw3-bundle.ps1 -StrictModels -RequireCapabilities
+```
+
+The validator checks local files only. It does not run Python, iw3, FFmpeg,
+model loading, downloads, or installs.
+
 ## Why PublishSingleFile is disabled
 
 `PublishSingleFile` is intentionally not enabled by default. The local engine,
