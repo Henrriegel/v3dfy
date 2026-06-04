@@ -20,6 +20,28 @@ public sealed record ConversionExecutionState(
         DetailEnglish: string.Empty,
         DetailSpanish: string.Empty);
 
+    public static ConversionExecutionState Blocked(
+        ConversionExecutionStartGateResult startGateResult)
+    {
+        ArgumentNullException.ThrowIfNull(startGateResult);
+
+        if (startGateResult.CanStart)
+        {
+            throw new ArgumentException(
+                "A blocked conversion state requires a blocked start gate result.",
+                nameof(startGateResult));
+        }
+
+        return new(
+            Status: ConversionExecutionStatus.Blocked,
+            ProgressPercent: 0,
+            CurrentStep: new(
+                "Conversion did not start.",
+                "La conversi\u00f3n no inici\u00f3."),
+            DetailEnglish: startGateResult.EnglishLogMessage,
+            DetailSpanish: startGateResult.SpanishLogMessage);
+    }
+
     public ConversionExecutionState NormalizeProgress() => this with
     {
         ProgressPercent = Math.Clamp(ProgressPercent, 0, 100),

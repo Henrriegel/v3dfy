@@ -4,6 +4,7 @@ public enum ConversionExecutionStatus
 {
     NotStarted,
     Ready,
+    Blocked,
     Running,
     Canceling,
     Canceled,

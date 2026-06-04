@@ -104,6 +104,7 @@ public sealed class ConversionWorkflowStateTests
     [Theory]
     [InlineData(ConversionExecutionStatus.NotStarted, true)]
     [InlineData(ConversionExecutionStatus.Ready, true)]
+    [InlineData(ConversionExecutionStatus.Blocked, true)]
     [InlineData(ConversionExecutionStatus.Running, false)]
     [InlineData(ConversionExecutionStatus.Completed, false)]
     public void ShowConversionReadinessCard_RequiresCompletedAnalysisAndIdleStatus(
@@ -131,6 +132,7 @@ public sealed class ConversionWorkflowStateTests
     [Theory]
     [InlineData(ConversionExecutionStatus.NotStarted, false)]
     [InlineData(ConversionExecutionStatus.Ready, false)]
+    [InlineData(ConversionExecutionStatus.Blocked, false)]
     [InlineData(ConversionExecutionStatus.Running, true)]
     [InlineData(ConversionExecutionStatus.Canceling, true)]
     [InlineData(ConversionExecutionStatus.Canceled, true)]

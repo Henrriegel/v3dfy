@@ -30,6 +30,35 @@ public sealed class ConversionExecutionStateTests
         Assert.True(state.CanCancel);
     }
 
+    [Fact]
+    public void Blocked_FromGateResult_DoesNotTransitionToRunning()
+    {
+        var gateResult = ConversionExecutionStartGateResult.Blocked(
+            ConversionExecutionBlocker.FeatureDisabled,
+            "Conversion execution is not enabled yet.",
+            "La ejecuci\u00f3n de conversi\u00f3n a\u00fan no est\u00e1 habilitada.",
+            "No Python, iw3, or FFmpeg conversion process was started.",
+            "No se inici\u00f3 ning\u00fan proceso de Python, iw3 ni conversi\u00f3n con FFmpeg.");
+
+        var state = ConversionExecutionState.Blocked(gateResult);
+
+        Assert.Equal(ConversionExecutionStatus.Blocked, state.Status);
+        Assert.NotEqual(ConversionExecutionStatus.Running, state.Status);
+        Assert.Equal(0, state.ProgressPercent);
+        Assert.False(state.CanCancel);
+        Assert.Equal("Conversion did not start.", state.CurrentStep.EnglishText);
+        Assert.Contains("No Python, iw3, or FFmpeg conversion process was started", state.DetailEnglish);
+    }
+
+    [Fact]
+    public void Blocked_WithReadyGateResult_Throws()
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            ConversionExecutionState.Blocked(ConversionExecutionStartGateResult.Ready()));
+
+        Assert.Equal("startGateResult", exception.ParamName);
+    }
+
     [Theory]
     [InlineData(-10, 0)]
     [InlineData(150, 100)]

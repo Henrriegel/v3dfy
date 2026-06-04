@@ -74,7 +74,10 @@ public sealed class ConversionWorkflowState
 
     public bool ShowConversionReadinessCard(ConversionExecutionStatus status) =>
         HasCompletedAnalysis &&
-        status is ConversionExecutionStatus.NotStarted or ConversionExecutionStatus.Ready;
+        status is
+            ConversionExecutionStatus.NotStarted or
+            ConversionExecutionStatus.Ready or
+            ConversionExecutionStatus.Blocked;
 
     public static bool ShowConversionProgressCard(ConversionExecutionStatus status) =>
         status is

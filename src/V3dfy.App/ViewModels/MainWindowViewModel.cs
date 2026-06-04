@@ -614,6 +614,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         ConversionExecutionStatus.NotStarted => Text("Not started", "No iniciada"),
         ConversionExecutionStatus.Ready => Text("Ready", "Lista"),
+        ConversionExecutionStatus.Blocked => Text("Blocked", "Bloqueada"),
         ConversionExecutionStatus.Running => Text("Running", "En ejecución"),
         ConversionExecutionStatus.Canceling => Text("Canceling", "Cancelando"),
         ConversionExecutionStatus.Canceled => Text("Canceled", "Cancelada"),
@@ -742,11 +743,23 @@ public sealed class MainWindowViewModel : ObservableObject
         "Missing requirements",
         "Requisitos faltantes");
 
-    public string ConversionReadinessStatusText => Text(
-        _conversionReadiness?.EnglishStatus ??
-        "Conversion unavailable. Required local components are missing.",
-        _conversionReadiness?.SpanishStatus ??
-        "Conversión no disponible. Faltan componentes locales requeridos.");
+    public string ConversionReadinessStatusText
+    {
+        get
+        {
+            var startGate = EvaluateConversionStartGate();
+            if (!startGate.CanStart)
+            {
+                return Text(startGate.EnglishStatus, startGate.SpanishStatus);
+            }
+
+            return Text(
+                _conversionReadiness?.EnglishStatus ??
+                "Conversion unavailable. Required local components are missing.",
+                _conversionReadiness?.SpanishStatus ??
+                "Conversión no disponible. Faltan componentes locales requeridos.");
+        }
+    }
 
     public string ConversionReadinessIssuesText => _conversionReadiness is null
         ? "-"
@@ -768,25 +781,22 @@ public sealed class MainWindowViewModel : ObservableObject
             _conversionReadiness.EnglishRequiredComponentsSummary,
             _conversionReadiness.SpanishRequiredComponentsSummary);
 
-    public string ConversionBlockedReasonText => CanStartConversion
-        ? string.Empty
-        : _conversionPlan is null
-            ? Text(
-                "Prepare a conversion plan before converting.",
-                "Prepara un plan de conversión antes de convertir.")
-            : _conversionReadiness?.CanConvert == true
-                ? Text(
-                    "Conversion is not enabled yet. The local execution runner still needs to be connected.",
-                    "La conversi\u00f3n a\u00fan no est\u00e1 habilitada. Todav\u00eda falta conectar el ejecutor local.")
-            : Text(
-                "This button will become available after the local engine, embedded runtime and models are bundled.",
-                "Este botón estará disponible cuando se incluyan el motor local, el runtime embebido y los modelos.");
+    public string ConversionBlockedReasonText
+    {
+        get
+        {
+            var startGate = EvaluateConversionStartGate();
+            return startGate.CanStart
+                ? string.Empty
+                : Text(startGate.EnglishDetail, startGate.SpanishDetail);
+        }
+    }
 
     public bool CanStartConversion =>
-        _conversionExecutionFeatureGate.CanStartConversion(
+        _conversionExecutionFeatureGate.EvaluateStart(
             HasCompletedAnalysis,
             _conversionPlan is not null,
-            _conversionReadiness);
+            _conversionReadiness).CanStart;
 
     public string StartConversionText => Text("Convert", "Convertir");
 
@@ -1107,6 +1117,12 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionReadinessPropertiesChanged();
     }
 
+    private ConversionExecutionStartGateResult EvaluateConversionStartGate() =>
+        _conversionExecutionFeatureGate.EvaluateStart(
+            HasCompletedAnalysis,
+            _conversionPlan is not null,
+            _conversionReadiness);
+
     private void UpdateToolStatuses()
     {
         if (_dependencyHealth is null)
@@ -1365,25 +1381,27 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void StartConversion()
     {
-        if (!_conversionExecutionFeatureGate.IsRealConversionExecutionEnabled)
+        var startGate = EvaluateConversionStartGate();
+        if (!startGate.CanStart)
         {
-            AddLog(
-                "Conversion execution is not enabled yet.",
-                "La ejecuci\u00f3n de conversi\u00f3n a\u00fan no est\u00e1 habilitada.");
+            BlockConversionStart(startGate);
             return;
         }
 
-        if (!CanStartConversion)
-        {
-            AddLog(
-                "Conversion cannot start because required local components are missing.",
-                "La conversión no puede iniciar porque faltan componentes locales requeridos.");
-            return;
-        }
-
-        AddLog(
+        var disabledStartGate = ConversionExecutionStartGateResult.Blocked(
+            ConversionExecutionBlocker.FeatureDisabled,
             "Conversion execution is not enabled yet.",
-            "La ejecución de conversión aún no está habilitada.");
+            "La ejecuci\u00f3n de conversi\u00f3n a\u00fan no est\u00e1 habilitada.",
+            "The local execution runner is not connected in this build. No Python, iw3, or FFmpeg conversion process was started.",
+            "El ejecutor local no est\u00e1 conectado en esta compilaci\u00f3n. No se inici\u00f3 ning\u00fan proceso de Python, iw3 ni conversi\u00f3n con FFmpeg.");
+        BlockConversionStart(disabledStartGate);
+    }
+
+    private void BlockConversionStart(ConversionExecutionStartGateResult startGate)
+    {
+        _conversionExecutionState = ConversionExecutionState.Blocked(startGate);
+        RaiseConversionExecutionPropertiesChanged();
+        AddLog(startGate.EnglishLogMessage, startGate.SpanishLogMessage);
     }
 
     private void CancelConversion()
