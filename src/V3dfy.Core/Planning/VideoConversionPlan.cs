@@ -18,5 +18,7 @@ public sealed record VideoConversionPlan(
     IReadOnlyList<VideoConversionPlanStep> Steps,
     string CommandPreview)
 {
+    public LocalModelPlanSelection? SelectedLocalModel { get; init; }
+
     public bool IsDryRun => Status == VideoConversionPlanStatus.DryRun;
 }

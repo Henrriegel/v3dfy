@@ -9,6 +9,19 @@ public sealed record ConversionExecutionRequest(
     string OutputPath,
     TargetDevicePreset SelectedPreset,
     VideoConversionPlanOptions Options,
+    InternalToolPaths ExpectedToolPaths,
+    LocalModelPlanSelection? SelectedLocalModel,
     string CommandPreview,
+    VideoConversionPlanStatus PlanStatus,
+    ConversionDryRunReason DryRunReason,
     bool IsDryRun,
-    CancellationToken CancellationToken = default);
+    CancellationToken CancellationToken = default)
+{
+    public OutputContainer OutputContainer => Options.OutputContainer;
+
+    public ThreeDOutputFormat ThreeDOutputFormat => Options.ThreeDOutputFormat;
+
+    public ThreeDIntensity Intensity => Options.Intensity;
+
+    public AiQualityPreset QualityPreset => Options.QualityPreset;
+}

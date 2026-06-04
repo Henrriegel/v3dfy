@@ -516,13 +516,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public LocalModelSelectionCandidate? SelectedLocalModelCandidate
     {
         get => _selectedLocalModelCandidate;
-        set
-        {
-            if (SetProperty(ref _selectedLocalModelCandidate, value))
-            {
-                OnPropertyChanged(nameof(LocalModelSelectionStatusText));
-            }
-        }
+        set => SetSelectedLocalModelCandidate(value, regeneratePlan: true);
     }
 
     public string LocalModelSelectionStatusText => SelectedLocalModelCandidate is null
@@ -560,6 +554,14 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ConversionPlanPresetText => Text(
         $"Based on preset: {SelectedOutputPreset.Name}",
         $"Basado en el perfil: {SelectedOutputPreset.SpanishName}");
+
+    public string ConversionPlanLocalModelText => _conversionPlan?.SelectedLocalModel is null
+        ? Text(
+            "Local model: Not selected / not available yet.",
+            "Modelo local: No seleccionado / a\u00fan no disponible.")
+        : Text(
+            $"Local model: {_conversionPlan.SelectedLocalModel.DisplayName} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.EnglishSourceText})",
+            $"Modelo local: {_conversionPlan.SelectedLocalModel.DisplayName} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.SpanishSourceText})");
 
     public string ConversionPlanOutputPathText => ConversionPlanLabelValue(
         "Output path",
@@ -1161,18 +1163,38 @@ public sealed class MainWindowViewModel : ObservableObject
                 StringComparison.OrdinalIgnoreCase))
             : null;
 
-        SetSelectedLocalModelCandidateFromInventory(
-            selectedCandidate ?? LocalModelCandidates.FirstOrDefault());
+        SetSelectedLocalModelCandidate(
+            selectedCandidate ?? LocalModelCandidates.FirstOrDefault(),
+            regeneratePlan: _analysis is not null && _conversionRecommendation is not null);
 
         OnPropertyChanged(nameof(HasLocalModelSelectionCandidates));
     }
 
-    private void SetSelectedLocalModelCandidateFromInventory(
-        LocalModelSelectionCandidate? candidate)
+    private void SetSelectedLocalModelCandidate(
+        LocalModelSelectionCandidate? candidate,
+        bool regeneratePlan = false)
     {
+        if (EqualityComparer<LocalModelSelectionCandidate?>.Default.Equals(
+            _selectedLocalModelCandidate,
+            candidate))
+        {
+            return;
+        }
+
         _selectedLocalModelCandidate = candidate;
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+
+        if (!regeneratePlan)
+        {
+            return;
+        }
+
+        ResetConversionExecutionState();
+        if (!RegenerateConversionPlan())
+        {
+            OnPropertyChanged(nameof(ConversionPlanLocalModelText));
+        }
     }
 
     private ConversionExecutionStartGateResult EvaluateConversionStartGate() =>
@@ -1823,7 +1845,8 @@ public sealed class MainWindowViewModel : ObservableObject
             SelectedOutputPreset,
             _planOptionState.CreatePlanOptions(_outputPathState.CustomOutputPath),
             _toolPaths,
-            _toolHealth ?? _healthChecker.Check(_toolPaths));
+            _toolHealth ?? _healthChecker.Check(_toolPaths),
+            SelectedLocalModelCandidate);
         RaiseConversionPlanPropertiesChanged();
         SetOutputPathText(_conversionPlan.SuggestedOutputPath);
         RaiseConversionReadinessPropertiesChanged();
@@ -2015,6 +2038,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ResetOutputPathText));
         OnPropertyChanged(nameof(ConversionPlanStatusText));
         OnPropertyChanged(nameof(ConversionPlanPresetText));
+        OnPropertyChanged(nameof(ConversionPlanLocalModelText));
         OnPropertyChanged(nameof(ConversionPlanOutputPathText));
         OnPropertyChanged(nameof(ConversionPlanOutputFormatText));
         OnPropertyChanged(nameof(ConversionPlanResolutionText));

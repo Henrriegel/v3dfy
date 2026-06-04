@@ -173,11 +173,82 @@ public sealed class VideoConversionPlanServiceTests
         Assert.Equal(ConversionDryRunReason.None, plan.DryRunReason);
     }
 
+    [Fact]
+    public void Create_NoSelectedModel_LeavesModelMetadataEmpty()
+    {
+        var plan = CreatePlan();
+
+        Assert.Null(plan.SelectedLocalModel);
+        Assert.DoesNotContain(
+            plan.Steps,
+            step => step.EnglishText.Contains("selected local model", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Create_SelectedCatalogManagedModel_AddsFriendlyModelMetadataAndStep()
+    {
+        var plan = CreatePlan(selectedLocalModel: CatalogManagedModel());
+
+        Assert.NotNull(plan.SelectedLocalModel);
+        Assert.Equal("Default depth model", plan.SelectedLocalModel.DisplayName);
+        Assert.Equal("depth/default-depth.onnx", plan.SelectedLocalModel.RelativePath);
+        Assert.Equal(LocalModelPlanSource.CatalogMetadata, plan.SelectedLocalModel.Source);
+        Assert.Equal("Catalog metadata", plan.SelectedLocalModel.EnglishSourceText);
+        Assert.Equal("Cat\u00e1logo", plan.SelectedLocalModel.SpanishSourceText);
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains("Default depth model", StringComparison.Ordinal) &&
+                    step.EnglishText.Contains("depth/default-depth.onnx", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Create_SelectedUnmanagedModel_AddsFilenameModelMetadataAndStep()
+    {
+        var plan = CreatePlan(selectedLocalModel: UnmanagedModel());
+
+        Assert.NotNull(plan.SelectedLocalModel);
+        Assert.Equal("local-depth.safetensors", plan.SelectedLocalModel.DisplayName);
+        Assert.Equal("local-depth.safetensors", plan.SelectedLocalModel.RelativePath);
+        Assert.Equal(LocalModelPlanSource.UnmanagedLocalFile, plan.SelectedLocalModel.Source);
+        Assert.Equal("Unmanaged local file", plan.SelectedLocalModel.EnglishSourceText);
+        Assert.Equal("Archivo local no administrado", plan.SelectedLocalModel.SpanishSourceText);
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains("local-depth.safetensors", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Create_SelectedModel_DoesNotChangeCommandPreviewWithoutSafeModelArgument()
+    {
+        var planWithoutModel = CreatePlan();
+        var planWithModel = CreatePlan(selectedLocalModel: CatalogManagedModel());
+
+        Assert.Equal(planWithoutModel.CommandPreview, planWithModel.CommandPreview);
+    }
+
+    [Fact]
+    public void Create_SelectedModel_DoesNotEnableConversionWhenBundleIsMissing()
+    {
+        var plan = CreatePlan(
+            healthStatus: CompleteHealth() with
+            {
+                Python = ToolHealthStatus.Missing,
+                Iw3EngineDirectory = ToolHealthStatus.Missing,
+                ModelsDirectory = ToolHealthStatus.Missing,
+            },
+            selectedLocalModel: CatalogManagedModel());
+
+        Assert.True(plan.IsDryRun);
+        Assert.Equal(ConversionDryRunReason.MissingLocalAiBundle, plan.DryRunReason);
+        Assert.NotNull(plan.SelectedLocalModel);
+    }
+
     private VideoConversionPlan CreatePlan(
         string inputPath = @"C:\Videos\Movie.mp4",
         VideoConversionPlanOptions? options = null,
         EngineHealthStatus? healthStatus = null,
-        TargetDevicePreset? targetPreset = null)
+        TargetDevicePreset? targetPreset = null,
+        LocalModelSelectionCandidate? selectedLocalModel = null)
     {
         targetPreset ??= TargetDevicePresets.Lg3dFullHd2012;
         var analysis = CreateAnalysis(inputPath);
@@ -191,8 +262,29 @@ public sealed class VideoConversionPlanServiceTests
             targetPreset,
             options ?? DefaultOptions(),
             Paths,
-            healthStatus ?? CompleteHealth());
+            healthStatus ?? CompleteHealth(),
+            selectedLocalModel);
     }
+
+    private static LocalModelSelectionCandidate CatalogManagedModel() => new(
+        Id: "depth-default",
+        DisplayName: "Default depth model",
+        RelativePath: "depth/default-depth.onnx",
+        FileName: "default-depth.onnx",
+        Extension: ".onnx",
+        ModelType: "depth-estimation",
+        Purpose: "2D to 3D depth generation",
+        IsCatalogManaged: true);
+
+    private static LocalModelSelectionCandidate UnmanagedModel() => new(
+        Id: "local-depth.safetensors",
+        DisplayName: "local-depth.safetensors",
+        RelativePath: "local-depth.safetensors",
+        FileName: "local-depth.safetensors",
+        Extension: ".safetensors",
+        ModelType: string.Empty,
+        Purpose: string.Empty,
+        IsCatalogManaged: false);
 
     private static VideoConversionPlanOptions DefaultOptions() => new(
         OutputContainer: OutputContainer.MP4,

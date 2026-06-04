@@ -16,7 +16,8 @@ public sealed class VideoConversionPlanService
         TargetDevicePreset targetPreset,
         VideoConversionPlanOptions options,
         InternalToolPaths paths,
-        EngineHealthStatus healthStatus)
+        EngineHealthStatus healthStatus,
+        LocalModelSelectionCandidate? selectedLocalModel = null)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(recommendation);
@@ -39,6 +40,15 @@ public sealed class VideoConversionPlanService
             AiQualityPreset: options.QualityPreset,
             ThreeDIntensity: options.Intensity);
         var command = _commandBuilder.Build(request, paths, healthStatus);
+        var selectedLocalModelPlan = selectedLocalModel is null
+            ? null
+            : LocalModelPlanSelection.FromCandidate(selectedLocalModel);
+        var steps = CreateSteps(
+            recommendation,
+            targetPreset,
+            options,
+            outputPath,
+            selectedLocalModelPlan);
 
         return new(
             SourcePath: analysis.InputPath,
@@ -53,22 +63,45 @@ public sealed class VideoConversionPlanService
             Intensity: options.Intensity,
             Status: command.DryRun ? VideoConversionPlanStatus.DryRun : VideoConversionPlanStatus.Ready,
             DryRunReason: GetDryRunReason(healthStatus),
-            Steps:
-            [
-                new(
-                    "Read the analyzed source video.",
-                    "Leer el video de origen analizado."),
-                new(
-                    $"Generate {GetLayoutName(options.ThreeDOutputFormat)} 3D frames with the bundled local iw3 engine.",
-                    $"Generar cuadros 3D {GetLayoutName(options.ThreeDOutputFormat)} con el motor local iw3 incluido."),
-                new(
-                    $"Prepare the {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} output for {targetPreset.Name}.",
-                    $"Preparar la salida {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} para {targetPreset.SpanishName}."),
-                new(
-                    $"Write the converted video to {outputPath}.",
-                    $"Guardar el video convertido en {outputPath}."),
-            ],
-            CommandPreview: command.FullCommandPreview);
+            Steps: steps,
+            CommandPreview: command.FullCommandPreview)
+        {
+            SelectedLocalModel = selectedLocalModelPlan,
+        };
+    }
+
+    private static IReadOnlyList<VideoConversionPlanStep> CreateSteps(
+        VideoConversionSetupRecommendation recommendation,
+        TargetDevicePreset targetPreset,
+        VideoConversionPlanOptions options,
+        string outputPath,
+        LocalModelPlanSelection? selectedLocalModel)
+    {
+        var steps = new List<VideoConversionPlanStep>
+        {
+            new(
+                "Read the analyzed source video.",
+                "Leer el video de origen analizado."),
+        };
+
+        if (selectedLocalModel is not null)
+        {
+            steps.Add(new(
+                $"Plan selected local model for future execution: {selectedLocalModel.DisplayName} ({selectedLocalModel.RelativePath}).",
+                $"Preparar el modelo local seleccionado para ejecuci\u00f3n futura: {selectedLocalModel.DisplayName} ({selectedLocalModel.RelativePath})."));
+        }
+
+        steps.Add(new(
+            $"Generate {GetLayoutName(options.ThreeDOutputFormat)} 3D frames with the bundled local iw3 engine.",
+            $"Generar cuadros 3D {GetLayoutName(options.ThreeDOutputFormat)} con el motor local iw3 incluido."));
+        steps.Add(new(
+            $"Prepare the {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} output for {targetPreset.Name}.",
+            $"Preparar la salida {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} para {targetPreset.SpanishName}."));
+        steps.Add(new(
+            $"Write the converted video to {outputPath}.",
+            $"Guardar el video convertido en {outputPath}."));
+
+        return steps;
     }
 
     private static string GetLayoutName(ThreeDOutputFormat format) => format switch

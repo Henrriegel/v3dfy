@@ -111,10 +111,21 @@ public sealed class DisabledConversionExecutorTests
             OutputPath: plan.SuggestedOutputPath,
             SelectedPreset: TargetDevicePresets.General3dVideo,
             Options: options,
+            ExpectedToolPaths: Paths,
+            SelectedLocalModel: plan.SelectedLocalModel,
             CommandPreview: plan.CommandPreview,
+            PlanStatus: plan.Status,
+            DryRunReason: plan.DryRunReason,
             IsDryRun: plan.IsDryRun,
             CancellationToken: cancellationToken);
     }
+
+    private static readonly InternalToolPaths Paths = new(
+        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
+        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
+        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
+        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
+        ModelsDirectory: @"C:\v3dfy\engine\iw3\models");
 
     private sealed class CapturingProgress : IProgress<ConversionExecutionProgressUpdate>
     {
