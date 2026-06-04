@@ -14,6 +14,7 @@
     <Content Include="..\..\engine\**\*">
       <Link>engine\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </Content>
     <Content Include="..\..\licenses\**\*">
       <Link>licenses\%(RecursiveDir)%(Filename)%(Extension)</Link>
