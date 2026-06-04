@@ -26,7 +26,15 @@ engine:
 .\scripts\validate-iw3-bundle.ps1 -StrictModels -RequireCapabilities
 ```
 
-The validator checks local files only. It does not run Python, iw3, FFmpeg,
+After validation, stage the bundle into an app or publish layout:
+
+```powershell
+.\scripts\stage-iw3-bundle.ps1 -TargetRoot artifacts\publish\v3dfy-win-x64
+```
+
+The staged runtime layout is `<target>\engine\iw3`. Package only after the
+staged output contains the expected engine layout. The validation and staging
+scripts inspect and copy local files only. They do not run Python, iw3, FFmpeg,
 model loading, downloads, or installs.
 
 ## Why PublishSingleFile is disabled
