@@ -1,0 +1,229 @@
+using V3dfy.Core.Execution;
+using V3dfy.Core.Models;
+using V3dfy.Core.Planning;
+using V3dfy.Core.Presets;
+using V3dfy.Core.Processes;
+using V3dfy.Engine.Iw3.Commands;
+using V3dfy.Engine.Iw3.Execution;
+
+namespace V3dfy.Tests.Execution;
+
+public sealed class LocalIw3ProcessRequestBuilderTests
+{
+    private static readonly InternalToolPaths Paths = new(
+        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
+        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
+        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
+        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
+        ModelsDirectory: @"C:\v3dfy\engine\iw3\models");
+
+    private readonly LocalIw3ProcessRequestBuilder _builder = new();
+
+    [Fact]
+    public void Build_UsesEmbeddedPythonExecutableFromRequest()
+    {
+        var processRequest = _builder.Build(CreateRequest());
+
+        Assert.Equal(Paths.PythonExecutable, processRequest.ExecutablePath);
+        Assert.True(Path.IsPathFullyQualified(processRequest.ExecutablePath));
+        Assert.NotEqual("python.exe", processRequest.ExecutablePath);
+    }
+
+    [Fact]
+    public void Build_UsesIw3EngineDirectoryAsWorkingDirectory()
+    {
+        var processRequest = _builder.Build(CreateRequest());
+
+        Assert.Equal(Paths.Iw3EngineDirectory, processRequest.WorkingDirectory);
+    }
+
+    [Fact]
+    public void Build_SetsIw3EngineDirectoryAsAllowedRoot()
+    {
+        var processRequest = _builder.Build(CreateRequest());
+
+        Assert.Equal(Paths.Iw3EngineDirectory, processRequest.AllowedRootDirectory);
+        ProcessExecutionRequestValidator.ValidateBundledToolRequest(processRequest);
+    }
+
+    [Fact]
+    public void Build_UsesStructuredArgumentListWithoutShellWrapper()
+    {
+        var processRequest = _builder.Build(CreateRequest());
+
+        Assert.Contains("-m", processRequest.Arguments);
+        Assert.Contains("iw3", processRequest.Arguments);
+        Assert.Contains("-i", processRequest.Arguments);
+        Assert.Contains(@"C:\Videos\Movie.mp4", processRequest.Arguments);
+        Assert.DoesNotContain("cmd.exe", processRequest.ExecutablePath, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("powershell", processRequest.ExecutablePath, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            processRequest.Arguments,
+            argument => argument.Contains("-m iw3", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_ReusesIw3CommandBuilderArgumentsAndPreservesPreviewShape()
+    {
+        var request = CreateRequest();
+        var processRequest = _builder.Build(request);
+        var command = new Iw3CommandBuilder().Build(
+            CreateConversionRequest(request),
+            Paths,
+            CompleteHealth());
+
+        Assert.Equal(command.Arguments, processRequest.Arguments);
+        Assert.Equal(request.CommandPreview, command.FullCommandPreview);
+    }
+
+    [Fact]
+    public void Build_SelectedLocalModelMetadataDoesNotAddUnsupportedModelArgument()
+    {
+        var processRequest = _builder.Build(CreateRequest(
+            selectedModel: new(
+                "Default depth model",
+                "depth/default-depth.onnx",
+                LocalModelPlanSource.CatalogMetadata)));
+
+        Assert.DoesNotContain(
+            processRequest.Arguments,
+            argument => argument.Contains("depth/default-depth.onnx", StringComparison.Ordinal));
+        Assert.DoesNotContain("--model", processRequest.Arguments);
+    }
+
+    [Fact]
+    public void Build_DryRunRequestCreatesDataOnly()
+    {
+        var processRequest = _builder.Build(CreateRequest());
+
+        Assert.Equal(Paths.PythonExecutable, processRequest.ExecutablePath);
+        Assert.Contains("iw3", processRequest.Arguments);
+    }
+
+    [Fact]
+    public void Build_InvalidRequestIsRejectedBeforeProcessDataIsReturned()
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => _builder.Build(CreateRequest(sourcePath: string.Empty)));
+
+        Assert.Contains("invalid conversion execution request", exception.Message);
+        Assert.Contains("Source video path is required", exception.Message);
+    }
+
+    [Fact]
+    public async Task LocalIw3ConversionExecutor_StillBlocksDryRunAndDoesNotUseProcessRequest()
+    {
+        var processRequestBuilder = new CountingProcessRequestBuilder();
+        var executor = new LocalIw3ConversionExecutor(processRequestBuilder: processRequestBuilder);
+
+        var result = await executor.ExecuteAsync(CreateRequest());
+
+        Assert.False(result.Success);
+        Assert.Contains("dry-run", result.EnglishSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, processRequestBuilder.BuildCallCount);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                "No Python, iw3, FFmpeg conversion, or model process was started.",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LocalIw3ConversionExecutor_DoesNotExposeProcessRunnerDependency()
+    {
+        var constructorParameterTypes = typeof(LocalIw3ConversionExecutor)
+            .GetConstructors()
+            .SelectMany(constructor => constructor.GetParameters())
+            .Select(parameter => parameter.ParameterType.Name);
+
+        Assert.DoesNotContain(
+            constructorParameterTypes,
+            parameterTypeName => parameterTypeName.Contains("ProcessRunner", StringComparison.Ordinal));
+    }
+
+    private static ConversionExecutionRequest CreateRequest(
+        string sourcePath = @"C:\Videos\Movie.mp4",
+        string outputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+        LocalModelPlanSelection? selectedModel = null,
+        VideoConversionPlanStatus planStatus = VideoConversionPlanStatus.DryRun,
+        ConversionDryRunReason dryRunReason = ConversionDryRunReason.MissingLocalAiBundle,
+        bool isDryRun = true)
+    {
+        var options = new VideoConversionPlanOptions(
+            OutputContainer: OutputContainer.MP4,
+            QualityPreset: AiQualityPreset.Balanced,
+            Intensity: ThreeDIntensity.Medium,
+            ThreeDOutputFormat: ThreeDOutputFormat.HalfTopBottom);
+        var commandPreview = new Iw3CommandBuilder().Build(
+            new ConversionRequest(
+                InputPath: sourcePath,
+                OutputPath: outputPath,
+                OutputContainer: options.OutputContainer,
+                ThreeDOutputFormat: options.ThreeDOutputFormat,
+                AiQualityPreset: options.QualityPreset,
+                ThreeDIntensity: options.Intensity),
+            Paths,
+            CompleteHealth()).FullCommandPreview;
+        var plan = new VideoConversionPlan(
+            SourcePath: sourcePath,
+            SuggestedOutputPath: outputPath,
+            OutputContainer: options.OutputContainer,
+            VideoCodec: "H.264",
+            AudioCodec: "AAC or AC3",
+            Width: 1920,
+            Height: 1080,
+            ThreeDOutputFormat: options.ThreeDOutputFormat,
+            QualityPreset: options.QualityPreset,
+            Intensity: options.Intensity,
+            Status: planStatus,
+            DryRunReason: dryRunReason,
+            Steps:
+            [
+                new("Read the analyzed source video.", "Leer el video de origen analizado."),
+            ],
+            CommandPreview: commandPreview)
+        {
+            SelectedLocalModel = selectedModel,
+        };
+
+        return new(
+            Plan: plan,
+            SourcePath: sourcePath,
+            OutputPath: outputPath,
+            SelectedPreset: TargetDevicePresets.General3dVideo,
+            Options: options,
+            ExpectedToolPaths: Paths,
+            SelectedLocalModel: selectedModel,
+            CommandPreview: commandPreview,
+            PlanStatus: planStatus,
+            DryRunReason: dryRunReason,
+            IsDryRun: isDryRun);
+    }
+
+    private static ConversionRequest CreateConversionRequest(
+        ConversionExecutionRequest request) => new(
+        InputPath: request.SourcePath,
+        OutputPath: request.OutputPath,
+        OutputContainer: request.OutputContainer,
+        ThreeDOutputFormat: request.ThreeDOutputFormat,
+        AiQualityPreset: request.QualityPreset,
+        ThreeDIntensity: request.Intensity);
+
+    private static EngineHealthStatus CompleteHealth() => new(
+        Ffmpeg: ToolHealthStatus.Found,
+        Ffprobe: ToolHealthStatus.Found,
+        Python: ToolHealthStatus.Found,
+        Iw3EngineDirectory: ToolHealthStatus.Found,
+        ModelsDirectory: ToolHealthStatus.Found);
+
+    private sealed class CountingProcessRequestBuilder : LocalIw3ProcessRequestBuilder
+    {
+        public int BuildCallCount { get; private set; }
+
+        public override ProcessExecutionRequest Build(ConversionExecutionRequest request)
+        {
+            BuildCallCount++;
+            return base.Build(request);
+        }
+    }
+}
