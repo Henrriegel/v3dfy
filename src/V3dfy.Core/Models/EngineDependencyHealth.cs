@@ -6,7 +6,8 @@ public sealed record EngineDependencyHealth(
     ToolDependencyHealth Python,
     ToolDependencyHealth Iw3EngineDirectory,
     ToolDependencyHealth ModelsDirectory,
-    LocalModelInventory ModelInventory)
+    LocalModelInventory ModelInventory,
+    Iw3CliCapabilitiesManifest Iw3CliCapabilities)
 {
     public EngineDependencyHealth(
         ToolDependencyHealth Ffmpeg,
@@ -20,7 +21,10 @@ public sealed record EngineDependencyHealth(
             Python,
             Iw3EngineDirectory,
             ModelsDirectory,
-            LocalModelInventory.Empty(ModelsDirectory.ExpectedPath))
+            LocalModelInventory.Empty(ModelsDirectory.ExpectedPath),
+            Iw3CliCapabilitiesManifest.Missing(Path.Combine(
+                Iw3EngineDirectory.ExpectedPath,
+                Iw3EngineBundleContract.CliCapabilitiesFileName)))
     {
     }
 

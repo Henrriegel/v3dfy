@@ -6,6 +6,7 @@ namespace V3dfy.Infrastructure.Health;
 public sealed class InternalToolsHealthChecker
 {
     private const long MaxModelCatalogBytes = 256 * 1024;
+    private const long MaxCliCapabilitiesBytes = 128 * 1024;
 
     public EngineHealthStatus Check(InternalToolPaths paths) => CheckDetailed(paths).Summary;
 
@@ -14,6 +15,7 @@ public sealed class InternalToolsHealthChecker
         ArgumentNullException.ThrowIfNull(paths);
 
         var modelInventory = GetModelInventory(paths.ModelsDirectory);
+        var cliCapabilities = GetIw3CliCapabilities(paths.Iw3EngineDirectory);
 
         return new EngineDependencyHealth(
             Ffmpeg: GetBundledFileHealth(paths.FfmpegExecutable),
@@ -21,7 +23,8 @@ public sealed class InternalToolsHealthChecker
             Python: GetBundledFileHealth(paths.PythonExecutable),
             Iw3EngineDirectory: GetIw3EngineHealth(paths.Iw3EngineDirectory),
             ModelsDirectory: GetModelsHealth(modelInventory),
-            ModelInventory: modelInventory);
+            ModelInventory: modelInventory,
+            Iw3CliCapabilities: cliCapabilities);
     }
 
     private static ToolDependencyHealth GetBundledFileHealth(string path) =>
@@ -85,6 +88,75 @@ public sealed class InternalToolsHealthChecker
         return inventory.HasCompatibleModels
             ? new(ToolHealthStatus.Found, ToolHealthDetailKind.ModelFilesFound, inventory.ModelsDirectory)
             : new(ToolHealthStatus.Missing, ToolHealthDetailKind.ModelFilesMissing, inventory.ModelsDirectory);
+    }
+
+    private static Iw3CliCapabilitiesManifest GetIw3CliCapabilities(
+        string iw3EngineDirectory)
+    {
+        var manifestPath = Path.Combine(
+            iw3EngineDirectory,
+            Iw3EngineBundleContract.CliCapabilitiesFileName);
+        if (!File.Exists(manifestPath))
+        {
+            return Iw3CliCapabilitiesManifest.Missing(manifestPath);
+        }
+
+        try
+        {
+            var manifestFile = new FileInfo(manifestPath);
+            if (manifestFile.Length > MaxCliCapabilitiesBytes)
+            {
+                return Iw3CliCapabilitiesManifest.Invalid(
+                    manifestPath,
+                    $"CLI capabilities manifest is larger than {MaxCliCapabilitiesBytes} bytes.");
+            }
+
+            using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var root = document.RootElement;
+            if (IsPlaceholderCapabilitiesManifest(root))
+            {
+                return Iw3CliCapabilitiesManifest.Placeholder(manifestPath);
+            }
+
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return Iw3CliCapabilitiesManifest.Invalid(
+                    manifestPath,
+                    "CLI capabilities manifest root must be a JSON object.");
+            }
+
+            if (!TryGetStringArray(root, "verifiedOptions", out var verifiedOptions, out var errorMessage) ||
+                !TryGetStringArray(root, "unverifiedOptions", out var unverifiedOptions, out errorMessage))
+            {
+                return Iw3CliCapabilitiesManifest.Invalid(manifestPath, errorMessage);
+            }
+
+            return new(
+                ManifestPath: manifestPath,
+                Status: Iw3CliCapabilitiesStatus.Found,
+                ErrorMessage: null,
+                BundledIw3Version: GetOptionalString(root, "bundledIw3Version") is { Length: > 0 } bundledVersion
+                    ? bundledVersion
+                    : GetOptionalString(root, "iw3Version"),
+                VerifiedBaseCommand: GetOptionalBoolean(root, "verifiedBaseCommand"),
+                VerifiedOptions: verifiedOptions,
+                UnverifiedOptions: unverifiedOptions,
+                VerificationSource: GetOptionalString(root, "verificationSource"),
+                VerifiedAtUtc: GetOptionalString(root, "verifiedAtUtc"),
+                Notes: GetOptionalString(root, "notes"));
+        }
+        catch (JsonException exception)
+        {
+            return Iw3CliCapabilitiesManifest.Invalid(manifestPath, exception.Message);
+        }
+        catch (IOException exception)
+        {
+            return Iw3CliCapabilitiesManifest.Invalid(manifestPath, exception.Message);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return Iw3CliCapabilitiesManifest.Invalid(manifestPath, exception.Message);
+        }
     }
 
     private static LocalModelInventory GetModelInventory(string path)
@@ -269,6 +341,73 @@ public sealed class InternalToolsHealthChecker
         value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty
             : string.Empty;
+
+    private static bool GetOptionalBoolean(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind == JsonValueKind.True;
+
+    private static bool TryGetStringArray(
+        JsonElement element,
+        string propertyName,
+        out IReadOnlyList<string> values,
+        out string errorMessage)
+    {
+        values = [];
+        errorMessage = string.Empty;
+
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return true;
+        }
+
+        if (property.ValueKind != JsonValueKind.Array)
+        {
+            errorMessage = $"CLI capabilities {propertyName} property must be an array.";
+            return false;
+        }
+
+        var parsedValues = new List<string>();
+        foreach (var item in property.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                errorMessage = $"CLI capabilities {propertyName} entries must be strings.";
+                return false;
+            }
+
+            var value = item.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                parsedValues.Add(value);
+            }
+        }
+
+        values = parsedValues;
+        return true;
+    }
+
+    private static bool IsPlaceholderCapabilitiesManifest(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        if (root.TryGetProperty("placeholder", out var placeholder) &&
+            placeholder.ValueKind == JsonValueKind.True)
+        {
+            return true;
+        }
+
+        return IsPlaceholderStringProperty(root, "version") ||
+            IsPlaceholderStringProperty(root, "iw3Version") ||
+            IsPlaceholderStringProperty(root, "bundledIw3Version");
+    }
+
+    private static bool IsPlaceholderStringProperty(JsonElement root, string propertyName) =>
+        root.TryGetProperty(propertyName, out var value) &&
+        value.ValueKind == JsonValueKind.String &&
+        string.Equals(value.GetString(), "placeholder", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsPlaceholderCatalog(JsonElement root)
     {

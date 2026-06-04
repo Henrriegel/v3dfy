@@ -4,4 +4,5 @@ public sealed record Iw3Command(
     string ExecutablePath,
     IReadOnlyList<string> Arguments,
     string FullCommandPreview,
-    bool DryRun);
+    bool DryRun,
+    IReadOnlyList<string> UnconfirmedPlanningOptions);

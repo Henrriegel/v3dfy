@@ -51,10 +51,16 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     {
         var processRequest = _builder.Build(CreateRequest());
 
-        Assert.Contains("-m", processRequest.Arguments);
-        Assert.Contains("iw3", processRequest.Arguments);
-        Assert.Contains("-i", processRequest.Arguments);
-        Assert.Contains(@"C:\Videos\Movie.mp4", processRequest.Arguments);
+        Assert.Equal(
+            [
+                Iw3CliContract.PythonModuleSwitch,
+                Iw3CliContract.ModuleName,
+                Iw3CliContract.InputSwitch,
+                @"C:\Videos\Movie.mp4",
+                Iw3CliContract.OutputSwitch,
+                @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+            ],
+            processRequest.Arguments);
         Assert.DoesNotContain("cmd.exe", processRequest.ExecutablePath, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("powershell", processRequest.ExecutablePath, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(
@@ -89,6 +95,23 @@ public sealed class LocalIw3ProcessRequestBuilderTests
             processRequest.Arguments,
             argument => argument.Contains("depth/default-depth.onnx", StringComparison.Ordinal));
         Assert.DoesNotContain("--model", processRequest.Arguments);
+    }
+
+    [Fact]
+    public void Build_PlanningOptionsDoNotBecomeExecutableArgumentsUntilConfirmed()
+    {
+        var processRequest = _builder.Build(CreateRequest(
+            outputFormat: ThreeDOutputFormat.Anaglyph,
+            qualityPreset: AiQualityPreset.HighQuality,
+            intensity: ThreeDIntensity.High));
+
+        Assert.DoesNotContain("--anaglyph", processRequest.Arguments);
+        Assert.DoesNotContain("--preset", processRequest.Arguments);
+        Assert.DoesNotContain("-d", processRequest.Arguments);
+        Assert.DoesNotContain("--video-codec", processRequest.Arguments);
+        Assert.DoesNotContain("--scene-detect", processRequest.Arguments);
+        Assert.DoesNotContain("--ema-normalize", processRequest.Arguments);
+        Assert.DoesNotContain("-c", processRequest.Arguments);
     }
 
     [Fact]
@@ -145,25 +168,32 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         string sourcePath = @"C:\Videos\Movie.mp4",
         string outputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
         LocalModelPlanSelection? selectedModel = null,
+        ThreeDOutputFormat outputFormat = ThreeDOutputFormat.HalfTopBottom,
+        AiQualityPreset qualityPreset = AiQualityPreset.Balanced,
+        ThreeDIntensity intensity = ThreeDIntensity.Medium,
         VideoConversionPlanStatus planStatus = VideoConversionPlanStatus.DryRun,
         ConversionDryRunReason dryRunReason = ConversionDryRunReason.MissingLocalAiBundle,
         bool isDryRun = true)
     {
         var options = new VideoConversionPlanOptions(
             OutputContainer: OutputContainer.MP4,
-            QualityPreset: AiQualityPreset.Balanced,
-            Intensity: ThreeDIntensity.Medium,
-            ThreeDOutputFormat: ThreeDOutputFormat.HalfTopBottom);
-        var commandPreview = new Iw3CommandBuilder().Build(
-            new ConversionRequest(
-                InputPath: sourcePath,
-                OutputPath: outputPath,
-                OutputContainer: options.OutputContainer,
-                ThreeDOutputFormat: options.ThreeDOutputFormat,
-                AiQualityPreset: options.QualityPreset,
-                ThreeDIntensity: options.Intensity),
-            Paths,
-            CompleteHealth()).FullCommandPreview;
+            QualityPreset: qualityPreset,
+            Intensity: intensity,
+            ThreeDOutputFormat: outputFormat);
+        var commandPreview =
+            string.IsNullOrWhiteSpace(sourcePath) ||
+            string.IsNullOrWhiteSpace(outputPath)
+                ? "iw3 local engine dry-run preview"
+                : new Iw3CommandBuilder().Build(
+                    new ConversionRequest(
+                        InputPath: sourcePath,
+                        OutputPath: outputPath,
+                        OutputContainer: options.OutputContainer,
+                        ThreeDOutputFormat: options.ThreeDOutputFormat,
+                        AiQualityPreset: options.QualityPreset,
+                        ThreeDIntensity: options.Intensity),
+                    Paths,
+                    CompleteHealth()).FullCommandPreview;
         var plan = new VideoConversionPlan(
             SourcePath: sourcePath,
             SuggestedOutputPath: outputPath,

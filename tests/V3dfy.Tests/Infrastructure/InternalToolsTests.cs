@@ -171,6 +171,116 @@ public sealed class InternalToolsTests
         Assert.Equal(ToolHealthDetailKind.EngineBundleFound, health.Iw3EngineDirectory.DetailKind);
     }
 
+    [Fact]
+    public void DetailedHealthCheck_MissingCliCapabilitiesManifest_IsSafeAndDoesNotAffectEngineHealth()
+    {
+        var paths = CreateToolLayout();
+        CreateReadyIw3Engine(paths);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
+        Assert.Equal(Iw3CliCapabilitiesStatus.Missing, health.Iw3CliCapabilities.Status);
+        Assert.Equal(
+            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            health.Iw3CliCapabilities.ManifestPath);
+        Assert.False(health.Iw3CliCapabilities.HasVerifiedCapabilities);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_InvalidCliCapabilitiesManifest_DoesNotCrashOrAffectEngineHealth()
+    {
+        var paths = CreateToolLayout();
+        CreateReadyIw3Engine(paths);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            "{ invalid json");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
+        Assert.Equal(Iw3CliCapabilitiesStatus.Invalid, health.Iw3CliCapabilities.Status);
+        Assert.False(string.IsNullOrWhiteSpace(health.Iw3CliCapabilities.ErrorMessage));
+        Assert.False(health.Iw3CliCapabilities.HasVerifiedCapabilities);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_PlaceholderCliCapabilitiesManifest_IsNotVerified()
+    {
+        var paths = CreateToolLayout();
+        CreateReadyIw3Engine(paths);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            """
+            {
+              "placeholder": true,
+              "verifiedBaseCommand": true,
+              "verifiedOptions": ["selected model"]
+            }
+            """);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(Iw3CliCapabilitiesStatus.Placeholder, health.Iw3CliCapabilities.Status);
+        Assert.False(health.Iw3CliCapabilities.HasVerifiedCapabilities);
+        Assert.Empty(health.Iw3CliCapabilities.VerifiedOptions);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_CliCapabilitiesManifestAlone_DoesNotMarkEngineFound()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            """
+            {
+              "bundledIw3Version": "1.2.3",
+              "verifiedBaseCommand": true
+            }
+            """);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.Iw3EngineDirectory.Status);
+        Assert.Equal(ToolHealthDetailKind.EnginePlaceholderOnly, health.Iw3EngineDirectory.DetailKind);
+        Assert.Equal(Iw3CliCapabilitiesStatus.Found, health.Iw3CliCapabilities.Status);
+        Assert.True(health.Iw3CliCapabilities.HasVerifiedCapabilities);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_VerifiedCliCapabilitiesAreMetadataOnly()
+    {
+        var paths = CreateToolLayout();
+        CreateReadyIw3Engine(paths);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            """
+            {
+              "bundledIw3Version": "1.2.3",
+              "verifiedBaseCommand": true,
+              "verifiedOptions": ["-i", "-o"],
+              "unverifiedOptions": ["selected model", "quality preset"],
+              "verificationSource": "python -m iw3 -h",
+              "verifiedAtUtc": "2026-06-04T00:00:00Z",
+              "notes": "Verified during bundle preparation."
+            }
+            """);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(Iw3CliCapabilitiesStatus.Found, health.Iw3CliCapabilities.Status);
+        Assert.True(health.Iw3CliCapabilities.HasVerifiedCapabilities);
+        Assert.Equal("1.2.3", health.Iw3CliCapabilities.BundledIw3Version);
+        Assert.True(health.Iw3CliCapabilities.VerifiedBaseCommand);
+        Assert.Equal(["-i", "-o"], health.Iw3CliCapabilities.VerifiedOptions);
+        Assert.Equal(["selected model", "quality preset"], health.Iw3CliCapabilities.UnverifiedOptions);
+        Assert.Equal("python -m iw3 -h", health.Iw3CliCapabilities.VerificationSource);
+        Assert.Equal("2026-06-04T00:00:00Z", health.Iw3CliCapabilities.VerifiedAtUtc);
+        Assert.Equal("Verified during bundle preparation.", health.Iw3CliCapabilities.Notes);
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
+    }
+
     [Theory]
     [InlineData("depth-model.pth")]
     [InlineData("depth-model.onnx")]
@@ -561,5 +671,14 @@ public sealed class InternalToolsTests
             Guid.NewGuid().ToString("N"));
 
         return new InternalToolPathResolver(baseDirectory).Resolve();
+    }
+
+    private static void CreateReadyIw3Engine(InternalToolPaths paths)
+    {
+        Directory.CreateDirectory(paths.Iw3EngineDirectory);
+        File.WriteAllText(
+            Path.Combine(paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
+            """{"version":"1.0.0"}""");
+        File.WriteAllText(Path.Combine(paths.Iw3EngineDirectory, "iw3.py"), "# entrypoint");
     }
 }

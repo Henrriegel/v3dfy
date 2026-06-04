@@ -13,27 +13,52 @@ public sealed class Iw3CommandBuilderTests
         ModelsDirectory: @"C:\v3dfy\engine\iw3\models");
 
     [Fact]
-    public void Build_HalfTopBottom_AddsHalfTbArgument()
+    public void Build_UsesConfirmedBaseStructuredArguments()
     {
         var command = Build();
 
-        Assert.Contains("--half-tb", command.Arguments);
+        Assert.Equal(
+            [
+                Iw3CliContract.PythonModuleSwitch,
+                Iw3CliContract.ModuleName,
+                Iw3CliContract.InputSwitch,
+                @"C:\videos\input video.mp4",
+                Iw3CliContract.OutputSwitch,
+                @"C:\videos\output video.mp4",
+            ],
+            command.Arguments);
     }
 
     [Fact]
-    public void Build_MediumIntensity_AddsDepthOnePointFive()
+    public void Build_ExposesUnconfirmedPlanningOptionsAsMetadata()
     {
         var command = Build();
 
-        AssertArgumentValue(command.Arguments, "-d", "1.5");
+        Assert.Contains("selected model", command.UnconfirmedPlanningOptions);
+        Assert.Contains("3D layout", command.UnconfirmedPlanningOptions);
+        Assert.Contains("video codec", command.UnconfirmedPlanningOptions);
+        Assert.Contains("quality preset", command.UnconfirmedPlanningOptions);
+        Assert.Contains("3D intensity/depth", command.UnconfirmedPlanningOptions);
+        Assert.Contains("scene detection", command.UnconfirmedPlanningOptions);
+        Assert.Contains("normalization", command.UnconfirmedPlanningOptions);
+        Assert.Contains("convergence/divergence", command.UnconfirmedPlanningOptions);
     }
 
     [Fact]
-    public void Build_BalancedQuality_AddsMediumPreset()
+    public void Build_UnconfirmedOptionsDoNotBecomeExecutableArguments()
     {
-        var command = Build();
+        var command = Build(
+            outputFormat: ThreeDOutputFormat.Anaglyph,
+            intensity: ThreeDIntensity.High,
+            qualityPreset: AiQualityPreset.HighQuality);
 
-        AssertArgumentValue(command.Arguments, "--preset", "medium");
+        Assert.DoesNotContain("--anaglyph", command.Arguments);
+        Assert.DoesNotContain("--video-codec", command.Arguments);
+        Assert.DoesNotContain("--preset", command.Arguments);
+        Assert.DoesNotContain("--scene-detect", command.Arguments);
+        Assert.DoesNotContain("--ema-normalize", command.Arguments);
+        Assert.DoesNotContain("-d", command.Arguments);
+        Assert.DoesNotContain("-c", command.Arguments);
     }
 
     [Fact]
@@ -45,6 +70,9 @@ public sealed class Iw3CommandBuilderTests
         Assert.Contains("-m iw3", command.FullCommandPreview);
         Assert.Contains("\"C:\\videos\\input video.mp4\"", command.FullCommandPreview);
         Assert.Contains("\"C:\\videos\\output video.mp4\"", command.FullCommandPreview);
+        Assert.DoesNotContain("--half", command.FullCommandPreview);
+        Assert.DoesNotContain("--preset", command.FullCommandPreview);
+        Assert.DoesNotContain("--video-codec", command.FullCommandPreview);
     }
 
     [Fact]
@@ -55,42 +83,55 @@ public sealed class Iw3CommandBuilderTests
         Assert.True(command.DryRun);
     }
 
+    [Fact]
+    public void Build_UsesEmbeddedPythonPathAndDoesNotRelyOnPathOrShell()
+    {
+        var command = Build();
+
+        Assert.Equal(Paths.PythonExecutable, command.ExecutablePath);
+        Assert.NotEqual("python.exe", command.ExecutablePath);
+        Assert.DoesNotContain("cmd.exe", command.ExecutablePath, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("powershell", command.ExecutablePath, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(ThreeDOutputFormat.HalfTopBottom, "--half-tb")]
     [InlineData(ThreeDOutputFormat.HalfSideBySide, "--half-sbs")]
     [InlineData(ThreeDOutputFormat.FullSideBySide, "--sbs")]
     [InlineData(ThreeDOutputFormat.Anaglyph, "--anaglyph")]
-    public void Build_MapsOutputFormat(ThreeDOutputFormat format, string expectedArgument)
+    public void Build_OutputFormatDoesNotBecomeExecutableArgumentUntilConfirmed(
+        ThreeDOutputFormat format,
+        string unconfirmedArgument)
     {
         var command = Build(outputFormat: format);
 
-        Assert.Contains(expectedArgument, command.Arguments);
+        Assert.DoesNotContain(unconfirmedArgument, command.Arguments);
     }
 
     [Theory]
-    [InlineData(ThreeDIntensity.Low, null, "1.0")]
-    [InlineData(ThreeDIntensity.Medium, null, "1.5")]
-    [InlineData(ThreeDIntensity.High, null, "2.0")]
-    [InlineData(ThreeDIntensity.Custom, 1.75, "1.75")]
-    public void Build_MapsIntensity(
+    [InlineData(ThreeDIntensity.Low, null)]
+    [InlineData(ThreeDIntensity.Medium, null)]
+    [InlineData(ThreeDIntensity.High, null)]
+    [InlineData(ThreeDIntensity.Custom, 1.75)]
+    public void Build_IntensityDoesNotBecomeExecutableArgumentUntilConfirmed(
         ThreeDIntensity intensity,
-        double? customDepth,
-        string expectedDepth)
+        double? customDepth)
     {
         var command = Build(intensity: intensity, customDepth: customDepth);
 
-        AssertArgumentValue(command.Arguments, "-d", expectedDepth);
+        Assert.DoesNotContain("-d", command.Arguments);
     }
 
     [Theory]
-    [InlineData(AiQualityPreset.Fast, "fast")]
-    [InlineData(AiQualityPreset.Balanced, "medium")]
-    [InlineData(AiQualityPreset.HighQuality, "slow")]
-    public void Build_MapsQualityPreset(AiQualityPreset preset, string expectedPreset)
+    [InlineData(AiQualityPreset.Fast)]
+    [InlineData(AiQualityPreset.Balanced)]
+    [InlineData(AiQualityPreset.HighQuality)]
+    public void Build_QualityDoesNotBecomeExecutableArgumentUntilConfirmed(
+        AiQualityPreset preset)
     {
         var command = Build(qualityPreset: preset);
 
-        AssertArgumentValue(command.Arguments, "--preset", expectedPreset);
+        Assert.DoesNotContain("--preset", command.Arguments);
     }
 
     private static Iw3Command Build(
@@ -124,15 +165,4 @@ public sealed class Iw3CommandBuilderTests
         Iw3EngineDirectory = ToolHealthStatus.Missing,
     };
 
-    private static void AssertArgumentValue(
-        IReadOnlyList<string> arguments,
-        string argument,
-        string expectedValue)
-    {
-        var argumentIndex = Assert.Single(
-            arguments.Select((value, index) => (value, index)),
-            item => item.value == argument).index;
-
-        Assert.Equal(expectedValue, arguments[argumentIndex + 1]);
-    }
 }

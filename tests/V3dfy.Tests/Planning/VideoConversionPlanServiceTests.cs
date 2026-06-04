@@ -59,7 +59,7 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
-    public void Create_SelectedQuality_UpdatesPlanAndCommandPreview()
+    public void Create_SelectedQuality_UpdatesPlanWithoutAddingUnconfirmedCommandFlag()
     {
         var plan = CreatePlan(options: DefaultOptions() with
         {
@@ -67,11 +67,11 @@ public sealed class VideoConversionPlanServiceTests
         });
 
         Assert.Equal(AiQualityPreset.HighQuality, plan.QualityPreset);
-        Assert.Contains("--preset slow", plan.CommandPreview);
+        Assert.DoesNotContain("--preset", plan.CommandPreview);
     }
 
     [Fact]
-    public void Create_SelectedIntensity_UpdatesPlanAndCommandPreview()
+    public void Create_SelectedIntensity_UpdatesPlanWithoutAddingUnconfirmedCommandFlag()
     {
         var plan = CreatePlan(options: DefaultOptions() with
         {
@@ -79,11 +79,11 @@ public sealed class VideoConversionPlanServiceTests
         });
 
         Assert.Equal(ThreeDIntensity.High, plan.Intensity);
-        Assert.Contains("-d 2.0", plan.CommandPreview);
+        Assert.DoesNotContain("-d", plan.CommandPreview);
     }
 
     [Fact]
-    public void Create_SelectedHalfSideBySide_UpdatesPlanOutputAndCommandPreview()
+    public void Create_SelectedHalfSideBySide_UpdatesPlanOutputWithoutAddingUnconfirmedCommandFlag()
     {
         var plan = CreatePlan(options: DefaultOptions() with
         {
@@ -92,7 +92,7 @@ public sealed class VideoConversionPlanServiceTests
 
         Assert.Equal(ThreeDOutputFormat.HalfSideBySide, plan.ThreeDOutputFormat);
         Assert.EndsWith(".v3dfy.3d.hsbs.mp4", plan.SuggestedOutputPath);
-        Assert.Contains("--half-sbs", plan.CommandPreview);
+        Assert.DoesNotContain("--half-sbs", plan.CommandPreview);
     }
 
     [Theory]
@@ -147,7 +147,7 @@ public sealed class VideoConversionPlanServiceTests
         Assert.Equal("H.264", plan.VideoCodec);
         Assert.Equal("AAC or AC3", plan.AudioCodec);
         Assert.Equal(ThreeDOutputFormat.HalfTopBottom, plan.ThreeDOutputFormat);
-        Assert.Contains("--half-tb", plan.CommandPreview);
+        Assert.DoesNotContain("--half-tb", plan.CommandPreview);
     }
 
     [Fact]
