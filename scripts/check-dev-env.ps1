@@ -3,6 +3,18 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$runtimeRoot = $repoRoot
+
+$runtimeDependencyPaths = [ordered]@{
+    FfmpegExecutable = 'tools\ffmpeg\win-x64\ffmpeg.exe'
+    FfprobeExecutable = 'tools\ffmpeg\win-x64\ffprobe.exe'
+    Iw3EngineRoot = 'engine\iw3'
+    PythonExecutable = 'engine\iw3\python\python.exe'
+    ModelsDirectory = 'engine\iw3\models'
+    ModelCatalog = 'engine\iw3\models\MODEL_CATALOG.json'
+    Iw3CliCapabilities = 'engine\iw3\IW3_CLI_CAPABILITIES.json'
+    EngineManifest = 'engine\iw3\ENGINE_MANIFEST.json'
+}
 
 function Write-Check {
     param(
@@ -20,31 +32,64 @@ function Write-Check {
     Write-Host "[$Level] $Message" -ForegroundColor $color
 }
 
-function Test-OptionalPath {
+function Get-RuntimePath {
+    param([string]$RelativePath)
+
+    return Join-Path $runtimeRoot $RelativePath
+}
+
+function Test-RuntimeFile {
     param(
         [string]$RelativePath,
-        [string]$Description
+        [string]$Description,
+        [bool]$Required = $true
     )
 
-    $path = Join-Path $repoRoot $RelativePath
-    if (Test-Path -LiteralPath $path) {
+    $path = Get-RuntimePath $RelativePath
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
         Write-Check OK "$Description found: $RelativePath"
     }
-    else {
+    elseif ($Required) {
         Write-Check WARN "$Description is not bundled yet: $RelativePath"
+    }
+    else {
+        Write-Check WARN "Optional $Description is not bundled yet: $RelativePath"
     }
 }
 
+function Test-RuntimeDirectory {
+    param(
+        [string]$RelativePath,
+        [string]$Description,
+        [bool]$Required = $true
+    )
+
+    $path = Get-RuntimePath $RelativePath
+    if (Test-Path -LiteralPath $path -PathType Container) {
+        Write-Check OK "$Description found: $RelativePath"
+        return $true
+    }
+
+    if ($Required) {
+        Write-Check WARN "$Description is not bundled yet: $RelativePath"
+    }
+    else {
+        Write-Check WARN "Optional $Description is not bundled yet: $RelativePath"
+    }
+
+    return $false
+}
+
 function Test-Iw3Engine {
-    $enginePath = Join-Path $repoRoot 'engine\iw3'
+    $enginePath = Get-RuntimePath $runtimeDependencyPaths.Iw3EngineRoot
     if (-not (Test-Path -LiteralPath $enginePath -PathType Container)) {
-        Write-Check WARN 'Bundled iw3 engine is not bundled yet: engine\iw3'
-        Write-Check WARN 'Expected iw3 layout: engine\iw3\ENGINE_MANIFEST.json, engine\iw3\python\python.exe, engine\iw3\iw3.py or engine\iw3\iw3\__main__.py, engine\iw3\models'
+        Write-Check WARN "Bundled iw3 engine is not bundled yet: $($runtimeDependencyPaths.Iw3EngineRoot)"
+        Write-Check WARN "Expected iw3 layout: $($runtimeDependencyPaths.EngineManifest), $($runtimeDependencyPaths.PythonExecutable), engine\iw3\iw3.py or engine\iw3\iw3\__main__.py, $($runtimeDependencyPaths.ModelsDirectory)"
         return
     }
 
     $hasNonPlaceholderManifest = $false
-    $manifestPath = Join-Path $enginePath 'ENGINE_MANIFEST.json'
+    $manifestPath = Get-RuntimePath $runtimeDependencyPaths.EngineManifest
     if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         try {
             $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
@@ -64,7 +109,7 @@ function Test-Iw3Engine {
         Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }).Count -gt 0
 
     if ($hasNonPlaceholderManifest -and $hasEngineEntry) {
-        Write-Check OK 'Bundled iw3 engine found: engine\iw3'
+        Write-Check OK "Bundled iw3 engine found: $($runtimeDependencyPaths.Iw3EngineRoot)"
         return
     }
 
@@ -74,11 +119,17 @@ function Test-Iw3Engine {
     }
 
     if ($hasEngineEntry) {
-        Write-Check WARN 'Bundled iw3 engine is incomplete. Missing non-placeholder manifest: engine\iw3\ENGINE_MANIFEST.json'
+        Write-Check WARN "Bundled iw3 engine is incomplete. Missing non-placeholder manifest: $($runtimeDependencyPaths.EngineManifest)"
         return
     }
 
-    $placeholderOrContractFiles = @('README.md', 'ENGINE_MANIFEST.json', 'ENGINE_BUNDLE_CONTRACT.md')
+    $placeholderOrContractFiles = @(
+        'README.md',
+        'ENGINE_MANIFEST.json',
+        'ENGINE_BUNDLE_CONTRACT.md',
+        'IW3_CLI_CAPABILITIES.json',
+        'MODEL_CATALOG.json'
+    )
     $engineFiles = @(Get-ChildItem -LiteralPath $enginePath -File -Recurse |
         Where-Object {
             $relativePath = $_.FullName.Substring($enginePath.Length).TrimStart('\', '/')
@@ -92,15 +143,15 @@ function Test-Iw3Engine {
         })
 
     if ($engineFiles.Count -eq 0) {
-        Write-Check WARN 'Bundled iw3 engine contains placeholders or contract files only: engine\iw3'
+        Write-Check WARN "Bundled iw3 engine contains placeholders or contract files only: $($runtimeDependencyPaths.Iw3EngineRoot)"
     }
     else {
-        Write-Check WARN 'Bundled iw3 engine is incomplete. Missing non-placeholder manifest: engine\iw3\ENGINE_MANIFEST.json'
+        Write-Check WARN "Bundled iw3 engine is incomplete. Missing non-placeholder manifest: $($runtimeDependencyPaths.EngineManifest)"
     }
 }
 
 function Test-Iw3Models {
-    $modelsPath = Join-Path $repoRoot 'engine\iw3\models'
+    $modelsPath = Get-RuntimePath $runtimeDependencyPaths.ModelsDirectory
     $modelExtensions = @('.pth', '.pt', '.onnx', '.safetensors', '.ckpt', '.bin')
     $modelFiles = @()
 
@@ -110,11 +161,28 @@ function Test-Iw3Models {
     }
 
     if ($modelFiles.Count -gt 0) {
-        Write-Check OK 'iw3 models found: engine\iw3\models'
+        Write-Check OK "iw3 models found: $($runtimeDependencyPaths.ModelsDirectory)"
     }
     else {
-        Write-Check WARN 'iw3 models are not bundled yet: engine\iw3\models'
+        Write-Check WARN "iw3 models are not bundled yet: $($runtimeDependencyPaths.ModelsDirectory)"
     }
+}
+
+function Test-RuntimeDependencyLayout {
+    Write-Host "Runtime dependency root: $runtimeRoot"
+    Write-Host 'Runtime dependency checks inspect local files only. They do not run the app, Python, iw3, FFmpeg, model loading, downloads, or installs.'
+
+    Test-RuntimeFile $runtimeDependencyPaths.FfmpegExecutable 'Bundled FFmpeg executable'
+    Test-RuntimeFile $runtimeDependencyPaths.FfprobeExecutable 'Bundled FFprobe executable'
+    Test-RuntimeDirectory $runtimeDependencyPaths.Iw3EngineRoot 'Bundled iw3 engine root' | Out-Null
+    Test-RuntimeFile $runtimeDependencyPaths.PythonExecutable 'Embedded Python executable'
+    Test-RuntimeDirectory $runtimeDependencyPaths.ModelsDirectory 'iw3 models directory' | Out-Null
+    Test-Iw3Engine
+    Test-Iw3Models
+
+    Test-RuntimeFile $runtimeDependencyPaths.ModelCatalog 'MODEL_CATALOG.json metadata' $false
+    Test-RuntimeFile $runtimeDependencyPaths.Iw3CliCapabilities 'IW3_CLI_CAPABILITIES.json metadata' $false
+    Write-Check WARN 'Optional metadata files are diagnostic only and do not make the iw3 engine ready by themselves.'
 }
 
 $hasErrors = $false
@@ -179,11 +247,7 @@ else {
     $hasErrors = $true
 }
 
-Test-OptionalPath 'tools\ffmpeg\win-x64\ffmpeg.exe' 'Bundled FFmpeg'
-Test-OptionalPath 'tools\ffmpeg\win-x64\ffprobe.exe' 'Bundled FFprobe'
-Test-OptionalPath 'engine\iw3\python\python.exe' 'Embedded Python'
-Test-Iw3Engine
-Test-Iw3Models
+Test-RuntimeDependencyLayout
 
 if ($hasErrors) {
     exit 1

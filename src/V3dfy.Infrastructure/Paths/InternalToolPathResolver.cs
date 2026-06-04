@@ -4,6 +4,9 @@ namespace V3dfy.Infrastructure.Paths;
 
 public sealed class InternalToolPathResolver
 {
+    public const string FfmpegExecutableRelativePath = "tools/ffmpeg/win-x64/ffmpeg.exe";
+    public const string FfprobeExecutableRelativePath = "tools/ffmpeg/win-x64/ffprobe.exe";
+
     private readonly string _applicationBaseDirectory;
 
     public InternalToolPathResolver(string applicationBaseDirectory)
@@ -13,12 +16,22 @@ public sealed class InternalToolPathResolver
     }
 
     public InternalToolPaths Resolve() => new(
-        FfmpegExecutable: ResolvePath("tools", "ffmpeg", "win-x64", "ffmpeg.exe"),
-        FfprobeExecutable: ResolvePath("tools", "ffmpeg", "win-x64", "ffprobe.exe"),
-        PythonExecutable: ResolvePath("engine", "iw3", "python", "python.exe"),
-        Iw3EngineDirectory: ResolvePath("engine", "iw3"),
-        ModelsDirectory: ResolvePath("engine", "iw3", "models"));
+        FfmpegExecutable: ResolvePath(FfmpegExecutableRelativePath),
+        FfprobeExecutable: ResolvePath(FfprobeExecutableRelativePath),
+        PythonExecutable: ResolvePath(Iw3EngineBundleContract.PythonExecutableRelativePath),
+        Iw3EngineDirectory: ResolvePath(Iw3EngineBundleContract.EngineDirectoryRelativePath),
+        ModelsDirectory: ResolvePath(Iw3EngineBundleContract.ModelsDirectoryRelativePath))
+    {
+        ModelCatalogFile = ResolvePath(Iw3EngineBundleContract.ModelCatalogRelativePath),
+        Iw3CliCapabilitiesFile = ResolvePath(Iw3EngineBundleContract.CliCapabilitiesRelativePath),
+    };
 
-    private string ResolvePath(params string[] segments) =>
-        Path.GetFullPath(Path.Combine([_applicationBaseDirectory, .. segments]));
+    private string ResolvePath(string relativePath) =>
+        Path.GetFullPath(Path.Combine(
+            [_applicationBaseDirectory, .. SplitRelativePath(relativePath)]));
+
+    private static string[] SplitRelativePath(string relativePath) =>
+        relativePath.Split(
+            ['/', '\\'],
+            StringSplitOptions.RemoveEmptyEntries);
 }

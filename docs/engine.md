@@ -113,11 +113,25 @@ load/run model frameworks.
 
 ## Directories
 
+Bundled runtime paths are resolved relative to the app/runtime root. Do not
+hardcode Debug, publish, installer, repository, or developer-machine paths in
+application code. `check-dev-env.ps1` uses the same conceptual layout for
+development diagnostics.
+
+Expected resolved runtime paths:
+
+- `tools/ffmpeg/win-x64/ffmpeg.exe`: bundled FFmpeg executable.
+- `tools/ffmpeg/win-x64/ffprobe.exe`: bundled FFprobe executable.
 - `engine/iw3`: bundled local/offline iw3 engine root.
-- `engine/iw3/python`: embedded Python runtime expected to contain
-  `python.exe`.
+- `engine/iw3/python/python.exe`: embedded Python executable.
 - `engine/iw3/models`: approved pretrained models used by iw3.
-- `tools/ffmpeg/win-x64`: bundled `ffmpeg.exe` and `ffprobe.exe`.
+- `engine/iw3/models/MODEL_CATALOG.json`: optional local model metadata.
+- `engine/iw3/IW3_CLI_CAPABILITIES.json`: optional verified CLI metadata.
+
+`MODEL_CATALOG.json` and `IW3_CLI_CAPABILITIES.json` are diagnostic metadata.
+They do not make the engine ready by themselves. Engine readiness still requires
+a valid non-placeholder manifest, an iw3 entry file, bundled Python, and
+compatible local model files where required by the health and readiness checks.
 
 ## End-user requirement
 

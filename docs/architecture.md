@@ -20,3 +20,9 @@ The final installer must include the self-contained .NET app, FFmpeg, FFprobe,
 the local AI engine, an embedded runtime when required, pretrained models,
 configuration files, and applicable licenses. The installed app must not
 require cloud APIs or development dependencies.
+
+Runtime dependency paths are resolved from the app/runtime root through
+`InternalToolPathResolver` or an equivalent centralized service. Future code
+must not hardcode Debug, publish, installer, repository, or developer-machine
+paths for bundled tools or engine files. At the app boundary, the runtime root
+is the application base directory; lower layers consume resolved paths.

@@ -16,13 +16,20 @@ public sealed record LocalModelInventory(
 
     public static LocalModelInventory Empty(
         string modelsDirectory,
+        bool directoryExists = false) => Empty(
+        modelsDirectory,
+        Path.Combine(modelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+        directoryExists);
+
+    public static LocalModelInventory Empty(
+        string modelsDirectory,
+        string modelCatalogFile,
         bool directoryExists = false) => new(
         ModelsDirectory: modelsDirectory,
         DirectoryExists: directoryExists,
         SupportedExtensions: Iw3EngineBundleContract.SupportedModelExtensions,
         CompatibleModelFiles: [],
-        Catalog: LocalModelCatalog.Missing(
-            Path.Combine(modelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName)));
+        Catalog: LocalModelCatalog.Missing(modelCatalogFile));
 
     private IReadOnlyList<LocalModelSelectionCandidate> CreateSelectionCandidates()
     {

@@ -14,8 +14,8 @@ public sealed class InternalToolsHealthChecker
     {
         ArgumentNullException.ThrowIfNull(paths);
 
-        var modelInventory = GetModelInventory(paths.ModelsDirectory);
-        var cliCapabilities = GetIw3CliCapabilities(paths.Iw3EngineDirectory);
+        var modelInventory = GetModelInventory(paths.ModelsDirectory, paths.ModelCatalogFile);
+        var cliCapabilities = GetIw3CliCapabilities(paths.Iw3CliCapabilitiesFile);
 
         return new EngineDependencyHealth(
             Ffmpeg: GetBundledFileHealth(paths.FfmpegExecutable),
@@ -91,11 +91,8 @@ public sealed class InternalToolsHealthChecker
     }
 
     private static Iw3CliCapabilitiesManifest GetIw3CliCapabilities(
-        string iw3EngineDirectory)
+        string manifestPath)
     {
-        var manifestPath = Path.Combine(
-            iw3EngineDirectory,
-            Iw3EngineBundleContract.CliCapabilitiesFileName);
         if (!File.Exists(manifestPath))
         {
             return Iw3CliCapabilitiesManifest.Missing(manifestPath);
@@ -159,11 +156,13 @@ public sealed class InternalToolsHealthChecker
         }
     }
 
-    private static LocalModelInventory GetModelInventory(string path)
+    private static LocalModelInventory GetModelInventory(
+        string path,
+        string modelCatalogFile)
     {
         if (!Directory.Exists(path))
         {
-            return LocalModelInventory.Empty(path);
+            return LocalModelInventory.Empty(path, modelCatalogFile);
         }
 
         var compatibleModelFiles = Directory
@@ -173,7 +172,7 @@ public sealed class InternalToolsHealthChecker
             .OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var catalog = GetModelCatalog(path, compatibleModelFiles);
+        var catalog = GetModelCatalog(path, modelCatalogFile, compatibleModelFiles);
 
         return new(
             ModelsDirectory: path,
@@ -185,9 +184,9 @@ public sealed class InternalToolsHealthChecker
 
     private static LocalModelCatalog GetModelCatalog(
         string modelsDirectory,
+        string catalogPath,
         IReadOnlyList<LocalModelFile> compatibleModelFiles)
     {
-        var catalogPath = Path.Combine(modelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName);
         if (!File.Exists(catalogPath))
         {
             return LocalModelCatalog.Missing(catalogPath, compatibleModelFiles);

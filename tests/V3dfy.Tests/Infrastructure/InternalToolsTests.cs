@@ -17,8 +17,84 @@ public sealed class InternalToolsTests
             Path.Combine(baseDirectory, "tools", "ffmpeg", "win-x64", "ffmpeg.exe"),
             paths.FfmpegExecutable);
         Assert.Equal(
+            Path.Combine(baseDirectory, "tools", "ffmpeg", "win-x64", "ffprobe.exe"),
+            paths.FfprobeExecutable);
+        Assert.Equal(
             Path.Combine(baseDirectory, "engine", "iw3", "python", "python.exe"),
             paths.PythonExecutable);
+        Assert.Equal(
+            Path.Combine(baseDirectory, "engine", "iw3"),
+            paths.Iw3EngineDirectory);
+        Assert.Equal(
+            Path.Combine(baseDirectory, "engine", "iw3", "models"),
+            paths.ModelsDirectory);
+        Assert.Equal(
+            Path.Combine(baseDirectory, "engine", "iw3", "models", "MODEL_CATALOG.json"),
+            paths.ModelCatalogFile);
+        Assert.Equal(
+            Path.Combine(baseDirectory, "engine", "iw3", "IW3_CLI_CAPABILITIES.json"),
+            paths.Iw3CliCapabilitiesFile);
+    }
+
+    [Fact]
+    public void Resolver_HandlesTrailingSlashesCleanly()
+    {
+        var baseDirectory = Path.GetFullPath(Path.Combine(
+            Environment.CurrentDirectory,
+            "app-root-with-trailing-slash")) + Path.DirectorySeparatorChar;
+        var normalizedBaseDirectory = Path.GetFullPath(baseDirectory);
+
+        var paths = new InternalToolPathResolver(baseDirectory).Resolve();
+
+        Assert.Equal(
+            Path.Combine(normalizedBaseDirectory, "tools", "ffmpeg", "win-x64", "ffmpeg.exe"),
+            paths.FfmpegExecutable);
+        Assert.Equal(
+            Path.Combine(normalizedBaseDirectory, "engine", "iw3", "models", "MODEL_CATALOG.json"),
+            paths.ModelCatalogFile);
+        Assert.Equal(
+            Path.Combine(normalizedBaseDirectory, "engine", "iw3", "IW3_CLI_CAPABILITIES.json"),
+            paths.Iw3CliCapabilitiesFile);
+    }
+
+    [Fact]
+    public void Resolver_DoesNotUseCurrentDirectoryAsRuntimeRoot_WhenRootIsProvided()
+    {
+        var currentDirectory = Path.GetFullPath(Environment.CurrentDirectory);
+        var baseDirectory = Path.GetFullPath(Path.Combine(
+            currentDirectory,
+            "runtime-root",
+            Guid.NewGuid().ToString("N")));
+
+        var paths = new InternalToolPathResolver(baseDirectory).Resolve();
+
+        Assert.StartsWith(
+            baseDirectory,
+            paths.FfmpegExecutable,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(
+            Path.Combine(currentDirectory, "tools", "ffmpeg", "win-x64", "ffmpeg.exe"),
+            paths.FfmpegExecutable);
+    }
+
+    [Fact]
+    public void Resolver_KeepsOptionalMetadataUnderIw3Bundle()
+    {
+        var baseDirectory = Path.GetFullPath(Path.Combine(
+            Environment.CurrentDirectory,
+            "metadata-root",
+            Guid.NewGuid().ToString("N")));
+
+        var paths = new InternalToolPathResolver(baseDirectory).Resolve();
+
+        Assert.StartsWith(
+            paths.Iw3EngineDirectory,
+            paths.Iw3CliCapabilitiesFile,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(
+            paths.ModelsDirectory,
+            paths.ModelCatalogFile,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -38,6 +114,17 @@ public sealed class InternalToolsTests
         Assert.Equal(ToolHealthStatus.Missing, status.Iw3EngineDirectory);
         Assert.Equal(ToolHealthStatus.Missing, status.ModelsDirectory);
         Assert.False(status.IsComplete);
+    }
+
+    [Fact]
+    public void Resolver_ProducesPathsCompatibleWithInternalToolsHealthChecker()
+    {
+        var paths = CreateToolLayout();
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(paths.ModelCatalogFile, health.ModelInventory.Catalog.CatalogPath);
+        Assert.Equal(paths.Iw3CliCapabilitiesFile, health.Iw3CliCapabilities.ManifestPath);
     }
 
     [Fact]
@@ -182,7 +269,7 @@ public sealed class InternalToolsTests
         Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
         Assert.Equal(Iw3CliCapabilitiesStatus.Missing, health.Iw3CliCapabilities.Status);
         Assert.Equal(
-            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            paths.Iw3CliCapabilitiesFile,
             health.Iw3CliCapabilities.ManifestPath);
         Assert.False(health.Iw3CliCapabilities.HasVerifiedCapabilities);
     }
@@ -193,7 +280,7 @@ public sealed class InternalToolsTests
         var paths = CreateToolLayout();
         CreateReadyIw3Engine(paths);
         File.WriteAllText(
-            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            paths.Iw3CliCapabilitiesFile,
             "{ invalid json");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
@@ -210,7 +297,7 @@ public sealed class InternalToolsTests
         var paths = CreateToolLayout();
         CreateReadyIw3Engine(paths);
         File.WriteAllText(
-            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            paths.Iw3CliCapabilitiesFile,
             """
             {
               "placeholder": true,
@@ -232,7 +319,7 @@ public sealed class InternalToolsTests
         var paths = CreateToolLayout();
         Directory.CreateDirectory(paths.Iw3EngineDirectory);
         File.WriteAllText(
-            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            paths.Iw3CliCapabilitiesFile,
             """
             {
               "bundledIw3Version": "1.2.3",
@@ -254,7 +341,7 @@ public sealed class InternalToolsTests
         var paths = CreateToolLayout();
         CreateReadyIw3Engine(paths);
         File.WriteAllText(
-            Path.Combine(paths.Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName),
+            paths.Iw3CliCapabilitiesFile,
             """
             {
               "bundledIw3Version": "1.2.3",
@@ -408,7 +495,7 @@ public sealed class InternalToolsTests
 
         Assert.Equal(LocalModelCatalogStatus.Missing, health.ModelInventory.Catalog.Status);
         Assert.Equal(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             health.ModelInventory.Catalog.CatalogPath);
         var unmanagedFile = Assert.Single(health.ModelInventory.Catalog.UnmanagedCompatibleModelFiles);
         Assert.Equal("depth-model.onnx", unmanagedFile.RelativePath);
@@ -421,7 +508,7 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.onnx"), "model");
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             "{ invalid json");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
@@ -439,7 +526,7 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.onnx"), "model");
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             """
             {
               "models": [
@@ -472,7 +559,7 @@ public sealed class InternalToolsTests
         var paths = CreateToolLayout();
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             """
             {
               "models": [
@@ -503,7 +590,7 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "unlisted-model.ckpt"), "model");
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             """{"models":[]}""");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
@@ -522,7 +609,7 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "placeholder.pt"), "placeholder");
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             """{"version":"placeholder","models":[]}""");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
@@ -550,7 +637,7 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.onnx"), "model");
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             """
             {
               "models": [
@@ -600,7 +687,7 @@ public sealed class InternalToolsTests
         Directory.CreateDirectory(paths.ModelsDirectory);
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "notes.txt"), "not a supported model");
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             """
             {
               "models": [
@@ -637,7 +724,7 @@ public sealed class InternalToolsTests
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "README.md"), "placeholder");
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "placeholder.onnx"), "placeholder");
         File.WriteAllText(
-            Path.Combine(paths.ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName),
+            paths.ModelCatalogFile,
             """{"version":"placeholder","models":[]}""");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);

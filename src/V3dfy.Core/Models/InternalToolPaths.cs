@@ -5,4 +5,11 @@ public sealed record InternalToolPaths(
     string FfprobeExecutable,
     string PythonExecutable,
     string Iw3EngineDirectory,
-    string ModelsDirectory);
+    string ModelsDirectory)
+{
+    public string ModelCatalogFile { get; init; } =
+        Path.Combine(ModelsDirectory, Iw3EngineBundleContract.ModelCatalogFileName);
+
+    public string Iw3CliCapabilitiesFile { get; init; } =
+        Path.Combine(Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName);
+}
