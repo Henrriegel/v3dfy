@@ -77,7 +77,10 @@ function Test-SameOrNestedPath {
 }
 
 function Invoke-BundleValidation {
-    param([string]$BundleRoot)
+    param(
+        [string]$BundleRoot,
+        [string]$Description
+    )
 
     $validatorPath = Join-Path $PSScriptRoot 'validate-iw3-bundle.ps1'
     if (-not (Test-Path -LiteralPath $validatorPath -PathType Leaf)) {
@@ -103,29 +106,26 @@ function Invoke-BundleValidation {
         $validationArguments += '-RequireCapabilities'
     }
 
-    Write-Host "Validating source iw3 bundle before staging: $BundleRoot"
+    Write-Host "Validating $Description iw3 bundle: $BundleRoot"
     $validationOutput = & powershell @validationArguments 2>&1
     foreach ($line in $validationOutput) {
         Write-Host $line
     }
 
     if ($LASTEXITCODE -ne 0) {
-        Write-Failure "source bundle validation failed; staging skipped."
+        Write-Failure "$Description bundle validation failed."
         return $false
     }
 
-    Write-Check OK 'source bundle validation passed.'
+    Write-Check OK "$Description bundle validation passed."
     return $true
 }
 
 function Copy-Bundle {
     param(
         [string]$SourceRoot,
-        [string]$DestinationRoot,
         [string]$DestinationBundleRoot
     )
-
-    $destinationEngineRoot = Join-Path $DestinationRoot 'engine'
 
     if ($CleanTarget.IsPresent -and
         (Test-Path -LiteralPath $DestinationBundleRoot -PathType Container)) {
@@ -144,17 +144,27 @@ function Copy-Bundle {
 
     $didCopy = $false
     if ($PSCmdlet.ShouldProcess($DestinationBundleRoot, 'stage iw3 bundle')) {
-        New-Item -ItemType Directory -Path $destinationEngineRoot -Force | Out-Null
-        Copy-Item `
-            -LiteralPath $SourceRoot `
-            -Destination $destinationEngineRoot `
-            -Recurse `
-            -Force
+        New-Item -ItemType Directory -Path $DestinationBundleRoot -Force | Out-Null
+
+        $sourceItems = @(Get-ChildItem -LiteralPath $SourceRoot -Force)
+        foreach ($sourceItem in $sourceItems) {
+            Copy-Item `
+                -LiteralPath $sourceItem.FullName `
+                -Destination $DestinationBundleRoot `
+                -Recurse `
+                -Force
+        }
+
         $didCopy = $true
     }
 
     if ($didCopy) {
-        Write-Check OK "iw3 bundle staged under: $DestinationBundleRoot"
+        if (Test-Path -LiteralPath $DestinationBundleRoot -PathType Container) {
+            Write-Check OK "iw3 bundle staged under: $DestinationBundleRoot"
+        }
+        else {
+            Write-Failure "target iw3 bundle was not created: $DestinationBundleRoot"
+        }
     }
     else {
         Write-Check OK "iw3 bundle staging target checked: $DestinationBundleRoot"
@@ -188,17 +198,21 @@ if ($script:failureCount -gt 0) {
 if ($SkipValidation.IsPresent) {
     Write-Check WARN 'source validation was skipped by request.'
 }
-elseif (-not (Invoke-BundleValidation $sourcePath)) {
+elseif (-not (Invoke-BundleValidation -BundleRoot $sourcePath -Description 'source')) {
     Write-Check FAIL "iw3 bundle staging failed with $script:failureCount required issue(s)."
     exit 1
 }
 
 Copy-Bundle `
     -SourceRoot $sourcePath `
-    -DestinationRoot $targetPath `
     -DestinationBundleRoot $targetBundlePath
 
 if ($script:failureCount -gt 0) {
+    Write-Check FAIL "iw3 bundle staging failed with $script:failureCount required issue(s)."
+    exit 1
+}
+
+if (-not (Invoke-BundleValidation -BundleRoot $targetBundlePath -Description 'staged')) {
     Write-Check FAIL "iw3 bundle staging failed with $script:failureCount required issue(s)."
     exit 1
 }
