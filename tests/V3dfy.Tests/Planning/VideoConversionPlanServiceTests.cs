@@ -2,6 +2,7 @@ using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
 using V3dfy.Core.Recommendations;
+using V3dfy.Engine.Iw3.Commands;
 using V3dfy.Engine.Iw3.Planning;
 
 namespace V3dfy.Tests.Planning;
@@ -227,6 +228,18 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
+    public void Create_RecognizedDepthModel_AddsVerifiedDepthModelToCommandPreview()
+    {
+        var plan = CreatePlan(selectedLocalModel: RecognizedDepthModel());
+
+        Assert.Contains("--depth-model ZoeD_Any_N", plan.CommandPreview);
+        Assert.DoesNotContain("--model", plan.CommandPreview);
+        Assert.DoesNotContain(
+            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+            plan.CommandPreview);
+    }
+
+    [Fact]
     public void Create_SelectedModel_DoesNotEnableConversionWhenBundleIsMissing()
     {
         var plan = CreatePlan(
@@ -282,6 +295,16 @@ public sealed class VideoConversionPlanServiceTests
         RelativePath: "local-depth.safetensors",
         FileName: "local-depth.safetensors",
         Extension: ".safetensors",
+        ModelType: string.Empty,
+        Purpose: string.Empty,
+        IsCatalogManaged: false);
+
+    private static LocalModelSelectionCandidate RecognizedDepthModel() => new(
+        Id: Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+        DisplayName: "depth_anything_metric_depth_indoor.pt",
+        RelativePath: Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+        FileName: "depth_anything_metric_depth_indoor.pt",
+        Extension: ".pt",
         ModelType: string.Empty,
         Purpose: string.Empty,
         IsCatalogManaged: false);

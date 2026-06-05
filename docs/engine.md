@@ -55,6 +55,13 @@ convergence/divergence options. These unconfirmed options must not be treated
 as executable iw3 arguments until the bundled CLI is verified, for example with
 `python -m iw3 -h` during engine-bundle preparation.
 
+The first conservative runtime model mapping is intentionally narrow: when the
+selected local model path is
+`hub/checkpoints/depth_anything_metric_depth_indoor.pt`, v3dfy maps it to the
+iw3 depth model name `ZoeD_Any_N` and adds `--depth-model ZoeD_Any_N`.
+No model file path is passed to iw3, and no generic `--model` argument is
+emitted.
+
 iw3 can download large model files on first run in upstream usage. v3dfy final
 offline packaging must avoid first-run downloads by bundling the required
 runtime and approved model files before release.

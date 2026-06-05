@@ -6,9 +6,22 @@ namespace V3dfy.Tests.Execution;
 public sealed class ConversionExecutionFeatureGateTests
 {
     [Fact]
-    public void CanStartConversion_WhenReadinessIsCompleteButRealExecutionIsDisabled_ReturnsFalse()
+    public void CanStartConversion_WhenReadinessIsComplete_ReturnsTrue()
     {
         var gate = new ConversionExecutionFeatureGate();
+
+        var canStart = gate.CanStartConversion(
+            hasCompletedAnalysis: true,
+            hasConversionPlan: true,
+            readiness: CompleteReadiness());
+
+        Assert.True(canStart);
+    }
+
+    [Fact]
+    public void CanStartConversion_WhenRealExecutionIsExplicitlyDisabled_ReturnsFalse()
+    {
+        var gate = new ConversionExecutionFeatureGate(isRealConversionExecutionEnabled: false);
 
         var canStart = gate.CanStartConversion(
             hasCompletedAnalysis: true,
@@ -75,7 +88,7 @@ public sealed class ConversionExecutionFeatureGateTests
     [Fact]
     public void EvaluateStart_WhenRealExecutionIsDisabled_ReturnsFeatureDisabledBlocker()
     {
-        var gate = new ConversionExecutionFeatureGate();
+        var gate = new ConversionExecutionFeatureGate(isRealConversionExecutionEnabled: false);
 
         var result = gate.EvaluateStart(
             hasCompletedAnalysis: true,

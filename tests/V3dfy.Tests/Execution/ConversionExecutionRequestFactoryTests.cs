@@ -103,7 +103,7 @@ public sealed class ConversionExecutionRequestFactoryTests
     }
 
     [Fact]
-    public void Create_DoesNotImplyConversionCanRun()
+    public void Create_ReadyRequestCanPassStartGateWhenReadinessIsComplete()
     {
         var request = _factory.Create(
             CreatePlan(
@@ -120,8 +120,8 @@ public sealed class ConversionExecutionRequestFactoryTests
             readiness: CompleteReadiness());
 
         Assert.False(request.IsDryRun);
-        Assert.False(startGate.CanStart);
-        Assert.Equal(ConversionExecutionBlocker.FeatureDisabled, startGate.Blocker);
+        Assert.True(startGate.CanStart);
+        Assert.Equal(ConversionExecutionBlocker.None, startGate.Blocker);
     }
 
     [Fact]

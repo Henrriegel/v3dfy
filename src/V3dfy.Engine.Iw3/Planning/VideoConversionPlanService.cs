@@ -39,10 +39,14 @@ public sealed class VideoConversionPlanService
             ThreeDOutputFormat: options.ThreeDOutputFormat,
             AiQualityPreset: options.QualityPreset,
             ThreeDIntensity: options.Intensity);
-        var command = _commandBuilder.Build(request, paths, healthStatus);
         var selectedLocalModelPlan = selectedLocalModel is null
             ? null
             : LocalModelPlanSelection.FromCandidate(selectedLocalModel);
+        var command = _commandBuilder.Build(
+            request,
+            paths,
+            healthStatus,
+            selectedLocalModelPlan);
         var steps = CreateSteps(
             recommendation,
             targetPreset,

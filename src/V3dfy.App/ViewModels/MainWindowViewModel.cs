@@ -15,6 +15,7 @@ using V3dfy.Core.Presets;
 using V3dfy.Core.Recommendations;
 using V3dfy.Core.Readiness;
 using V3dfy.Core.Workflow;
+using V3dfy.Engine.Iw3.Execution;
 using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
 using V3dfy.Infrastructure.Health;
@@ -50,7 +51,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly VideoConversionRecommendationService _recommendationService;
     private readonly VideoConversionPlanService _conversionPlanService;
     private readonly ConversionReadinessService _conversionReadinessService;
+    private readonly Iw3ConversionReadinessService _iw3ConversionReadinessService;
     private readonly ConversionExecutionFeatureGate _conversionExecutionFeatureGate;
+    private readonly ConversionExecutionRequestFactory _conversionExecutionRequestFactory;
+    private readonly ConversionExecutionRequestValidator _conversionExecutionRequestValidator = new();
+    private readonly IConversionExecutor _conversionExecutor;
     private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
     private readonly ConversionWorkflowState _workflowState = new();
@@ -69,6 +74,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _outputPathText = string.Empty;
     private string _technicalDetailsBodyText = string.Empty;
     private TaskCompletionSource<bool>? _replaceVideoConfirmationCompletion;
+    private CancellationTokenSource? _conversionCancellationTokenSource;
     private bool _isUpdatingOutputPathText;
     private bool _isAnalyzing;
     private bool _isTechnicalDetailsModalOpen;
@@ -88,7 +94,13 @@ public sealed class MainWindowViewModel : ObservableObject
         _recommendationService = new VideoConversionRecommendationService();
         _conversionPlanService = new VideoConversionPlanService();
         _conversionReadinessService = new ConversionReadinessService();
+        _iw3ConversionReadinessService = new Iw3ConversionReadinessService();
         _conversionExecutionFeatureGate = new ConversionExecutionFeatureGate();
+        _conversionExecutionRequestFactory = new ConversionExecutionRequestFactory();
+        _conversionExecutor = new LocalIw3ConversionExecutor(
+            processRunner: new BundledLocalProcessRunner(
+                new LocalProcessRunner(),
+                _toolPaths.Iw3EngineDirectory));
 
         SelectVideoCommand = new RelayCommand(SelectVideo);
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
@@ -97,7 +109,9 @@ public sealed class MainWindowViewModel : ObservableObject
         ClearLogsCommand = new RelayCommand(Logs.Clear);
         BrowseOutputFolderCommand = new RelayCommand(BrowseOutputFolder);
         ResetOutputPathCommand = new RelayCommand(ResetOutputPath);
-        StartConversionCommand = new RelayCommand(StartConversion, () => CanStartConversion);
+        StartConversionCommand = new AsyncRelayCommand(
+            StartConversionAsync,
+            () => CanStartConversion);
         CancelConversionCommand = new RelayCommand(CancelConversion);
         ShowTechnicalDetailsCommand = new RelayCommand(ShowTechnicalDetails);
         CloseTechnicalDetailsCommand = new RelayCommand(CloseTechnicalDetails);
@@ -550,7 +564,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ? Text("No conversion plan yet.", "Aún no hay plan de conversión.")
         : _conversionPlan.IsDryRun
             ? Text("Dry-run preview. Conversion is not started.", "Vista previa en seco. La conversión no se ha iniciado.")
-            : Text("Ready for conversion when execution is enabled.", "Listo para convertir cuando se habilite la ejecución.");
+            : Text("Ready for conversion.", "Listo para convertir.");
 
     public string ConversionPlanPresetText => Text(
         $"Based on preset: {SelectedOutputPreset.Name}",
@@ -819,10 +833,13 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public bool CanStartConversion =>
+        _conversionExecutionState.Status is not ConversionExecutionStatus.Running and
+            not ConversionExecutionStatus.Canceling &&
         _conversionExecutionFeatureGate.EvaluateStart(
             HasCompletedAnalysis,
             _conversionPlan is not null,
-            _conversionReadiness).CanStart;
+            _conversionReadiness).CanStart &&
+        CurrentExecutionRequestCanStart();
 
     public string StartConversionText => Text("Convert", "Convertir");
 
@@ -909,7 +926,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand ResetOutputPathCommand { get; }
 
-    public RelayCommand StartConversionCommand { get; }
+    public AsyncRelayCommand StartConversionCommand { get; }
 
     public RelayCommand CancelConversionCommand { get; }
 
@@ -1142,7 +1159,14 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        _conversionReadiness = _conversionReadinessService.Evaluate(_dependencyHealth);
+        var baseReadiness = _conversionReadinessService.Evaluate(_dependencyHealth);
+        var selectedModel = SelectedLocalModelCandidate is null
+            ? null
+            : LocalModelPlanSelection.FromCandidate(SelectedLocalModelCandidate);
+        _conversionReadiness =
+            _iw3ConversionReadinessService.ApplyIw3ExecutionRequirements(
+                baseReadiness,
+                selectedModel);
         RaiseConversionReadinessPropertiesChanged();
     }
 
@@ -1185,6 +1209,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _selectedLocalModelCandidate = candidate;
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+        UpdateConversionReadiness();
 
         if (!regeneratePlan)
         {
@@ -1203,6 +1228,23 @@ public sealed class MainWindowViewModel : ObservableObject
             HasCompletedAnalysis,
             _conversionPlan is not null,
             _conversionReadiness);
+
+    private bool CurrentExecutionRequestCanStart()
+    {
+        if (_conversionPlan is null)
+        {
+            return false;
+        }
+
+        var request = _conversionExecutionRequestFactory.Create(
+            _conversionPlan,
+            SelectedOutputPreset,
+            _planOptionState.CreatePlanOptions(_outputPathState.CustomOutputPath),
+            _toolPaths);
+        return _conversionExecutionRequestValidator
+            .Validate(request)
+            .CanStartLocalProcess;
+    }
 
     private void UpdateToolStatuses()
     {
@@ -1631,7 +1673,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionReadinessPropertiesChanged();
     }
 
-    private void StartConversion()
+    private async Task StartConversionAsync()
     {
         var startGate = EvaluateConversionStartGate();
         if (!startGate.CanStart)
@@ -1640,13 +1682,75 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var disabledStartGate = ConversionExecutionStartGateResult.Blocked(
-            ConversionExecutionBlocker.FeatureDisabled,
-            "Conversion execution is not enabled yet.",
-            "La ejecuci\u00f3n de conversi\u00f3n a\u00fan no est\u00e1 habilitada.",
-            "The local execution runner is not connected in this build. No Python, iw3, or FFmpeg conversion process was started.",
-            "El ejecutor local no est\u00e1 conectado en esta compilaci\u00f3n. No se inici\u00f3 ning\u00fan proceso de Python, iw3 ni conversi\u00f3n con FFmpeg.");
-        BlockConversionStart(disabledStartGate);
+        if (_conversionPlan is null)
+        {
+            return;
+        }
+
+        _conversionCancellationTokenSource?.Dispose();
+        _conversionCancellationTokenSource = new CancellationTokenSource();
+        var startedAt = DateTimeOffset.UtcNow;
+        _conversionExecutionState = new(
+            Status: ConversionExecutionStatus.Running,
+            ProgressPercent: 0,
+            CurrentStep: new(
+                "Starting local iw3 conversion.",
+                "Iniciando conversion local iw3."),
+            DetailEnglish: "Launching bundled local iw3 process.",
+            DetailSpanish: "Iniciando el proceso local iw3 incluido.",
+            StartedAt: startedAt);
+        RaiseConversionExecutionPropertiesChanged();
+        AddLog(
+            "Starting local iw3 conversion.",
+            "Iniciando conversion local iw3.");
+
+        try
+        {
+            var request = _conversionExecutionRequestFactory.Create(
+                _conversionPlan,
+                SelectedOutputPreset,
+                _planOptionState.CreatePlanOptions(_outputPathState.CustomOutputPath),
+                _toolPaths,
+                _conversionCancellationTokenSource.Token);
+            var result = await _conversionExecutor.ExecuteAsync(
+                request,
+                new Progress<ConversionExecutionProgressUpdate>(ApplyConversionProgressUpdate),
+                _conversionCancellationTokenSource.Token);
+
+            foreach (var log in result.Logs)
+            {
+                AddLog(log.EnglishMessage, log.SpanishMessage);
+            }
+
+            _conversionExecutionState = CreateFinishedConversionState(result);
+        }
+        catch (OperationCanceledException)
+        {
+            _conversionExecutionState = CreateCanceledConversionState(
+                startedAt,
+                DateTimeOffset.UtcNow);
+            AddLog(
+                "Local iw3 conversion was canceled.",
+                "La conversion local iw3 fue cancelada.");
+        }
+        catch (Exception exception)
+        {
+            _conversionExecutionState = CreateFailedConversionState(
+                startedAt,
+                DateTimeOffset.UtcNow,
+                $"Local iw3 conversion failed unexpectedly: {exception.Message}",
+                $"La conversion local iw3 fallo inesperadamente: {exception.Message}");
+            AddLog(
+                $"Local iw3 conversion failed. {exception.Message}",
+                $"La conversion local iw3 fallo. {exception.Message}");
+        }
+        finally
+        {
+            _conversionCancellationTokenSource?.Dispose();
+            _conversionCancellationTokenSource = null;
+            RaiseConversionExecutionPropertiesChanged();
+            RaiseConversionReadinessPropertiesChanged();
+        }
     }
 
     private void BlockConversionStart(ConversionExecutionStartGateResult startGate)
@@ -1655,6 +1759,74 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionExecutionPropertiesChanged();
         AddLog(startGate.EnglishLogMessage, startGate.SpanishLogMessage);
     }
+
+    private void ApplyConversionProgressUpdate(
+        ConversionExecutionProgressUpdate progressUpdate)
+    {
+        var normalizedUpdate = progressUpdate.NormalizeProgress();
+        _conversionExecutionState = _conversionExecutionState with
+        {
+            ProgressPercent = normalizedUpdate.ProgressPercent,
+            CurrentStep = normalizedUpdate.CurrentStep,
+            DetailEnglish = normalizedUpdate.DetailEnglish,
+            DetailSpanish = normalizedUpdate.DetailSpanish,
+        };
+        RaiseConversionExecutionPropertiesChanged();
+    }
+
+    private static ConversionExecutionState CreateFinishedConversionState(
+        ConversionExecutionResult result)
+    {
+        if (result.WasCanceled)
+        {
+            return CreateCanceledConversionState(result.StartedAt, result.FinishedAt);
+        }
+
+        return result.Success
+            ? new(
+                Status: ConversionExecutionStatus.Completed,
+                ProgressPercent: 100,
+                CurrentStep: new(
+                    "Local iw3 conversion completed.",
+                    "La conversion local iw3 se completo."),
+                DetailEnglish: result.EnglishSummary,
+                DetailSpanish: result.SpanishSummary,
+                StartedAt: result.StartedAt,
+                FinishedAt: result.FinishedAt)
+            : CreateFailedConversionState(
+                result.StartedAt,
+                result.FinishedAt,
+                result.EnglishSummary,
+                result.SpanishSummary);
+    }
+
+    private static ConversionExecutionState CreateCanceledConversionState(
+        DateTimeOffset startedAt,
+        DateTimeOffset finishedAt) => new(
+        Status: ConversionExecutionStatus.Canceled,
+        ProgressPercent: 0,
+        CurrentStep: new(
+            "Local iw3 conversion was canceled.",
+            "La conversion local iw3 fue cancelada."),
+        DetailEnglish: "Local iw3 conversion was canceled.",
+        DetailSpanish: "La conversion local iw3 fue cancelada.",
+        StartedAt: startedAt,
+        FinishedAt: finishedAt);
+
+    private static ConversionExecutionState CreateFailedConversionState(
+        DateTimeOffset startedAt,
+        DateTimeOffset finishedAt,
+        string englishSummary,
+        string spanishSummary) => new(
+        Status: ConversionExecutionStatus.Failed,
+        ProgressPercent: 0,
+        CurrentStep: new(
+            "Local iw3 conversion failed.",
+            "La conversion local iw3 fallo."),
+        DetailEnglish: englishSummary,
+        DetailSpanish: spanishSummary,
+        StartedAt: startedAt,
+        FinishedAt: finishedAt);
 
     private void CancelConversion()
     {
@@ -1666,9 +1838,20 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        _conversionExecutionState = _conversionExecutionState with
+        {
+            Status = ConversionExecutionStatus.Canceling,
+            CurrentStep = new(
+                "Canceling local iw3 conversion.",
+                "Cancelando conversion local iw3."),
+            DetailEnglish = "A cancellation request was sent to the local process.",
+            DetailSpanish = "Se envio una solicitud de cancelacion al proceso local.",
+        };
+        RaiseConversionExecutionPropertiesChanged();
+        _conversionCancellationTokenSource?.Cancel();
         AddLog(
-            "Conversion cancellation is not enabled yet.",
-            "La cancelación de conversión aún no está habilitada.");
+            "Canceling local iw3 conversion.",
+            "Cancelando conversion local iw3.");
     }
 
     private static bool IsSupportedVideoFile(string path) =>
@@ -2079,6 +2262,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionExecutionDetailText));
         OnPropertyChanged(nameof(CanCancelConversion));
         OnPropertyChanged(nameof(CancelConversionText));
+        OnPropertyChanged(nameof(CanStartConversion));
+        StartConversionCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseWorkflowAvailabilityPropertiesChanged()

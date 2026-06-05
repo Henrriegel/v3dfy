@@ -5,6 +5,7 @@ using V3dfy.Core.Presets;
 using V3dfy.Core.Processes;
 using V3dfy.Engine.Iw3.Commands;
 using V3dfy.Engine.Iw3.Execution;
+using V3dfy.Infrastructure.Processes;
 
 namespace V3dfy.Tests.Execution;
 
@@ -16,6 +17,10 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
         Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
         ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly LocalModelPlanSelection RecognizedDepthModel = new(
+        "depth_anything_metric_depth_indoor.pt",
+        Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+        LocalModelPlanSource.UnmanagedLocalFile);
 
     private readonly LocalIw3ProcessRequestBuilder _builder = new();
 
@@ -63,6 +68,8 @@ public sealed class LocalIw3ProcessRequestBuilderTests
                 @"C:\Videos\Movie.mp4",
                 Iw3CliContract.OutputSwitch,
                 @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+                Iw3CliContract.DepthModelSwitch,
+                Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
             ],
             processRequest.Arguments);
         Assert.DoesNotContain("cmd.exe", processRequest.ExecutablePath, StringComparison.OrdinalIgnoreCase);
@@ -80,25 +87,42 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         var command = new Iw3CommandBuilder().Build(
             CreateConversionRequest(request),
             Paths,
-            CompleteHealth());
+            CompleteHealth(),
+            request.SelectedLocalModel);
 
         Assert.Equal(command.Arguments, processRequest.Arguments);
         Assert.Equal(request.CommandPreview, command.FullCommandPreview);
     }
 
     [Fact]
-    public void Build_SelectedLocalModelMetadataDoesNotAddUnsupportedModelArgument()
+    public void Build_RecognizedSelectedLocalModelAddsVerifiedDepthModelArgumentOnly()
     {
-        var processRequest = _builder.Build(CreateRequest(
-            selectedModel: new(
-                "Default depth model",
-                "depth/default-depth.onnx",
-                LocalModelPlanSource.CatalogMetadata)));
+        var processRequest = _builder.Build(CreateRequest());
 
         Assert.DoesNotContain(
             processRequest.Arguments,
-            argument => argument.Contains("depth/default-depth.onnx", StringComparison.Ordinal));
+            argument => argument.Contains(
+                Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+                StringComparison.Ordinal));
+        Assert.Contains(Iw3CliContract.DepthModelSwitch, processRequest.Arguments);
+        Assert.Contains(Iw3DepthModelMapper.ZoeDAnyNDepthModelName, processRequest.Arguments);
         Assert.DoesNotContain("--model", processRequest.Arguments);
+    }
+
+    [Fact]
+    public void Build_UnmappedSelectedLocalModelIsRejectedBeforeProcessDataIsReturned()
+    {
+        var exception = Assert.Throws<ArgumentException>(
+            () => _builder.Build(CreateRequest(
+                selectedModel: new(
+                    "Default depth model",
+                    "depth/default-depth.onnx",
+                    LocalModelPlanSource.CatalogMetadata))));
+
+        Assert.Contains(
+            "Selected local model is not mapped",
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -141,7 +165,10 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     public async Task LocalIw3ConversionExecutor_StillBlocksDryRunAndDoesNotUseProcessRequest()
     {
         var processRequestBuilder = new CountingProcessRequestBuilder();
-        var executor = new LocalIw3ConversionExecutor(processRequestBuilder: processRequestBuilder);
+        var processRunner = new FakeProcessRunner();
+        var executor = new LocalIw3ConversionExecutor(
+            processRequestBuilder: processRequestBuilder,
+            processRunner: processRunner);
 
         var result = await executor.ExecuteAsync(CreateRequest());
 
@@ -153,17 +180,18 @@ public sealed class LocalIw3ProcessRequestBuilderTests
             log => log.EnglishMessage.Contains(
                 "No Python, iw3, FFmpeg conversion, or model process was started.",
                 StringComparison.Ordinal));
+        Assert.Equal(0, processRunner.RunCallCount);
     }
 
     [Fact]
-    public void LocalIw3ConversionExecutor_DoesNotExposeProcessRunnerDependency()
+    public void LocalIw3ConversionExecutor_ExposesProcessRunnerDependencyForTestability()
     {
         var constructorParameterTypes = typeof(LocalIw3ConversionExecutor)
             .GetConstructors()
             .SelectMany(constructor => constructor.GetParameters())
             .Select(parameter => parameter.ParameterType.Name);
 
-        Assert.DoesNotContain(
+        Assert.Contains(
             constructorParameterTypes,
             parameterTypeName => parameterTypeName.Contains("ProcessRunner", StringComparison.Ordinal));
     }
@@ -179,6 +207,8 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         ConversionDryRunReason dryRunReason = ConversionDryRunReason.MissingLocalAiBundle,
         bool isDryRun = true)
     {
+        selectedModel ??= RecognizedDepthModel;
+
         var options = new VideoConversionPlanOptions(
             OutputContainer: OutputContainer.MP4,
             QualityPreset: qualityPreset,
@@ -197,7 +227,8 @@ public sealed class LocalIw3ProcessRequestBuilderTests
                         AiQualityPreset: options.QualityPreset,
                         ThreeDIntensity: options.Intensity),
                     Paths,
-                    CompleteHealth()).FullCommandPreview;
+                    CompleteHealth(),
+                    selectedModel).FullCommandPreview;
         var plan = new VideoConversionPlan(
             SourcePath: sourcePath,
             SuggestedOutputPath: outputPath,
@@ -258,6 +289,27 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         {
             BuildCallCount++;
             return base.Build(request);
+        }
+    }
+
+    private sealed class FakeProcessRunner : ILocalProcessRunner
+    {
+        public int RunCallCount { get; private set; }
+
+        public Task<ProcessExecutionResult> RunAsync(
+            ProcessExecutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            RunCallCount++;
+            var now = DateTimeOffset.UtcNow;
+            return Task.FromResult(new ProcessExecutionResult(
+                ExitCode: 0,
+                StandardOutput: string.Empty,
+                StandardError: string.Empty,
+                OutputLines: [],
+                Status: ProcessExecutionStatus.Completed,
+                StartedAt: now,
+                EndedAt: now));
         }
     }
 }

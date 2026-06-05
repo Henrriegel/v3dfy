@@ -6,6 +6,7 @@ public static class Iw3CliContract
     public const string ModuleName = "iw3";
     public const string InputSwitch = "-i";
     public const string OutputSwitch = "-o";
+    public const string DepthModelSwitch = "--depth-model";
 
     public static IReadOnlyList<string> ConfirmedBaseArgumentTemplate { get; } =
     [

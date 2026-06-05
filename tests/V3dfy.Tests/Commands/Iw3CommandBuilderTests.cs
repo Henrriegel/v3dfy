@@ -1,4 +1,5 @@
 using V3dfy.Core.Models;
+using V3dfy.Core.Planning;
 using V3dfy.Engine.Iw3.Commands;
 
 namespace V3dfy.Tests.Commands;
@@ -11,6 +12,10 @@ public sealed class Iw3CommandBuilderTests
         PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
         Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
         ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly LocalModelPlanSelection RecognizedDepthModel = new(
+        "depth_anything_metric_depth_indoor.pt",
+        Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+        LocalModelPlanSource.UnmanagedLocalFile);
 
     [Fact]
     public void Build_UsesConfirmedBaseStructuredArguments()
@@ -27,6 +32,31 @@ public sealed class Iw3CommandBuilderTests
                 @"C:\videos\output video.mp4",
             ],
             command.Arguments);
+    }
+
+    [Fact]
+    public void Build_RecognizedDepthAnythingMetricDepthIndoorMapsToZoeDAnyN()
+    {
+        var command = Build(selectedLocalModel: RecognizedDepthModel);
+
+        Assert.Equal(
+            [
+                Iw3CliContract.PythonModuleSwitch,
+                Iw3CliContract.ModuleName,
+                Iw3CliContract.InputSwitch,
+                @"C:\videos\input video.mp4",
+                Iw3CliContract.OutputSwitch,
+                @"C:\videos\output video.mp4",
+                Iw3CliContract.DepthModelSwitch,
+                Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
+            ],
+            command.Arguments);
+        Assert.DoesNotContain("--model", command.Arguments);
+        Assert.DoesNotContain(
+            command.Arguments,
+            argument => argument.Contains(
+                Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -139,7 +169,8 @@ public sealed class Iw3CommandBuilderTests
         ThreeDIntensity intensity = ThreeDIntensity.Medium,
         double? customDepth = null,
         AiQualityPreset qualityPreset = AiQualityPreset.Balanced,
-        EngineHealthStatus? healthStatus = null)
+        EngineHealthStatus? healthStatus = null,
+        LocalModelPlanSelection? selectedLocalModel = null)
     {
         var request = new ConversionRequest(
             InputPath: @"C:\videos\input video.mp4",
@@ -150,7 +181,11 @@ public sealed class Iw3CommandBuilderTests
             ThreeDIntensity: intensity,
             CustomDepth: customDepth);
 
-        return new Iw3CommandBuilder().Build(request, Paths, healthStatus ?? CompleteHealth());
+        return new Iw3CommandBuilder().Build(
+            request,
+            Paths,
+            healthStatus ?? CompleteHealth(),
+            selectedLocalModel);
     }
 
     private static EngineHealthStatus CompleteHealth() => new(

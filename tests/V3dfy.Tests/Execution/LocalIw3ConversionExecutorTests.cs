@@ -3,7 +3,9 @@ using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
 using V3dfy.Core.Processes;
+using V3dfy.Engine.Iw3.Commands;
 using V3dfy.Engine.Iw3.Execution;
+using V3dfy.Infrastructure.Processes;
 
 namespace V3dfy.Tests.Execution;
 
@@ -15,6 +17,10 @@ public sealed class LocalIw3ConversionExecutorTests
         PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
         Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
         ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly LocalModelPlanSelection RecognizedDepthModel = new(
+        "depth_anything_metric_depth_indoor.pt",
+        Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
+        LocalModelPlanSource.UnmanagedLocalFile);
 
     [Fact]
     public void LocalIw3ConversionExecutor_ImplementsConversionExecutor()
@@ -25,15 +31,15 @@ public sealed class LocalIw3ConversionExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_InvalidRequest_ReturnsValidationFailureBeforeCancellation()
+    public async Task ExecuteAsync_InvalidRequest_DoesNotStartProcess()
     {
-        var processRequestBuilder = new SpyProcessRequestBuilder();
-        var executor = new LocalIw3ConversionExecutor(processRequestBuilder: processRequestBuilder);
+        var runner = new FakeProcessRunner(CompletedProcess());
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
         using var cancellationTokenSource = new CancellationTokenSource();
         cancellationTokenSource.Cancel();
 
         var result = await executor.ExecuteAsync(
-            CreateRequest(sourcePath: string.Empty),
+            CreateReadyRequest(sourcePath: string.Empty),
             cancellationToken: cancellationTokenSource.Token);
 
         Assert.False(result.Success);
@@ -43,13 +49,14 @@ public sealed class LocalIw3ConversionExecutorTests
             result.Logs,
             log => log.EnglishMessage.Contains("SourcePath", StringComparison.Ordinal));
         AssertLogsNoProcessStarted(result);
-        Assert.Equal(0, processRequestBuilder.BuildCallCount);
+        Assert.Equal(0, runner.RunCallCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_NullRequest_ReturnsValidationFailure()
+    public async Task ExecuteAsync_NullRequest_ReturnsValidationFailureWithoutStartingProcess()
     {
-        var executor = new LocalIw3ConversionExecutor();
+        var runner = new FakeProcessRunner(CompletedProcess());
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
 
         var result = await executor.ExecuteAsync(null!);
 
@@ -60,147 +67,169 @@ public sealed class LocalIw3ConversionExecutorTests
             result.Logs,
             log => log.EnglishMessage.Contains("request", StringComparison.OrdinalIgnoreCase));
         AssertLogsNoProcessStarted(result);
+        Assert.Equal(0, runner.RunCallCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_DryRunRequest_DoesNotReportProgressOrStartProcess()
+    public async Task ExecuteAsync_DryRunRequest_DoesNotStartProcess()
     {
-        var processRequestBuilder = new SpyProcessRequestBuilder();
-        var executor = new LocalIw3ConversionExecutor(processRequestBuilder: processRequestBuilder);
+        var runner = new FakeProcessRunner(CompletedProcess());
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
         var progress = new CapturingProgress();
 
-        var result = await executor.ExecuteAsync(CreateRequest(), progress);
+        var result = await executor.ExecuteAsync(CreateDryRunRequest(), progress);
 
         Assert.False(result.Success);
         Assert.False(result.WasCanceled);
         Assert.Contains("dry-run", result.EnglishSummary, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(progress.Updates);
         AssertLogsNoProcessStarted(result);
-        Assert.Equal(0, processRequestBuilder.BuildCallCount);
+        Assert.Equal(0, runner.RunCallCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_NotImplementedRequest_PreparesProcessRequestWithoutReportingProgressOrStartingProcess()
+    public async Task ExecuteAsync_UnmappedSelectedModel_DoesNotStartProcess()
     {
-        var processRequestBuilder = new SpyProcessRequestBuilder();
-        var executor = new LocalIw3ConversionExecutor(processRequestBuilder: processRequestBuilder);
-        var progress = new CapturingProgress();
-        var request = CreateRequest(
-            planStatus: VideoConversionPlanStatus.Ready,
-            dryRunReason: ConversionDryRunReason.None,
-            isDryRun: false);
+        var runner = new FakeProcessRunner(CompletedProcess());
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
 
-        var result = await executor.ExecuteAsync(request, progress);
+        var result = await executor.ExecuteAsync(CreateReadyRequest(
+            selectedModel: new(
+                "Default depth model",
+                "depth/default-depth.onnx",
+                LocalModelPlanSource.CatalogMetadata)));
 
         Assert.False(result.Success);
         Assert.False(result.WasCanceled);
-        Assert.Contains("not implemented", result.EnglishSummary, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(progress.Updates);
+        Assert.Contains("not mapped", result.EnglishSummary, StringComparison.OrdinalIgnoreCase);
         AssertLogsNoProcessStarted(result);
-        Assert.Equal(1, processRequestBuilder.BuildCallCount);
-        Assert.Same(request, processRequestBuilder.LastRequest);
-        Assert.NotNull(processRequestBuilder.LastProcessRequest);
-        Assert.Contains(
-            result.Logs,
-            log => log.EnglishMessage.Contains(
-                "Future iw3 process request was prepared but not executed.",
-                StringComparison.Ordinal));
+        Assert.Equal(0, runner.RunCallCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_CanceledReadyRequest_ReturnsCanceledBeforeFutureExecution()
+    public async Task ExecuteAsync_ValidReadyRequest_StartsFakeProcess()
     {
-        var processRequestBuilder = new SpyProcessRequestBuilder();
-        var executor = new LocalIw3ConversionExecutor(processRequestBuilder: processRequestBuilder);
+        var runner = new FakeProcessRunner(CompletedProcess());
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest());
+
+        Assert.True(result.Success);
+        Assert.Equal(1, runner.RunCallCount);
+        Assert.NotNull(runner.LastRequest);
+        Assert.Equal(Paths.PythonExecutable, runner.LastRequest.ExecutablePath);
+        Assert.Equal(Paths.NunifRootDirectory, runner.LastRequest.WorkingDirectory);
+        Assert.Equal(Paths.Iw3EngineDirectory, runner.LastRequest.AllowedRootDirectory);
+        Assert.Contains(Iw3CliContract.DepthModelSwitch, runner.LastRequest.Arguments);
+        Assert.Contains(Iw3DepthModelMapper.ZoeDAnyNDepthModelName, runner.LastRequest.Arguments);
+        Assert.DoesNotContain("--model", runner.LastRequest.Arguments);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProcessExitsZero_ReportsSuccessAndOutputLogs()
+    {
+        var runner = new FakeProcessRunner(CompletedProcess(
+            outputLines:
+            [
+                new(
+                    ProcessOutputStream.StandardOutput,
+                    "iw3 finished",
+                    DateTimeOffset.UtcNow),
+            ]));
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest());
+
+        Assert.True(result.Success);
+        Assert.False(result.WasCanceled);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("Local iw3 conversion completed.", result.EnglishSummary);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage == "stdout: iw3 finished");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProcessExitsNonZero_ReportsFailureAndStderrLogs()
+    {
+        var runner = new FakeProcessRunner(CompletedProcess(
+            exitCode: 7,
+            standardError: "iw3 failed"));
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest());
+
+        Assert.False(result.Success);
+        Assert.False(result.WasCanceled);
+        Assert.Equal(7, result.ExitCode);
+        Assert.Equal("Local iw3 conversion failed.", result.EnglishSummary);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage == "stderr: iw3 failed");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_FakeRunnerReturnsCanceled_ReportsCancellation()
+    {
+        var runner = new FakeProcessRunner(CanceledProcess());
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest());
+
+        Assert.False(result.Success);
+        Assert.True(result.WasCanceled);
+        Assert.Equal("Local iw3 conversion was canceled.", result.EnglishSummary);
+        Assert.Equal(1, runner.RunCallCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CanceledReadyRequest_DoesNotStartProcess()
+    {
+        var runner = new FakeProcessRunner(CompletedProcess());
+        var executor = new LocalIw3ConversionExecutor(processRunner: runner);
         using var cancellationTokenSource = new CancellationTokenSource();
         cancellationTokenSource.Cancel();
 
         var result = await executor.ExecuteAsync(
-            CreateRequest(
-                planStatus: VideoConversionPlanStatus.Ready,
-                dryRunReason: ConversionDryRunReason.None,
-                isDryRun: false),
+            CreateReadyRequest(),
             cancellationToken: cancellationTokenSource.Token);
 
         Assert.False(result.Success);
         Assert.True(result.WasCanceled);
-        Assert.Contains("canceled", result.EnglishSummary, StringComparison.OrdinalIgnoreCase);
         AssertLogsNoProcessStarted(result);
-        Assert.Equal(0, processRequestBuilder.BuildCallCount);
+        Assert.Equal(0, runner.RunCallCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_SelectedModelMetadataIsAcceptedButNotExecuted()
-    {
-        var processRequestBuilder = new SpyProcessRequestBuilder();
-        var executor = new LocalIw3ConversionExecutor(processRequestBuilder: processRequestBuilder);
-        var request = CreateRequest(
-            selectedModel: new(
-                "Default depth model",
-                "depth/default-depth.onnx",
-                LocalModelPlanSource.CatalogMetadata),
-            planStatus: VideoConversionPlanStatus.Ready,
-            dryRunReason: ConversionDryRunReason.None,
-            isDryRun: false);
-
-        var result = await executor.ExecuteAsync(request);
-
-        Assert.False(result.Success);
-        Assert.Contains("not implemented", result.EnglishSummary, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(
-            result.Logs,
-            log => log.EnglishMessage.Contains("depth/default-depth.onnx", StringComparison.Ordinal));
-        AssertLogsNoProcessStarted(result);
-        Assert.Equal(1, processRequestBuilder.BuildCallCount);
-        Assert.NotNull(processRequestBuilder.LastProcessRequest);
-        Assert.DoesNotContain(
-            processRequestBuilder.LastProcessRequest.Arguments,
-            argument => argument.Contains("depth/default-depth.onnx", StringComparison.Ordinal));
-        Assert.DoesNotContain("--model", processRequestBuilder.LastProcessRequest.Arguments);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_InvalidSelectedModelMetadata_ReturnsValidationFailure()
-    {
-        var executor = new LocalIw3ConversionExecutor();
-
-        var result = await executor.ExecuteAsync(CreateRequest(
-            selectedModel: new(
-                "Default depth model",
-                @"..\depth.onnx",
-                LocalModelPlanSource.CatalogMetadata)));
-
-        Assert.False(result.Success);
-        Assert.Contains("invalid", result.EnglishSummary, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(
-            result.Logs,
-            log => log.EnglishMessage.Contains("parent traversal", StringComparison.OrdinalIgnoreCase));
-        AssertLogsNoProcessStarted(result);
-    }
-
-    [Fact]
-    public void LocalIw3ConversionExecutor_DoesNotExposeProcessRunnerDependency()
+    public void LocalIw3ConversionExecutor_ExposesProcessRunnerDependencyForTestability()
     {
         var constructorParameterTypes = typeof(LocalIw3ConversionExecutor)
             .GetConstructors()
             .SelectMany(constructor => constructor.GetParameters())
             .Select(parameter => parameter.ParameterType.Name);
 
-        Assert.DoesNotContain(
+        Assert.Contains(
             constructorParameterTypes,
             parameterTypeName => parameterTypeName.Contains("ProcessRunner", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public void LocalIw3ConversionExecutor_ExposesProcessRequestBuilderForPreflightOnly()
-    {
-        var constructorParameterTypes = typeof(LocalIw3ConversionExecutor)
-            .GetConstructors()
-            .SelectMany(constructor => constructor.GetParameters())
-            .Select(parameter => parameter.ParameterType);
+    private static ConversionExecutionRequest CreateDryRunRequest() =>
+        CreateRequest(
+            planStatus: VideoConversionPlanStatus.DryRun,
+            dryRunReason: ConversionDryRunReason.MissingLocalAiBundle,
+            isDryRun: true);
 
-        Assert.Contains(typeof(LocalIw3ProcessRequestBuilder), constructorParameterTypes);
-    }
+    private static ConversionExecutionRequest CreateReadyRequest(
+        string sourcePath = @"C:\Videos\Movie.mp4",
+        string outputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+        LocalModelPlanSelection? selectedModel = null) =>
+        CreateRequest(
+            sourcePath,
+            outputPath,
+            selectedModel,
+            VideoConversionPlanStatus.Ready,
+            ConversionDryRunReason.None,
+            isDryRun: false);
 
     private static ConversionExecutionRequest CreateRequest(
         string sourcePath = @"C:\Videos\Movie.mp4",
@@ -210,6 +239,8 @@ public sealed class LocalIw3ConversionExecutorTests
         ConversionDryRunReason dryRunReason = ConversionDryRunReason.MissingLocalAiBundle,
         bool isDryRun = true)
     {
+        selectedModel ??= RecognizedDepthModel;
+
         var options = new VideoConversionPlanOptions(
             OutputContainer: OutputContainer.MP4,
             QualityPreset: AiQualityPreset.Balanced,
@@ -232,7 +263,7 @@ public sealed class LocalIw3ConversionExecutorTests
             [
                 new("Read the analyzed source video.", "Leer el video de origen analizado."),
             ],
-            CommandPreview: "iw3 local engine dry-run preview")
+            CommandPreview: "iw3 local engine command preview")
         {
             SelectedLocalModel = selectedModel,
         };
@@ -251,6 +282,36 @@ public sealed class LocalIw3ConversionExecutorTests
             IsDryRun: isDryRun);
     }
 
+    private static ProcessExecutionResult CompletedProcess(
+        int exitCode = 0,
+        string standardOutput = "",
+        string standardError = "",
+        IReadOnlyList<ProcessOutputLine>? outputLines = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new(
+            ExitCode: exitCode,
+            StandardOutput: standardOutput,
+            StandardError: standardError,
+            OutputLines: outputLines ?? [],
+            Status: ProcessExecutionStatus.Completed,
+            StartedAt: now,
+            EndedAt: now);
+    }
+
+    private static ProcessExecutionResult CanceledProcess()
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new(
+            ExitCode: -1,
+            StandardOutput: string.Empty,
+            StandardError: string.Empty,
+            OutputLines: [],
+            Status: ProcessExecutionStatus.Canceled,
+            StartedAt: now,
+            EndedAt: now);
+    }
+
     private static void AssertLogsNoProcessStarted(ConversionExecutionResult result) =>
         Assert.Contains(
             result.Logs,
@@ -266,20 +327,19 @@ public sealed class LocalIw3ConversionExecutorTests
             Updates.Add(value);
     }
 
-    private sealed class SpyProcessRequestBuilder : LocalIw3ProcessRequestBuilder
+    private sealed class FakeProcessRunner(ProcessExecutionResult result) : ILocalProcessRunner
     {
-        public int BuildCallCount { get; private set; }
+        public int RunCallCount { get; private set; }
 
-        public ConversionExecutionRequest? LastRequest { get; private set; }
+        public ProcessExecutionRequest? LastRequest { get; private set; }
 
-        public ProcessExecutionRequest? LastProcessRequest { get; private set; }
-
-        public override ProcessExecutionRequest Build(ConversionExecutionRequest request)
+        public Task<ProcessExecutionResult> RunAsync(
+            ProcessExecutionRequest request,
+            CancellationToken cancellationToken = default)
         {
-            BuildCallCount++;
+            RunCallCount++;
             LastRequest = request;
-            LastProcessRequest = base.Build(request);
-            return LastProcessRequest;
+            return Task.FromResult(result);
         }
     }
 }

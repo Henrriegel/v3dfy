@@ -2,7 +2,7 @@ using V3dfy.Core.Readiness;
 
 namespace V3dfy.Core.Execution;
 
-public sealed class ConversionExecutionFeatureGate(bool isRealConversionExecutionEnabled = false)
+public sealed class ConversionExecutionFeatureGate(bool isRealConversionExecutionEnabled = true)
 {
     public bool IsRealConversionExecutionEnabled { get; } = isRealConversionExecutionEnabled;
 
@@ -57,16 +57,14 @@ public sealed class ConversionExecutionFeatureGate(bool isRealConversionExecutio
                 "Incluye FFmpeg, FFprobe, Python embebido, el motor local iw3 y los modelos 3D locales antes de convertir. No se inici\u00f3 ning\u00fan proceso de Python, iw3 ni conversi\u00f3n con FFmpeg.");
         }
 
-        // Bundled Python, iw3, and models are necessary but not sufficient.
-        // Real conversion stays blocked until the local execution runner is intentionally connected.
         if (!IsRealConversionExecutionEnabled)
         {
             return ConversionExecutionStartGateResult.Blocked(
                 ConversionExecutionBlocker.FeatureDisabled,
                 "Conversion execution is not enabled yet.",
                 "La ejecuci\u00f3n de conversi\u00f3n a\u00fan no est\u00e1 habilitada.",
-                "The local execution runner is still gated off. No Python, iw3, or FFmpeg conversion process was started.",
-                "El ejecutor local sigue deshabilitado. No se inici\u00f3 ning\u00fan proceso de Python, iw3 ni conversi\u00f3n con FFmpeg.");
+                "Conversion execution was explicitly disabled by configuration. No Python, iw3, or FFmpeg conversion process was started.",
+                "La ejecucion de conversion fue deshabilitada explicitamente por configuracion. No se inicio ningun proceso de Python, iw3 ni conversion con FFmpeg.");
         }
 
         return ConversionExecutionStartGateResult.Ready();

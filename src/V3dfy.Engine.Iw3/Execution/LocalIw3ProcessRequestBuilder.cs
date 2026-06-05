@@ -29,7 +29,9 @@ public class LocalIw3ProcessRequestBuilder
         var command = _commandBuilder.Build(
             CreateConversionRequest(request),
             request.ExpectedToolPaths,
-            CreateCompleteHealthStatus());
+            CreateCompleteHealthStatus(),
+            request.SelectedLocalModel,
+            requireVerifiedDepthModel: true);
 
         return new(
             ExecutablePath: command.ExecutablePath,
