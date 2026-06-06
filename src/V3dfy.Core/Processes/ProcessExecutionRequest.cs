@@ -7,4 +7,7 @@ public sealed record ProcessExecutionRequest(
     IReadOnlyDictionary<string, string?>? EnvironmentVariables = null,
     TimeSpan? Timeout = null,
     bool CaptureStandardError = true,
-    string? AllowedRootDirectory = null);
+    string? AllowedRootDirectory = null,
+    IProgress<ProcessOutputLine>? OutputProgress = null,
+    IProgress<ProcessMetricSample>? MetricsProgress = null,
+    TimeSpan? MetricsInterval = null);

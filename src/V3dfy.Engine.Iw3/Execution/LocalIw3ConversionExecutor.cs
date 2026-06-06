@@ -1,6 +1,7 @@
 using V3dfy.Core.Execution;
 using V3dfy.Core.Processes;
 using V3dfy.Engine.Iw3.Commands;
+using V3dfy.Infrastructure.Files;
 using V3dfy.Infrastructure.Processes;
 
 namespace V3dfy.Engine.Iw3.Execution;
@@ -48,20 +49,31 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
         "No Python, iw3, FFmpeg conversion, or model process was started.";
     private const string NoProcessSpanishDetail =
         "No se inicio ningun proceso de Python, iw3, conversion con FFmpeg ni modelo.";
+    private const string PartialPreparationFailedEnglishSummary =
+        "Local iw3 conversion could not prepare the partial output file.";
+    private const string PartialPreparationFailedSpanishSummary =
+        "La conversion local iw3 no pudo preparar el archivo parcial.";
 
     private readonly ConversionExecutionRequestValidator _requestValidator;
     private readonly LocalIw3ProcessRequestBuilder _processRequestBuilder;
     private readonly ILocalProcessRunner _processRunner;
+    private readonly ConversionOutputFinalizer _outputFinalizer;
+    private readonly LgCompatibilityCopyRequestBuilder _lgCompatibilityCopyRequestBuilder;
 
     public LocalIw3ConversionExecutor(
         ConversionExecutionRequestValidator? requestValidator = null,
         LocalIw3ProcessRequestBuilder? processRequestBuilder = null,
-        ILocalProcessRunner? processRunner = null)
+        ILocalProcessRunner? processRunner = null,
+        IConversionOutputFileService? outputFileService = null,
+        LgCompatibilityCopyRequestBuilder? lgCompatibilityCopyRequestBuilder = null)
     {
         _requestValidator = requestValidator ?? new ConversionExecutionRequestValidator();
         _processRequestBuilder =
             processRequestBuilder ?? new LocalIw3ProcessRequestBuilder(_requestValidator);
         _processRunner = processRunner ?? new BundledLocalProcessRunner();
+        _outputFinalizer = new(outputFileService ?? new FileSystemConversionOutputFileService());
+        _lgCompatibilityCopyRequestBuilder =
+            lgCompatibilityCopyRequestBuilder ?? new LgCompatibilityCopyRequestBuilder();
     }
 
     public async Task<ConversionExecutionResult> ExecuteAsync(
@@ -99,12 +111,28 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
                 UnmappedModelSpanishSummary);
         }
 
-        var processRequest = _processRequestBuilder.Build(request);
+        var outputPreparation = _outputFinalizer.PreparePartialOutput(request.OutputPath);
+        if (!outputPreparation.Success)
+        {
+            return CreatePartialPreparationFailureResult(startedAt, outputPreparation);
+        }
+
+        var processExecutionRequest = request with
+        {
+            OutputPath = outputPreparation.PartialOutputPath,
+        };
+        var processRequest = _processRequestBuilder.Build(processExecutionRequest) with
+        {
+            OutputProgress = CreateOutputProgress(progress),
+            MetricsProgress = CreateMetricsProgress(progress),
+        };
         progress?.Report(new(
             ProgressPercent: 0,
             CurrentStep: new(StartingEnglishDetail, StartingSpanishDetail),
-            DetailEnglish: "Launching bundled Python with local iw3.",
-            DetailSpanish: "Iniciando Python incluido con iw3 local."));
+            DetailEnglish:
+                "Launching bundled Python with local iw3. Writing to a partial output first.",
+            DetailSpanish:
+                "Iniciando Python incluido con iw3 local. Escribiendo primero en un archivo parcial."));
 
         using var linkedCancellationTokenSource =
             CancellationTokenSource.CreateLinkedTokenSource(
@@ -114,8 +142,28 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             processRequest,
             linkedCancellationTokenSource.Token);
 
-        progress?.Report(CreateFinalProgress(processResult));
-        return CreateProcessResult(startedAt, processResult);
+        var outputFinalization = _outputFinalizer.FinalizeAfterProcess(
+            processResult,
+            outputPreparation.FinalOutputPath,
+            outputPreparation.PartialOutputPath);
+        var compatibilityCopyResult = await CreateLgCompatibilityCopyAsync(
+            request,
+            outputFinalization,
+            outputPreparation.FinalOutputPath,
+            progress,
+            linkedCancellationTokenSource.Token);
+
+        progress?.Report(CreateFinalProgress(
+            processResult,
+            outputFinalization,
+            compatibilityCopyResult));
+        return CreateProcessResult(
+            request,
+            startedAt,
+            processResult,
+            outputPreparation,
+            outputFinalization,
+            compatibilityCopyResult);
     }
 
     private static ConversionExecutionResult CreateInvalidRequestResult(
@@ -196,45 +244,242 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             ]);
     }
 
+    private static ConversionExecutionResult CreatePartialPreparationFailureResult(
+        DateTimeOffset startedAt,
+        ConversionOutputPreparationResult outputPreparation)
+    {
+        var finishedAt = DateTimeOffset.UtcNow;
+        var logs = new List<ConversionExecutionLogEntry>(outputPreparation.Logs)
+        {
+            new(
+                finishedAt,
+                $"{PartialPreparationFailedEnglishSummary} {NoProcessEnglishDetail}",
+                $"{PartialPreparationFailedSpanishSummary} {NoProcessSpanishDetail}"),
+        };
+
+        return new(
+            Success: false,
+            WasCanceled: false,
+            ExitCode: null,
+            EnglishSummary: PartialPreparationFailedEnglishSummary,
+            SpanishSummary: PartialPreparationFailedSpanishSummary,
+            StartedAt: startedAt,
+            FinishedAt: finishedAt,
+            Logs: logs);
+    }
+
+    private async Task<LgCompatibilityCopyExecutionResult> CreateLgCompatibilityCopyAsync(
+        ConversionExecutionRequest request,
+        ConversionOutputFinalizationResult primaryFinalization,
+        string primaryOutputPath,
+        IProgress<ConversionExecutionProgressUpdate>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (!request.Options.CreateLgCompatibilityCopy ||
+            !primaryFinalization.Success)
+        {
+            return LgCompatibilityCopyExecutionResult.Skipped();
+        }
+
+        var compatibilityFinalOutputPath =
+            LgCompatibilityCopyRequestBuilder.CreateCompatibilityOutputPath(
+                primaryOutputPath,
+                request.ThreeDOutputFormat);
+        var compatibilityPreparation =
+            _outputFinalizer.PreparePartialOutput(compatibilityFinalOutputPath);
+        if (!compatibilityPreparation.Success)
+        {
+            var preparationLogs = new List<ConversionExecutionLogEntry>(
+                compatibilityPreparation.Logs)
+            {
+                CreateLog(
+                    "LG-compatible MP4 copy was skipped because the partial copy path could not be prepared. The primary output remains available.",
+                    "La copia MP4 compatible con LG se omitio porque no se pudo preparar la ruta parcial. La salida principal sigue disponible."),
+            };
+            return LgCompatibilityCopyExecutionResult.Failed(
+                compatibilityFinalOutputPath,
+                preparationLogs);
+        }
+
+        var copyRequest = _lgCompatibilityCopyRequestBuilder.Create(
+            request,
+            primaryOutputPath,
+            compatibilityPreparation.PartialOutputPath);
+        if (!copyRequest.ShouldRun)
+        {
+            return LgCompatibilityCopyExecutionResult.Failed(
+                compatibilityFinalOutputPath,
+                [.. compatibilityPreparation.Logs, .. copyRequest.Logs]);
+        }
+
+        progress?.Report(new(
+            ProgressPercent: 95,
+            CurrentStep: new(
+                "Creating LG-compatible MP4 copy.",
+                "Creando copia MP4 compatible con LG."),
+            DetailEnglish:
+                "Post-processing the completed primary output with bundled FFmpeg.",
+            DetailSpanish:
+                "Postprocesando la salida principal completada con FFmpeg incluido."));
+
+        var compatibilityProcessRequest = copyRequest.ProcessRequest! with
+        {
+            OutputProgress = CreateOutputProgress(progress),
+            MetricsProgress = CreateMetricsProgress(progress),
+        };
+        var compatibilityProcessResult = await _processRunner.RunAsync(
+            compatibilityProcessRequest,
+            cancellationToken);
+        var compatibilityFinalization = _outputFinalizer.FinalizeAfterProcess(
+            compatibilityProcessResult,
+            compatibilityPreparation.FinalOutputPath,
+            compatibilityPreparation.PartialOutputPath);
+        var copySucceeded =
+            compatibilityProcessResult.Status == ProcessExecutionStatus.Completed &&
+            compatibilityProcessResult.ExitCode == 0 &&
+            compatibilityFinalization.Success;
+
+        var logs = new List<ConversionExecutionLogEntry>();
+        logs.AddRange(compatibilityPreparation.Logs);
+        logs.AddRange(copyRequest.Logs);
+        logs.AddRange(CreateOutputLogs(compatibilityProcessResult));
+        logs.AddRange(compatibilityFinalization.Logs);
+        logs.Add(copySucceeded
+            ? CreateLog(
+                $"LG-compatible MP4 copy saved to {compatibilityFinalOutputPath}.",
+                $"Copia MP4 compatible con LG guardada en {compatibilityFinalOutputPath}.")
+            : CreateLog(
+                "LG-compatible MP4 copy failed. The primary output remains available.",
+                "La copia MP4 compatible con LG fallo. La salida principal sigue disponible."));
+
+        if (compatibilityProcessResult.Status == ProcessExecutionStatus.Canceled)
+        {
+            return LgCompatibilityCopyExecutionResult.Canceled(
+                compatibilityFinalOutputPath,
+                logs);
+        }
+
+        return copySucceeded
+            ? LgCompatibilityCopyExecutionResult.Completed(
+                compatibilityFinalOutputPath,
+                logs)
+            : LgCompatibilityCopyExecutionResult.Failed(
+                compatibilityFinalOutputPath,
+                logs);
+    }
+
     private static ConversionExecutionProgressUpdate CreateFinalProgress(
-        ProcessExecutionResult processResult)
+        ProcessExecutionResult processResult,
+        ConversionOutputFinalizationResult outputFinalization,
+        LgCompatibilityCopyExecutionResult compatibilityCopyResult)
     {
         var success = processResult.Status == ProcessExecutionStatus.Completed &&
-            processResult.ExitCode == 0;
+            processResult.ExitCode == 0 &&
+            outputFinalization.Success &&
+            !compatibilityCopyResult.WasCanceled;
 
         return new(
             ProgressPercent: success ? 100 : 0,
             CurrentStep: new(
-                GetEnglishSummary(processResult),
-                GetSpanishSummary(processResult)),
-            DetailEnglish: processResult.EnglishSummary,
-            DetailSpanish: processResult.SpanishSummary);
+                outputFinalization.FinalizationFailure
+                    ? FailedEnglishSummary
+                    : compatibilityCopyResult.WasCanceled
+                        ? CanceledEnglishSummary
+                    : GetEnglishSummary(processResult),
+                outputFinalization.FinalizationFailure
+                    ? FailedSpanishSummary
+                    : compatibilityCopyResult.WasCanceled
+                        ? CanceledSpanishSummary
+                    : GetSpanishSummary(processResult)),
+            DetailEnglish: outputFinalization.FinalizationFailure
+                ? "Final output promotion failed."
+                : compatibilityCopyResult.WasCanceled
+                    ? "LG-compatible MP4 copy was canceled."
+                : processResult.EnglishSummary,
+            DetailSpanish: outputFinalization.FinalizationFailure
+                ? "La promocion de la salida final fallo."
+                : compatibilityCopyResult.WasCanceled
+                    ? "La copia MP4 compatible con LG fue cancelada."
+                : processResult.SpanishSummary);
     }
 
+    private static IProgress<ProcessOutputLine>? CreateOutputProgress(
+        IProgress<ConversionExecutionProgressUpdate>? progress) =>
+        progress is null
+            ? null
+            : new DelegateProgress<ProcessOutputLine>(line => progress.Report(new(
+                ProgressPercent: 0,
+                CurrentStep: new(
+                    "Running local iw3 conversion.",
+                    "Ejecutando conversion local iw3."),
+                DetailEnglish: FormatOutputLine(line.Stream, line.Text),
+                DetailSpanish: FormatOutputLine(line.Stream, line.Text),
+                OutputLine: line)));
+
+    private static IProgress<ProcessMetricSample>? CreateMetricsProgress(
+        IProgress<ConversionExecutionProgressUpdate>? progress) =>
+        progress is null
+            ? null
+            : new DelegateProgress<ProcessMetricSample>(metrics => progress.Report(new(
+                ProgressPercent: 0,
+                CurrentStep: new(
+                    "Running local iw3 conversion.",
+                    "Ejecutando conversion local iw3."),
+                DetailEnglish: "Process metrics updated.",
+                DetailSpanish: "Metricas del proceso actualizadas.",
+                Metrics: metrics)));
+
     private static ConversionExecutionResult CreateProcessResult(
+        ConversionExecutionRequest request,
         DateTimeOffset startedAt,
-        ProcessExecutionResult processResult)
+        ProcessExecutionResult processResult,
+        ConversionOutputPreparationResult outputPreparation,
+        ConversionOutputFinalizationResult outputFinalization,
+        LgCompatibilityCopyExecutionResult compatibilityCopyResult)
     {
         var success = processResult.Status == ProcessExecutionStatus.Completed &&
-            processResult.ExitCode == 0;
-        var englishSummary = GetEnglishSummary(processResult);
-        var spanishSummary = GetSpanishSummary(processResult);
+            processResult.ExitCode == 0 &&
+            outputFinalization.Success &&
+            !compatibilityCopyResult.WasCanceled;
+        var englishSummary = outputFinalization.FinalizationFailure
+            ? FailedEnglishSummary
+            : compatibilityCopyResult.WasCanceled
+                ? CanceledEnglishSummary
+            : GetEnglishSummary(processResult);
+        var spanishSummary = outputFinalization.FinalizationFailure
+            ? FailedSpanishSummary
+            : compatibilityCopyResult.WasCanceled
+                ? CanceledSpanishSummary
+            : GetSpanishSummary(processResult);
         var logs = new List<ConversionExecutionLogEntry>
         {
             new(processResult.EndedAt, englishSummary, spanishSummary),
         };
 
+        logs.AddRange(outputPreparation.Logs);
         logs.AddRange(CreateOutputLogs(processResult));
+        logs.AddRange(outputFinalization.Logs);
+        logs.AddRange(compatibilityCopyResult.Logs);
 
         return new(
             Success: success,
-            WasCanceled: processResult.WasCanceled,
+            WasCanceled: processResult.WasCanceled || compatibilityCopyResult.WasCanceled,
             ExitCode: processResult.ExitCode,
             EnglishSummary: englishSummary,
             SpanishSummary: spanishSummary,
             StartedAt: startedAt,
             FinishedAt: processResult.EndedAt,
-            Logs: logs);
+            Logs: logs,
+            PrimaryOutputPath: outputPreparation.FinalOutputPath,
+            CompatibilityOutputPath: compatibilityCopyResult.Success
+                ? compatibilityCopyResult.FinalOutputPath
+                : null,
+            PreferredOpenOutputPath:
+                compatibilityCopyResult.Success &&
+                request.Options.PreferLgCompatibilityCopyWhenOpening
+                    ? compatibilityCopyResult.FinalOutputPath
+                    : outputPreparation.FinalOutputPath,
+            CompatibilityCopySucceeded: compatibilityCopyResult.Success);
     }
 
     private static string GetEnglishSummary(ProcessExecutionResult processResult) =>
@@ -303,4 +548,53 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             .Split(
                 ["\r\n", "\n"],
                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static ConversionExecutionLogEntry CreateLog(
+        string englishMessage,
+        string spanishMessage) => new(
+        DateTimeOffset.UtcNow,
+        englishMessage,
+        spanishMessage);
+
+    private sealed record LgCompatibilityCopyExecutionResult(
+        bool Success,
+        bool WasCanceled,
+        string? FinalOutputPath,
+        IReadOnlyList<ConversionExecutionLogEntry> Logs)
+    {
+        public static LgCompatibilityCopyExecutionResult Skipped() => new(
+            Success: false,
+            WasCanceled: false,
+            FinalOutputPath: null,
+            Logs: []);
+
+        public static LgCompatibilityCopyExecutionResult Completed(
+            string finalOutputPath,
+            IReadOnlyList<ConversionExecutionLogEntry> logs) => new(
+            Success: true,
+            WasCanceled: false,
+            FinalOutputPath: finalOutputPath,
+            Logs: logs);
+
+        public static LgCompatibilityCopyExecutionResult Failed(
+            string finalOutputPath,
+            IReadOnlyList<ConversionExecutionLogEntry> logs) => new(
+            Success: false,
+            WasCanceled: false,
+            FinalOutputPath: finalOutputPath,
+            Logs: logs);
+
+        public static LgCompatibilityCopyExecutionResult Canceled(
+            string finalOutputPath,
+            IReadOnlyList<ConversionExecutionLogEntry> logs) => new(
+            Success: false,
+            WasCanceled: true,
+            FinalOutputPath: finalOutputPath,
+            Logs: logs);
+    }
+
+    private sealed class DelegateProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
+    }
 }

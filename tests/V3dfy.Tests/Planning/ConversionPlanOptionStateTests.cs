@@ -1,5 +1,6 @@
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
+using V3dfy.Core.Presets;
 using V3dfy.Core.Recommendations;
 
 namespace V3dfy.Tests.Planning;
@@ -15,6 +16,8 @@ public sealed class ConversionPlanOptionStateTests
         Assert.Equal(AiQualityPreset.Balanced, state.QualityPreset);
         Assert.Equal(ThreeDIntensity.Medium, state.Intensity);
         Assert.Equal(ThreeDOutputFormat.HalfTopBottom, state.ThreeDOutputFormat);
+        Assert.False(state.CreateLgCompatibilityCopy);
+        Assert.False(state.PreferLgCompatibilityCopyWhenOpening);
         Assert.False(state.HasCustomizedOptions);
     }
 
@@ -58,6 +61,8 @@ public sealed class ConversionPlanOptionStateTests
         Assert.Equal(AiQualityPreset.HighQuality, state.QualityPreset);
         Assert.Equal(ThreeDIntensity.High, state.Intensity);
         Assert.Equal(ThreeDOutputFormat.Anaglyph, state.ThreeDOutputFormat);
+        Assert.False(state.CreateLgCompatibilityCopy);
+        Assert.False(state.PreferLgCompatibilityCopyWhenOpening);
         Assert.False(state.HasCustomizedOptions);
     }
 
@@ -87,7 +92,10 @@ public sealed class ConversionPlanOptionStateTests
     {
         var state = new ConversionPlanOptionState();
         state.SetQualityPreset(AiQualityPreset.HighQuality);
-        var preset = CreatePreset(OutputContainer.MKV, ThreeDOutputFormat.FullSideBySide);
+        var preset = CreatePreset(
+            OutputContainer.MKV,
+            ThreeDOutputFormat.HalfSideBySide,
+            usesLegacyLgCompatibilityGuidance: true);
 
         var changed = state.ApplyPresetDefaults(preset);
 
@@ -95,7 +103,51 @@ public sealed class ConversionPlanOptionStateTests
         Assert.Equal(OutputContainer.MKV, state.OutputContainer);
         Assert.Equal(AiQualityPreset.Balanced, state.QualityPreset);
         Assert.Equal(ThreeDIntensity.Medium, state.Intensity);
-        Assert.Equal(ThreeDOutputFormat.FullSideBySide, state.ThreeDOutputFormat);
+        Assert.Equal(ThreeDOutputFormat.HalfSideBySide, state.ThreeDOutputFormat);
+        Assert.True(state.CreateLgCompatibilityCopy);
+        Assert.True(state.PreferLgCompatibilityCopyWhenOpening);
+        Assert.False(state.HasCustomizedOptions);
+    }
+
+    [Fact]
+    public void SetCreateLgCompatibilityCopy_ChangedValue_MarksOptionsCustomized()
+    {
+        var state = new ConversionPlanOptionState();
+
+        var changed = state.SetCreateLgCompatibilityCopy(true);
+
+        Assert.True(changed);
+        Assert.True(state.CreateLgCompatibilityCopy);
+        Assert.True(state.HasCustomizedOptions);
+    }
+
+    [Fact]
+    public void SetCreateLgCompatibilityCopy_DisablingAlsoClearsPreferredOpenTarget()
+    {
+        var state = new ConversionPlanOptionState();
+        state.ApplyPresetDefaults(TargetDevicePresets.Lg3dFullHd2012);
+
+        var changed = state.SetCreateLgCompatibilityCopy(false);
+
+        Assert.True(changed);
+        Assert.False(state.CreateLgCompatibilityCopy);
+        Assert.False(state.PreferLgCompatibilityCopyWhenOpening);
+        Assert.True(state.HasCustomizedOptions);
+    }
+
+    [Fact]
+    public void ApplyPresetDefaults_SwitchingFromLgToGeneral_DisablesLgCopyBehavior()
+    {
+        var state = new ConversionPlanOptionState();
+        state.ApplyPresetDefaults(TargetDevicePresets.Lg3dFullHd2012);
+
+        Assert.True(state.CreateLgCompatibilityCopy);
+        Assert.True(state.PreferLgCompatibilityCopyWhenOpening);
+
+        state.ApplyPresetDefaults(TargetDevicePresets.General3dVideo);
+
+        Assert.False(state.CreateLgCompatibilityCopy);
+        Assert.False(state.PreferLgCompatibilityCopyWhenOpening);
         Assert.False(state.HasCustomizedOptions);
     }
 
@@ -113,6 +165,8 @@ public sealed class ConversionPlanOptionStateTests
         Assert.Equal(ThreeDIntensity.High, options.Intensity);
         Assert.Equal(ThreeDOutputFormat.HalfTopBottom, options.ThreeDOutputFormat);
         Assert.Equal("D:\\Manual\\Movie custom.output", options.CustomOutputPath);
+        Assert.False(options.CreateLgCompatibilityCopy);
+        Assert.False(options.PreferLgCompatibilityCopyWhenOpening);
     }
 
     private static VideoConversionSetupRecommendation CreateRecommendation(
@@ -136,7 +190,8 @@ public sealed class ConversionPlanOptionStateTests
 
     private static TargetDevicePreset CreatePreset(
         OutputContainer outputContainer,
-        ThreeDOutputFormat outputFormat) => new(
+        ThreeDOutputFormat outputFormat,
+        bool usesLegacyLgCompatibilityGuidance = false) => new(
         Name: "Test preset",
         SpanishName: "Perfil de prueba",
         Recommendation: new ConversionRecommendation(
@@ -157,5 +212,6 @@ public sealed class ConversionPlanOptionStateTests
         BestFor: "Tests.",
         SpanishBestFor: "Pruebas.",
         CompatibilityNote: "Test note.",
-        SpanishCompatibilityNote: "Nota de prueba.");
+        SpanishCompatibilityNote: "Nota de prueba.",
+        UsesLegacyLgCompatibilityGuidance: usesLegacyLgCompatibilityGuidance);
 }

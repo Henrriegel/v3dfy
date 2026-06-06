@@ -9,6 +9,8 @@ public sealed class ConversionPlanOptionState
     private AiQualityPreset _qualityPreset = AiQualityPreset.Balanced;
     private ThreeDIntensity _intensity = ThreeDIntensity.Medium;
     private ThreeDOutputFormat _threeDOutputFormat = ThreeDOutputFormat.HalfTopBottom;
+    private bool _createLgCompatibilityCopy;
+    private bool _preferLgCompatibilityCopyWhenOpening;
 
     public OutputContainer OutputContainer => _outputContainer;
 
@@ -17,6 +19,11 @@ public sealed class ConversionPlanOptionState
     public ThreeDIntensity Intensity => _intensity;
 
     public ThreeDOutputFormat ThreeDOutputFormat => _threeDOutputFormat;
+
+    public bool CreateLgCompatibilityCopy => _createLgCompatibilityCopy;
+
+    public bool PreferLgCompatibilityCopyWhenOpening =>
+        _preferLgCompatibilityCopyWhenOpening;
 
     public bool HasCustomizedOptions { get; private set; }
 
@@ -31,6 +38,22 @@ public sealed class ConversionPlanOptionState
 
     public bool SetThreeDOutputFormat(ThreeDOutputFormat value) =>
         SetCustomizedOption(ref _threeDOutputFormat, value);
+
+    public bool SetCreateLgCompatibilityCopy(bool value)
+    {
+        var changed = SetCustomizedOption(ref _createLgCompatibilityCopy, value);
+        if (!value)
+        {
+            changed |= SetCustomizedOption(
+                ref _preferLgCompatibilityCopyWhenOpening,
+                false);
+        }
+
+        return changed;
+    }
+
+    public bool SetPreferLgCompatibilityCopyWhenOpening(bool value) =>
+        SetCustomizedOption(ref _preferLgCompatibilityCopyWhenOpening, value);
 
     public bool ApplyRecommendationDefaultsIfNeeded(
         VideoConversionSetupRecommendation recommendation)
@@ -58,7 +81,9 @@ public sealed class ConversionPlanOptionState
             preset.Recommendation.OutputContainer,
             AiQualityPreset.Balanced,
             ThreeDIntensity.Medium,
-            preset.Recommendation.ThreeDOutputFormat);
+            preset.Recommendation.ThreeDOutputFormat,
+            preset.UsesLegacyLgCompatibilityGuidance,
+            preset.UsesLegacyLgCompatibilityGuidance);
     }
 
     public VideoConversionPlanOptions CreatePlanOptions(string? customOutputPath) => new(
@@ -66,24 +91,31 @@ public sealed class ConversionPlanOptionState
         QualityPreset,
         Intensity,
         ThreeDOutputFormat,
-        customOutputPath);
+        customOutputPath,
+        CreateLgCompatibilityCopy,
+        PreferLgCompatibilityCopyWhenOpening);
 
     private bool SetRecommendedOptions(
         OutputContainer outputContainer,
         AiQualityPreset qualityPreset,
         ThreeDIntensity intensity,
-        ThreeDOutputFormat threeDOutputFormat)
+        ThreeDOutputFormat threeDOutputFormat,
+        bool createLgCompatibilityCopy = false,
+        bool preferLgCompatibilityCopyWhenOpening = false)
     {
         var changed = false;
         changed |= SetOption(ref _outputContainer, outputContainer);
         changed |= SetOption(ref _qualityPreset, qualityPreset);
         changed |= SetOption(ref _intensity, intensity);
         changed |= SetOption(ref _threeDOutputFormat, threeDOutputFormat);
+        changed |= SetOption(ref _createLgCompatibilityCopy, createLgCompatibilityCopy);
+        changed |= SetOption(
+            ref _preferLgCompatibilityCopyWhenOpening,
+            preferLgCompatibilityCopyWhenOpening);
         return changed;
     }
 
     private bool SetCustomizedOption<T>(ref T field, T value)
-        where T : struct, Enum
     {
         if (!SetOption(ref field, value))
         {
@@ -95,7 +127,6 @@ public sealed class ConversionPlanOptionState
     }
 
     private static bool SetOption<T>(ref T field, T value)
-        where T : struct, Enum
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
         {

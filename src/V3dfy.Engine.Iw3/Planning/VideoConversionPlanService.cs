@@ -42,6 +42,9 @@ public sealed class VideoConversionPlanService
         var selectedLocalModelPlan = selectedLocalModel is null
             ? null
             : LocalModelPlanSelection.FromCandidate(selectedLocalModel);
+        var audioCodec = GetAudioCodecForContainer(
+            options.OutputContainer,
+            recommendation.AudioCodec);
         var command = _commandBuilder.Build(
             request,
             paths,
@@ -52,14 +55,15 @@ public sealed class VideoConversionPlanService
             targetPreset,
             options,
             outputPath,
-            selectedLocalModelPlan);
+            selectedLocalModelPlan,
+            audioCodec);
 
         return new(
             SourcePath: analysis.InputPath,
             SuggestedOutputPath: outputPath,
             OutputContainer: options.OutputContainer,
             VideoCodec: recommendation.VideoCodec,
-            AudioCodec: recommendation.AudioCodec,
+            AudioCodec: audioCodec,
             Width: recommendation.Width,
             Height: recommendation.Height,
             ThreeDOutputFormat: options.ThreeDOutputFormat,
@@ -79,7 +83,8 @@ public sealed class VideoConversionPlanService
         TargetDevicePreset targetPreset,
         VideoConversionPlanOptions options,
         string outputPath,
-        LocalModelPlanSelection? selectedLocalModel)
+        LocalModelPlanSelection? selectedLocalModel,
+        string audioCodec)
     {
         var steps = new List<VideoConversionPlanStep>
         {
@@ -101,6 +106,11 @@ public sealed class VideoConversionPlanService
         steps.Add(new(
             $"Prepare the {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} output for {targetPreset.Name}.",
             $"Preparar la salida {recommendation.Width}x{recommendation.Height} {recommendation.VideoCodec} para {targetPreset.SpanishName}."));
+        if (options.CreateLgCompatibilityCopy)
+        {
+            steps.Add(CreateLgCompatibilityStep(options));
+        }
+
         steps.Add(new(
             $"Write the converted video to {outputPath}.",
             $"Guardar el video convertido en {outputPath}."));
@@ -112,10 +122,15 @@ public sealed class VideoConversionPlanService
     {
         ThreeDOutputFormat.HalfTopBottom => "Half Top-Bottom",
         ThreeDOutputFormat.HalfSideBySide => "Half Side-by-Side",
-        ThreeDOutputFormat.FullSideBySide => "Full Side-by-Side",
         ThreeDOutputFormat.Anaglyph => "Anaglyph",
+        ThreeDOutputFormat.FullSideBySide => throw new NotSupportedException(
+            "Full Side-by-Side is not available because the bundled iw3 contract has no verified direct SBS flag."),
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
     };
+
+    private static string GetAudioCodecForContainer(
+        OutputContainer outputContainer,
+        string recommendedAudioCodec) => recommendedAudioCodec;
 
     public static string CreateSuggestedOutputPath(
         string inputPath,
@@ -137,10 +152,26 @@ public sealed class VideoConversionPlanService
     {
         ThreeDOutputFormat.HalfTopBottom => "htab",
         ThreeDOutputFormat.HalfSideBySide => "hsbs",
-        ThreeDOutputFormat.FullSideBySide => "sbs",
         ThreeDOutputFormat.Anaglyph => "anaglyph",
+        ThreeDOutputFormat.FullSideBySide => throw new NotSupportedException(
+            "Full Side-by-Side is not available because the bundled iw3 contract has no verified direct SBS flag."),
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
     };
+
+    private static VideoConversionPlanStep CreateLgCompatibilityStep(
+        VideoConversionPlanOptions options)
+    {
+        if (options.ThreeDOutputFormat == ThreeDOutputFormat.HalfSideBySide)
+        {
+            return new(
+                "After the primary iw3 output succeeds, create an optional LG 3D TV 2012 MP4 copy with H.264, copied audio from the primary output, yuv420p, faststart, and a 1920x1080 Half Side-by-Side target.",
+                "Despues de completar la salida principal de iw3, crear una copia MP4 opcional para LG 3D TV 2012 con H.264, audio copiado desde la salida principal, yuv420p, faststart y objetivo 1920x1080 Medio lado a lado.");
+        }
+
+        return new(
+            $"LG 3D TV 2012 MP4 copy is selected, but post-processing is currently enabled only for Half Side-by-Side. Selected layout: {GetLayoutName(options.ThreeDOutputFormat)}.",
+            $"La copia MP4 para LG 3D TV 2012 esta seleccionada, pero el postprocesamiento actualmente solo esta habilitado para Medio lado a lado. Diseno seleccionado: {GetLayoutName(options.ThreeDOutputFormat)}.");
+    }
 
     private static ConversionDryRunReason GetDryRunReason(EngineHealthStatus healthStatus)
     {

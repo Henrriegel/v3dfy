@@ -47,6 +47,27 @@ public sealed class BundledLocalProcessRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_PreservesLiveOutputAndMetricsCallbacksWhenApplyingAllowedRoot()
+    {
+        var innerRunner = new StubProcessRunner();
+        var outputProgress = new CapturingProgress<ProcessOutputLine>();
+        var metricsProgress = new CapturingProgress<ProcessMetricSample>();
+        var runner = new BundledLocalProcessRunner(
+            innerRunner,
+            allowedRootDirectory: @"C:\dev\v3dfy\tools");
+        var request = CreateRequest(
+            executablePath: @"C:\dev\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
+            outputProgress: outputProgress,
+            metricsProgress: metricsProgress);
+
+        await runner.RunAsync(request);
+
+        Assert.NotNull(innerRunner.Request);
+        Assert.Same(outputProgress, innerRunner.Request.OutputProgress);
+        Assert.Same(metricsProgress, innerRunner.Request.MetricsProgress);
+    }
+
+    [Fact]
     public async Task RunAsync_AllowsAbsoluteExecutableInsideAllowedRoot()
     {
         var innerRunner = new StubProcessRunner();
@@ -74,6 +95,17 @@ public sealed class BundledLocalProcessRunnerTests
     }
 
     [Fact]
+    public void ValidateBundledToolRequest_RejectsNonPositiveMetricsInterval()
+    {
+        var request = CreateRequest(
+            executablePath: @"C:\dev\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
+            metricsInterval: TimeSpan.Zero);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => ProcessExecutionRequestValidator.ValidateBundledToolRequest(request));
+    }
+
+    [Fact]
     public void ProcessExecutionResult_ProvidesLocalizedStatusSummaries()
     {
         var result = new ProcessExecutionResult(
@@ -92,11 +124,24 @@ public sealed class BundledLocalProcessRunnerTests
     private static ProcessExecutionRequest CreateRequest(
         string executablePath,
         string? allowedRootDirectory = null,
-        TimeSpan? timeout = null) => new(
+        TimeSpan? timeout = null,
+        IProgress<ProcessOutputLine>? outputProgress = null,
+        IProgress<ProcessMetricSample>? metricsProgress = null,
+        TimeSpan? metricsInterval = null) => new(
         ExecutablePath: executablePath,
         Arguments: ["-version"],
         Timeout: timeout,
-        AllowedRootDirectory: allowedRootDirectory);
+        AllowedRootDirectory: allowedRootDirectory,
+        OutputProgress: outputProgress,
+        MetricsProgress: metricsProgress,
+        MetricsInterval: metricsInterval);
+
+    private sealed class CapturingProgress<T> : IProgress<T>
+    {
+        public List<T> Values { get; } = [];
+
+        public void Report(T value) => Values.Add(value);
+    }
 
     private sealed class StubProcessRunner : ILocalProcessRunner
     {

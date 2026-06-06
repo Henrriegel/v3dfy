@@ -68,6 +68,7 @@ public sealed class LocalIw3ProcessRequestBuilderTests
                 @"C:\Videos\Movie.mp4",
                 Iw3CliContract.OutputSwitch,
                 @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+                Iw3CliContract.HalfTopBottomSwitch,
                 Iw3CliContract.DepthModelSwitch,
                 Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
             ],
@@ -126,14 +127,14 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     }
 
     [Fact]
-    public void Build_PlanningOptionsDoNotBecomeExecutableArgumentsUntilConfirmed()
+    public void Build_UsesVerifiedLayoutArgumentButKeepsEncodingOptionsUnconfirmed()
     {
         var processRequest = _builder.Build(CreateRequest(
             outputFormat: ThreeDOutputFormat.Anaglyph,
             qualityPreset: AiQualityPreset.HighQuality,
             intensity: ThreeDIntensity.High));
 
-        Assert.DoesNotContain("--anaglyph", processRequest.Arguments);
+        Assert.Contains(Iw3CliContract.AnaglyphSwitch, processRequest.Arguments);
         Assert.DoesNotContain("--preset", processRequest.Arguments);
         Assert.DoesNotContain("-d", processRequest.Arguments);
         Assert.DoesNotContain("--video-codec", processRequest.Arguments);

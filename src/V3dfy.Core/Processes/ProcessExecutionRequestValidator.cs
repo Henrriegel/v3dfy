@@ -22,6 +22,13 @@ public static class ProcessExecutionRequestValidator
                 "Timeout must be greater than zero.");
         }
 
+        if (request.MetricsInterval is { } metricsInterval && metricsInterval <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                "Metrics interval must be greater than zero.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.AllowedRootDirectory))
         {
             return;

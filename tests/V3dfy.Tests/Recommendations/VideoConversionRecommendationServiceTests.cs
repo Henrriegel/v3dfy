@@ -18,7 +18,7 @@ public sealed class VideoConversionRecommendationServiceTests
         Assert.Equal("AAC or AC3", recommendation.AudioCodec);
         Assert.Equal(1920, recommendation.Width);
         Assert.Equal(1080, recommendation.Height);
-        Assert.Equal(ThreeDOutputFormat.HalfTopBottom, recommendation.ThreeDOutputFormat);
+        Assert.Equal(ThreeDOutputFormat.HalfSideBySide, recommendation.ThreeDOutputFormat);
         Assert.Equal(AiQualityPreset.Balanced, recommendation.QualityPreset);
         Assert.Equal(ThreeDIntensity.Medium, recommendation.Intensity);
         Assert.True(recommendation.UseTvCompatibleMp4);

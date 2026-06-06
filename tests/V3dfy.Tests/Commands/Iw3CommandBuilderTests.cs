@@ -30,6 +30,7 @@ public sealed class Iw3CommandBuilderTests
                 @"C:\videos\input video.mp4",
                 Iw3CliContract.OutputSwitch,
                 @"C:\videos\output video.mp4",
+                Iw3CliContract.HalfTopBottomSwitch,
             ],
             command.Arguments);
     }
@@ -47,6 +48,7 @@ public sealed class Iw3CommandBuilderTests
                 @"C:\videos\input video.mp4",
                 Iw3CliContract.OutputSwitch,
                 @"C:\videos\output video.mp4",
+                Iw3CliContract.HalfTopBottomSwitch,
                 Iw3CliContract.DepthModelSwitch,
                 Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
             ],
@@ -65,7 +67,7 @@ public sealed class Iw3CommandBuilderTests
         var command = Build();
 
         Assert.Contains("selected model", command.UnconfirmedPlanningOptions);
-        Assert.Contains("3D layout", command.UnconfirmedPlanningOptions);
+        Assert.DoesNotContain("3D layout", command.UnconfirmedPlanningOptions);
         Assert.Contains("video codec", command.UnconfirmedPlanningOptions);
         Assert.Contains("quality preset", command.UnconfirmedPlanningOptions);
         Assert.Contains("3D intensity/depth", command.UnconfirmedPlanningOptions);
@@ -75,14 +77,12 @@ public sealed class Iw3CommandBuilderTests
     }
 
     [Fact]
-    public void Build_UnconfirmedOptionsDoNotBecomeExecutableArguments()
+    public void Build_UnconfirmedEncodingOptionsDoNotBecomeExecutableArguments()
     {
         var command = Build(
-            outputFormat: ThreeDOutputFormat.Anaglyph,
             intensity: ThreeDIntensity.High,
             qualityPreset: AiQualityPreset.HighQuality);
 
-        Assert.DoesNotContain("--anaglyph", command.Arguments);
         Assert.DoesNotContain("--video-codec", command.Arguments);
         Assert.DoesNotContain("--preset", command.Arguments);
         Assert.DoesNotContain("--scene-detect", command.Arguments);
@@ -100,7 +100,7 @@ public sealed class Iw3CommandBuilderTests
         Assert.Contains("-m iw3", command.FullCommandPreview);
         Assert.Contains("\"C:\\videos\\input video.mp4\"", command.FullCommandPreview);
         Assert.Contains("\"C:\\videos\\output video.mp4\"", command.FullCommandPreview);
-        Assert.DoesNotContain("--half", command.FullCommandPreview);
+        Assert.Contains("--half-tb", command.FullCommandPreview);
         Assert.DoesNotContain("--preset", command.FullCommandPreview);
         Assert.DoesNotContain("--video-codec", command.FullCommandPreview);
     }
@@ -127,15 +127,23 @@ public sealed class Iw3CommandBuilderTests
     [Theory]
     [InlineData(ThreeDOutputFormat.HalfTopBottom, "--half-tb")]
     [InlineData(ThreeDOutputFormat.HalfSideBySide, "--half-sbs")]
-    [InlineData(ThreeDOutputFormat.FullSideBySide, "--sbs")]
     [InlineData(ThreeDOutputFormat.Anaglyph, "--anaglyph")]
-    public void Build_OutputFormatDoesNotBecomeExecutableArgumentUntilConfirmed(
+    public void Build_OutputFormatBecomesVerifiedExecutableArgument(
         ThreeDOutputFormat format,
-        string unconfirmedArgument)
+        string verifiedArgument)
     {
         var command = Build(outputFormat: format);
 
-        Assert.DoesNotContain(unconfirmedArgument, command.Arguments);
+        Assert.Contains(verifiedArgument, command.Arguments);
+    }
+
+    [Fact]
+    public void Build_FullSideBySideIsRejectedBecauseNoVerifiedIw3FlagExists()
+    {
+        var exception = Assert.Throws<NotSupportedException>(
+            () => Build(outputFormat: ThreeDOutputFormat.FullSideBySide));
+
+        Assert.Contains("no verified direct SBS flag", exception.Message);
     }
 
     [Theory]

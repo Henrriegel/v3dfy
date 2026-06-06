@@ -12,12 +12,14 @@ using V3dfy.Core.Execution;
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
+using V3dfy.Core.Processes;
 using V3dfy.Core.Recommendations;
 using V3dfy.Core.Readiness;
 using V3dfy.Core.Workflow;
 using V3dfy.Engine.Iw3.Execution;
 using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
+using V3dfy.Infrastructure.Files;
 using V3dfy.Infrastructure.Health;
 using V3dfy.Infrastructure.Paths;
 using V3dfy.Infrastructure.Processes;
@@ -56,6 +58,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ConversionExecutionRequestFactory _conversionExecutionRequestFactory;
     private readonly ConversionExecutionRequestValidator _conversionExecutionRequestValidator = new();
     private readonly IConversionExecutor _conversionExecutor;
+    private readonly ConversionOutputOpenService _conversionOutputOpenService;
     private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
     private readonly ConversionWorkflowState _workflowState = new();
@@ -73,12 +76,21 @@ public sealed class MainWindowViewModel : ObservableObject
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private string _outputPathText = string.Empty;
     private string _technicalDetailsBodyText = string.Empty;
+    private string _lastConversionOutputLine = string.Empty;
+    private string _cpuUsageText = "CPU: Detecting...";
+    private string _ramUsageText = "RAM: Detecting...";
+    private string _gpuUsageText = "GPU: Detecting...";
+    private string _vramUsageText = string.Empty;
+    private ProcessMetricSample? _lastProcessMetricSample;
     private TaskCompletionSource<bool>? _replaceVideoConfirmationCompletion;
     private CancellationTokenSource? _conversionCancellationTokenSource;
     private bool _isUpdatingOutputPathText;
     private bool _isAnalyzing;
     private bool _isTechnicalDetailsModalOpen;
+    private bool _isProfileDetailsModalOpen;
     private bool _isReplaceVideoConfirmationModalOpen;
+    private bool _hasLiveConversionOutput;
+    private bool _openOutputWhenFinished;
 
     public MainWindowViewModel()
     {
@@ -101,20 +113,37 @@ public sealed class MainWindowViewModel : ObservableObject
             processRunner: new BundledLocalProcessRunner(
                 new LocalProcessRunner(),
                 _toolPaths.Iw3EngineDirectory));
+        _conversionOutputOpenService = new(
+            new FileSystemConversionOutputFileService(),
+            new ShellOutputFileOpenService());
 
-        SelectVideoCommand = new RelayCommand(SelectVideo);
-        AnalyzeCommand = new AsyncRelayCommand(AnalyzeAsync, () => !IsAnalyzing);
-        RefreshEngineStatusCommand = new RelayCommand(RefreshEngineStatus);
+        SelectVideoCommand = new RelayCommand(SelectVideo, () => !IsConversionRunning);
+        AnalyzeCommand = new AsyncRelayCommand(
+            AnalyzeAsync,
+            () => !IsAnalyzing && !IsConversionRunning);
+        RefreshEngineStatusCommand = new RelayCommand(
+            RefreshEngineStatus,
+            () => CanUseSystemStatusActions);
         OpenEngineFolderCommand = new RelayCommand(OpenEngineFolder);
         ClearLogsCommand = new RelayCommand(Logs.Clear);
-        BrowseOutputFolderCommand = new RelayCommand(BrowseOutputFolder);
-        ResetOutputPathCommand = new RelayCommand(ResetOutputPath);
-        StartConversionCommand = new AsyncRelayCommand(
-            StartConversionAsync,
-            () => CanStartConversion);
+        BrowseOutputFolderCommand = new RelayCommand(
+            BrowseOutputFolder,
+            () => !IsConversionRunning);
+        ResetOutputPathCommand = new RelayCommand(
+            ResetOutputPath,
+            () => !IsConversionRunning);
+        StartConversionCommand = new RelayCommand(
+            StartOrCancelConversion,
+            () => CanStartOrCancelConversion);
         CancelConversionCommand = new RelayCommand(CancelConversion);
-        ShowTechnicalDetailsCommand = new RelayCommand(ShowTechnicalDetails);
+        ShowTechnicalDetailsCommand = new RelayCommand(
+            ShowTechnicalDetails,
+            () => CanUseSystemStatusActions);
         CloseTechnicalDetailsCommand = new RelayCommand(CloseTechnicalDetails);
+        ShowProfileDetailsCommand = new RelayCommand(
+            ShowProfileDetails,
+            () => !IsConversionRunning);
+        CloseProfileDetailsCommand = new RelayCommand(CloseProfileDetails);
         ConfirmReplaceVideoCommand = new RelayCommand(ConfirmReplaceVideo);
         CancelReplaceVideoCommand = new RelayCommand(CancelReplaceVideo);
 
@@ -179,6 +208,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 UpdateToolStatuses();
                 UpdatePlanOptionLanguages();
                 UpdateLogLanguages();
+                RefreshMetricLanguage();
                 AddLog("Language selected: English.", "Idioma seleccionado: Español.");
             }
         }
@@ -241,7 +271,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 RaisePresetPropertiesChanged();
                 RaiseAnalysisPropertiesChanged();
                 AddLog(
-                    $"Output preset changed to {value.Name}.",
+                    $"Output profile changed to {value.Name}.",
                     $"Perfil de salida cambiado a {value.SpanishName}.");
             }
         }
@@ -269,9 +299,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public IReadOnlyList<LocalizedOptionViewModel<ThreeDOutputFormat>> ThreeDOutputFormatOptions { get; } =
     [
-        new(ThreeDOutputFormat.HalfTopBottom, "Half Top-Bottom", "Medio Arriba-Abajo"),
-        new(ThreeDOutputFormat.HalfSideBySide, "Half Side-by-Side", "Medio Lado a Lado"),
-        new(ThreeDOutputFormat.FullSideBySide, "Full Side-by-Side", "Completo Lado a Lado"),
+        new(ThreeDOutputFormat.HalfTopBottom, "Half Top-Bottom", "Medio arriba-abajo"),
+        new(ThreeDOutputFormat.HalfSideBySide, "Half Side-by-Side", "Medio lado a lado"),
         new(ThreeDOutputFormat.Anaglyph, "Anaglyph", "Anaglifo"),
     ];
 
@@ -335,6 +364,88 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    public string CreateLgCompatibilityCopyText => Text(
+        "Create LG 3D TV 2012 compatible MP4 copy",
+        "Crear copia MP4 compatible con LG 3D TV 2012");
+
+    public bool IsLgOutputProfileSelected =>
+        ReferenceEquals(SelectedOutputPreset, TargetDevicePresets.Lg3dFullHd2012);
+
+    public Visibility LgCompatibilityOptionsVisibility =>
+        IsLgOutputProfileSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility LgCompatibilityCopyPathVisibility =>
+        CreateLgCompatibilityCopy ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool CreateLgCompatibilityCopy
+    {
+        get => _planOptionState.CreateLgCompatibilityCopy;
+        set
+        {
+            if (value && !IsLgOutputProfileSelected)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (_planOptionState.SetCreateLgCompatibilityCopy(value))
+            {
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PreferLgCompatibilityCopyWhenOpening));
+                OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
+                OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
+                PlanOptionChanged(
+                    value
+                        ? "LG-compatible MP4 copy enabled."
+                        : "LG-compatible MP4 copy disabled.",
+                    value
+                        ? "Copia MP4 compatible con LG activada."
+                        : "Copia MP4 compatible con LG desactivada.");
+            }
+        }
+    }
+
+    public string PreferLgCompatibilityCopyWhenOpeningText => Text(
+        "Open LG-compatible copy when available",
+        "Abrir copia compatible LG cuando exista");
+
+    public bool PreferLgCompatibilityCopyWhenOpening
+    {
+        get => _planOptionState.PreferLgCompatibilityCopyWhenOpening;
+        set
+        {
+            if (value && !IsLgOutputProfileSelected)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (_planOptionState.SetPreferLgCompatibilityCopyWhenOpening(value))
+            {
+                OnPropertyChanged();
+                PlanOptionChanged(
+                    value
+                        ? "LG-compatible copy selected as preferred open target."
+                        : "Primary output selected as preferred open target.",
+                    value
+                        ? "Copia compatible con LG seleccionada como destino preferido al abrir."
+                        : "Salida principal seleccionada como destino preferido al abrir.");
+            }
+        }
+    }
+
+    public bool CanChangeLgCompatibilityCopyOptions =>
+        !IsConversionRunning && IsLgOutputProfileSelected;
+
+    public bool CanPreferLgCompatibilityCopyWhenOpening =>
+        !IsConversionRunning &&
+        IsLgOutputProfileSelected &&
+        CreateLgCompatibilityCopy;
+
+    public string LgCompatibilityCopyExplanationText => Text(
+        "When enabled, v3dfy creates the primary output first, then a separate LG-compatible MP4 copy for the TV.",
+        "Cuando esta opcion esta activada, v3dfy crea primero la salida principal y luego una copia MP4 compatible LG para la TV.");
+
     public int SelectedWorkflowTabIndex
     {
         get => _workflowState.SelectedTabIndex;
@@ -352,6 +463,12 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _workflowState.SelectedSystemStatusTabIndex;
         set
         {
+            if (IsConversionRunning && value != 1)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (_workflowState.SetSelectedSystemStatusTabIndex(value))
             {
                 OnPropertyChanged();
@@ -361,6 +478,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool CanOpenSystemStatusConversionTab =>
         _workflowState.CanOpenSystemStatusConversionTab;
+
+    public bool CanOpenSystemStatusToolsTab => !IsConversionRunning;
 
     public bool IsAnalyzing
     {
@@ -546,6 +665,27 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ResetOutputPathText => Text("Reset", "Restablecer");
 
+    public string OpenOutputWhenFinishedText => Text(
+        "Open video when finished",
+        "Abrir video al finalizar");
+
+    public bool OpenOutputWhenFinished
+    {
+        get => _openOutputWhenFinished;
+        set
+        {
+            if (IsConversionRunning)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            SetProperty(ref _openOutputWhenFinished, value);
+        }
+    }
+
+    public bool CanChangeOpenOutputWhenFinished => !IsConversionRunning;
+
     public bool HasCustomOutputPath => _outputPathState.HasCustomOutputPath;
 
     public string OutputPathText
@@ -566,9 +706,15 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Text("Dry-run preview. Conversion is not started.", "Vista previa en seco. La conversión no se ha iniciado.")
             : Text("Ready for conversion.", "Listo para convertir.");
 
+    public string OutputProfileDisplayText => _planOptionState.HasCustomizedOptions
+        ? Text(
+            $"Custom based on {SelectedOutputPreset.Name}",
+            $"Personalizado basado en {SelectedOutputPreset.SpanishName}")
+        : Text(SelectedOutputPreset.Name, SelectedOutputPreset.SpanishName);
+
     public string ConversionPlanPresetText => Text(
-        $"Based on preset: {SelectedOutputPreset.Name}",
-        $"Basado en el perfil: {SelectedOutputPreset.SpanishName}");
+        $"Output profile: {OutputProfileDisplayText}",
+        $"Perfil de salida: {OutputProfileDisplayText}");
 
     public string ConversionPlanLocalModelText => _conversionPlan?.SelectedLocalModel is null
         ? Text(
@@ -579,9 +725,15 @@ public sealed class MainWindowViewModel : ObservableObject
             $"Modelo local: {_conversionPlan.SelectedLocalModel.DisplayName} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.SpanishSourceText})");
 
     public string ConversionPlanOutputPathText => ConversionPlanLabelValue(
-        "Output path",
-        "Ruta de salida",
+        "Primary output",
+        "Salida principal",
         _conversionPlan?.SuggestedOutputPath);
+
+    public string ConversionPlanLgCompatibilityCopyPathText =>
+        ConversionPlanLabelValue(
+            "LG-compatible copy",
+            "Copia compatible LG",
+            GetLgCompatibilityCopyPath());
 
     public string ConversionPlanOutputFormatText => ConversionPlanLabelValue(
         "Output format",
@@ -683,6 +835,91 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string CancelConversionText => Text("Cancel", "Cancelar");
 
+    public bool IsConversionRunning =>
+        _conversionExecutionState.Status is
+            ConversionExecutionStatus.Running or
+            ConversionExecutionStatus.Canceling;
+
+    public Visibility NormalSetupVisibility =>
+        IsConversionRunning ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility ConversionRunningVisibility =>
+        IsConversionRunning ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ActivityLogVisibility =>
+        IsConversionRunning ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility ConversionSummaryVisibility =>
+        IsConversionRunning ? Visibility.Visible : Visibility.Collapsed;
+
+    public string ConversionRunningTitle => Text(
+        "Live conversion",
+        "Conversion en vivo");
+
+    public string ConversionRunningStatusText => Text("Converting...", "Convirtiendo...");
+
+    public string ConversionLiveLogEmptyText => Text(
+        "Waiting for local iw3 output...",
+        "Esperando salida local de iw3...");
+
+    public string ConversionSummaryTitle => Text(
+        "Conversion summary",
+        "Resumen de conversion");
+
+    public string ConversionSummaryPresetText => ConversionPlanLabelValue(
+        "Output profile",
+        "Perfil de salida",
+        OutputProfileDisplayText);
+
+    public string ConversionSummaryOutputContainerText => ConversionPlanLabelValue(
+        "Output container",
+        "Contenedor de salida",
+        SelectedOutputContainer.ToString());
+
+    public string ConversionSummaryQualityText => ConversionPlanLabelValue(
+        "Quality",
+        "Calidad",
+        QualityPresetText(SelectedQualityPreset, IsSpanish));
+
+    public string ConversionSummaryIntensityText => ConversionPlanLabelValue(
+        "3D intensity",
+        "Intensidad 3D",
+        ThreeDIntensityText(SelectedThreeDIntensity, IsSpanish));
+
+    public string ConversionSummaryLayoutText => ConversionPlanLabelValue(
+        "3D layout",
+        "Diseno 3D",
+        ThreeDOutputFormatText(SelectedThreeDOutputFormat, IsSpanish));
+
+    public string ConversionSummaryLocalModelText => ConversionPlanLabelValue(
+        "Local 3D/depth model",
+        "Modelo local 3D/profundidad",
+        SelectedLocalModelCandidate?.DisplayName);
+
+    public string ConversionSummaryOutputPathText => ConversionPlanLabelValue(
+        "Primary output",
+        "Salida principal",
+        _conversionPlan?.SuggestedOutputPath);
+
+    public string ConversionSummaryLgCompatibilityCopyText =>
+        ConversionPlanLabelValue(
+            "LG-compatible copy",
+            "Copia compatible LG",
+            GetLgCompatibilityCopyPath());
+
+    public string ConversionSummaryCurrentStatusText => ConversionPlanLabelValue(
+        "Current status",
+        "Estado actual",
+        IsConversionRunning ? ConversionRunningStatusText : ConversionExecutionStatusText);
+
+    public string CpuUsageText => _cpuUsageText;
+
+    public string RamUsageText => _ramUsageText;
+
+    public string GpuUsageText => _gpuUsageText;
+
+    public string VramUsageText => _vramUsageText;
+
     public string ConversionReadinessTitle => Text(
         "Conversion readiness",
         "Estado de conversión");
@@ -715,12 +952,22 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ReplaceVideoConfirmText => Text("Replace", "Reemplazar");
 
+    public string ProfileDetailsTitleText => Text(
+        "Profile details",
+        "Detalles del perfil");
+
+    public string ProfileDetailsButtonText => "?";
+
     public string ActiveModalTitleText => IsReplaceVideoConfirmationModalOpen
         ? ReplaceSelectedVideoTitleText
-        : SystemStatusTechnicalDetailsTitle;
+        : IsProfileDetailsModalOpen
+            ? ProfileDetailsTitleText
+            : SystemStatusTechnicalDetailsTitle;
 
     public bool IsAnyModalOpen =>
-        IsTechnicalDetailsModalOpen || IsReplaceVideoConfirmationModalOpen;
+        IsTechnicalDetailsModalOpen ||
+        IsProfileDetailsModalOpen ||
+        IsReplaceVideoConfirmationModalOpen;
 
     public Visibility ModalOverlayVisibility =>
         IsAnyModalOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -731,6 +978,18 @@ public sealed class MainWindowViewModel : ObservableObject
         private set
         {
             if (SetProperty(ref _isTechnicalDetailsModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsProfileDetailsModalOpen
+    {
+        get => _isProfileDetailsModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isProfileDetailsModalOpen, value))
             {
                 RaiseModalStatePropertiesChanged();
             }
@@ -752,6 +1011,9 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility TechnicalDetailsModalContentVisibility =>
         IsTechnicalDetailsModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility ProfileDetailsModalContentVisibility =>
+        IsProfileDetailsModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
     public Visibility ReplaceVideoConfirmationModalContentVisibility =>
         IsReplaceVideoConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
@@ -760,6 +1022,27 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _technicalDetailsBodyText;
         private set => SetProperty(ref _technicalDetailsBodyText, value);
     }
+
+    public string ProfileDetailsBodyText => string.Join(
+        Environment.NewLine,
+        [
+            PresetName,
+            PresetDescriptionText,
+            PresetBestForText,
+            string.Empty,
+            PresetTechnicalRecommendationTitle,
+            PresetContainerText,
+            PresetVideoCodecText,
+            PresetAudioCodecText,
+            PresetResolutionText,
+            PresetThreeDLayoutText,
+            PresetAdvancedOutputText,
+            string.Empty,
+            PresetCompatibilityNoteText,
+            string.Empty,
+            TvPlaybackTitle,
+            TvPlaybackInstructions,
+        ]);
 
     public string ConversionReadinessEmptyText => Text(
         "Analyze a video to see conversion readiness.",
@@ -841,7 +1124,19 @@ public sealed class MainWindowViewModel : ObservableObject
             _conversionReadiness).CanStart &&
         CurrentExecutionRequestCanStart();
 
-    public string StartConversionText => Text("Convert", "Convertir");
+    public bool CanStartOrCancelConversion =>
+        IsConversionRunning
+            ? _conversionExecutionState.Status == ConversionExecutionStatus.Running
+            : CanStartConversion;
+
+    public string StartConversionText => _conversionExecutionState.Status switch
+    {
+        ConversionExecutionStatus.Running => Text("Cancel", "Cancelar"),
+        ConversionExecutionStatus.Canceling => Text("Canceling...", "Cancelando..."),
+        _ => Text("Convert", "Convertir"),
+    };
+
+    public bool CanUseSystemStatusActions => !IsConversionRunning;
 
     public string ToolStatusTitle => Text(
         "Internal tool status",
@@ -858,10 +1153,10 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ClearText => Text("Clear", "Limpiar");
 
     public string RecommendedPresetTitle => Text(
-        "Selected output preset",
-        "Perfil de salida seleccionado");
+        "Output profile details",
+        "Detalles del perfil de salida");
 
-    public string OutputPresetLabel => Text("Output preset", "Perfil de salida");
+    public string OutputPresetLabel => Text("Output profile", "Perfil de salida");
 
     public string PresetName => Text(SelectedOutputPreset.Name, SelectedOutputPreset.SpanishName);
 
@@ -892,8 +1187,8 @@ public sealed class MainWindowViewModel : ObservableObject
         $": {ThreeDOutputFormatText(SelectedOutputPreset.Recommendation.ThreeDOutputFormat, IsSpanish)}";
 
     public string PresetAdvancedOutputText => Text(
-        "MKV: advanced/master output",
-        "MKV: salida avanzada/maestra");
+        "MKV: advanced/master primary output. LG compatibility: optional MP4 copy after the primary output succeeds.",
+        "MKV: salida principal avanzada/maestra. Compatibilidad LG: copia MP4 opcional despues de completar la salida principal.");
 
     public string PresetCompatibilityNoteText => Text("Compatibility note", "Nota de compatibilidad") +
         $": {Text(SelectedOutputPreset.CompatibilityNote, SelectedOutputPreset.SpanishCompatibilityNote)}";
@@ -909,6 +1204,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public ObservableCollection<ToolStatusItemViewModel> ToolStatuses { get; } = [];
 
     public ObservableCollection<LogEntryViewModel> Logs { get; } = [];
+
+    public ObservableCollection<LogEntryViewModel> ConversionLogs { get; } = [];
 
     public ObservableCollection<LocalModelSelectionCandidate> LocalModelCandidates { get; } = [];
 
@@ -926,7 +1223,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand ResetOutputPathCommand { get; }
 
-    public AsyncRelayCommand StartConversionCommand { get; }
+    public RelayCommand StartConversionCommand { get; }
 
     public RelayCommand CancelConversionCommand { get; }
 
@@ -934,12 +1231,21 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand CloseTechnicalDetailsCommand { get; }
 
+    public RelayCommand ShowProfileDetailsCommand { get; }
+
+    public RelayCommand CloseProfileDetailsCommand { get; }
+
     public RelayCommand ConfirmReplaceVideoCommand { get; }
 
     public RelayCommand CancelReplaceVideoCommand { get; }
 
     public async void SelectDroppedVideo(string path)
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         if (!IsSupportedVideoFile(path))
         {
             AddLog(
@@ -956,6 +1262,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async void SelectVideo()
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Title = Text("Select a video", "Selecciona un video"),
@@ -974,6 +1285,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async Task AnalyzeAsync()
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         SelectedWorkflowTabIndex = 0;
 
         if (string.IsNullOrWhiteSpace(SelectedVideoPath))
@@ -1020,6 +1336,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private Task<bool> ConfirmReplaceSelectedVideoAsync()
     {
         IsTechnicalDetailsModalOpen = false;
+        IsProfileDetailsModalOpen = false;
         _replaceVideoConfirmationCompletion =
             new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IsReplaceVideoConfirmationModalOpen = true;
@@ -1083,6 +1400,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void RefreshEngineStatus()
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         _dependencyHealth = _healthChecker.CheckDetailed(_toolPaths);
         _toolHealth = _dependencyHealth.Summary;
         UpdateLocalModelSelectionCandidates();
@@ -1121,7 +1443,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ShowTechnicalDetails()
     {
-        if (IsReplaceVideoConfirmationModalOpen)
+        if (IsConversionRunning ||
+            IsProfileDetailsModalOpen ||
+            IsReplaceVideoConfirmationModalOpen)
         {
             return;
         }
@@ -1133,6 +1457,23 @@ public sealed class MainWindowViewModel : ObservableObject
     private void CloseTechnicalDetails()
     {
         IsTechnicalDetailsModalOpen = false;
+    }
+
+    private void ShowProfileDetails()
+    {
+        if (IsConversionRunning ||
+            IsTechnicalDetailsModalOpen ||
+            IsReplaceVideoConfirmationModalOpen)
+        {
+            return;
+        }
+
+        IsProfileDetailsModalOpen = true;
+    }
+
+    private void CloseProfileDetails()
+    {
+        IsProfileDetailsModalOpen = false;
     }
 
     private void ConfirmReplaceVideo()
@@ -1673,8 +2014,24 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionReadinessPropertiesChanged();
     }
 
+    private void StartOrCancelConversion()
+    {
+        if (IsConversionRunning)
+        {
+            CancelConversion();
+            return;
+        }
+
+        _ = StartConversionAsync();
+    }
+
     private async Task StartConversionAsync()
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         var startGate = EvaluateConversionStartGate();
         if (!startGate.CanStart)
         {
@@ -1689,6 +2046,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _conversionCancellationTokenSource?.Dispose();
         _conversionCancellationTokenSource = new CancellationTokenSource();
+        ConversionLogs.Clear();
+        _lastConversionOutputLine = string.Empty;
+        _hasLiveConversionOutput = false;
+        ResetMetricText();
         var startedAt = DateTimeOffset.UtcNow;
         _conversionExecutionState = new(
             Status: ConversionExecutionStatus.Running,
@@ -1699,8 +2060,13 @@ public sealed class MainWindowViewModel : ObservableObject
             DetailEnglish: "Launching bundled local iw3 process.",
             DetailSpanish: "Iniciando el proceso local iw3 incluido.",
             StartedAt: startedAt);
+        SelectedSystemStatusTabIndex = 1;
         RaiseConversionExecutionPropertiesChanged();
+        RaiseConversionRunningModePropertiesChanged();
         AddLog(
+            "Starting local iw3 conversion.",
+            "Iniciando conversion local iw3.");
+        AddConversionLog(
             "Starting local iw3 conversion.",
             "Iniciando conversion local iw3.");
 
@@ -1717,11 +2083,13 @@ public sealed class MainWindowViewModel : ObservableObject
                 new Progress<ConversionExecutionProgressUpdate>(ApplyConversionProgressUpdate),
                 _conversionCancellationTokenSource.Token);
 
-            foreach (var log in result.Logs)
+            foreach (var log in GetConversionResultLogsForLivePanel(result))
             {
-                AddLog(log.EnglishMessage, log.SpanishMessage);
+                AddConversionLog(log.EnglishMessage, log.SpanishMessage);
             }
 
+            AddConversionResultActivityLogs(result);
+            HandleOpenOutputWhenFinished(result, request.OutputPath);
             _conversionExecutionState = CreateFinishedConversionState(result);
         }
         catch (OperationCanceledException)
@@ -1730,6 +2098,9 @@ public sealed class MainWindowViewModel : ObservableObject
                 startedAt,
                 DateTimeOffset.UtcNow);
             AddLog(
+                "Local iw3 conversion was canceled.",
+                "La conversion local iw3 fue cancelada.");
+            AddConversionLog(
                 "Local iw3 conversion was canceled.",
                 "La conversion local iw3 fue cancelada.");
         }
@@ -1743,12 +2114,16 @@ public sealed class MainWindowViewModel : ObservableObject
             AddLog(
                 $"Local iw3 conversion failed. {exception.Message}",
                 $"La conversion local iw3 fallo. {exception.Message}");
+            AddConversionLog(
+                $"Local iw3 conversion failed. {exception.Message}",
+                $"La conversion local iw3 fallo. {exception.Message}");
         }
         finally
         {
             _conversionCancellationTokenSource?.Dispose();
             _conversionCancellationTokenSource = null;
             RaiseConversionExecutionPropertiesChanged();
+            RaiseConversionRunningModePropertiesChanged();
             RaiseConversionReadinessPropertiesChanged();
         }
     }
@@ -1764,6 +2139,16 @@ public sealed class MainWindowViewModel : ObservableObject
         ConversionExecutionProgressUpdate progressUpdate)
     {
         var normalizedUpdate = progressUpdate.NormalizeProgress();
+        if (normalizedUpdate.OutputLine is not null)
+        {
+            AddConversionOutputLine(normalizedUpdate.OutputLine);
+        }
+
+        if (normalizedUpdate.Metrics is not null)
+        {
+            UpdateMetricText(normalizedUpdate.Metrics);
+        }
+
         _conversionExecutionState = _conversionExecutionState with
         {
             ProgressPercent = normalizedUpdate.ProgressPercent,
@@ -1772,6 +2157,167 @@ public sealed class MainWindowViewModel : ObservableObject
             DetailSpanish = normalizedUpdate.DetailSpanish,
         };
         RaiseConversionExecutionPropertiesChanged();
+    }
+
+    private void AddConversionOutputLine(ProcessOutputLine outputLine)
+    {
+        var message = FormatOutputLine(outputLine);
+        if (string.Equals(message, _lastConversionOutputLine, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastConversionOutputLine = message;
+        _hasLiveConversionOutput = true;
+        AddConversionLog(message, message, outputLine.CapturedAt.LocalDateTime);
+    }
+
+    private static string FormatOutputLine(ProcessOutputLine outputLine)
+    {
+        var prefix = outputLine.Stream == ProcessOutputStream.StandardError
+            ? "stderr"
+            : "stdout";
+        return $"{prefix}: {outputLine.Text}";
+    }
+
+    private void AddConversionLog(
+        string englishMessage,
+        string spanishMessage,
+        DateTime? timestamp = null)
+    {
+        ConversionLogs.Add(new LogEntryViewModel(
+            timestamp ?? DateTime.Now,
+            englishMessage,
+            spanishMessage,
+            IsSpanish));
+
+        const int maxConversionLogEntries = 1000;
+        while (ConversionLogs.Count > maxConversionLogEntries)
+        {
+            ConversionLogs.RemoveAt(0);
+        }
+    }
+
+    private void AddConversionResultActivityLogs(ConversionExecutionResult result)
+    {
+        AddLog(result.EnglishSummary, result.SpanishSummary);
+        if (result.Success)
+        {
+            if (!string.IsNullOrWhiteSpace(result.PrimaryOutputPath))
+            {
+                AddLog(
+                    $"Primary output was generated successfully: {result.PrimaryOutputPath}",
+                    $"La salida principal se genero correctamente: {result.PrimaryOutputPath}");
+            }
+
+            if (result.CompatibilityCopySucceeded &&
+                !string.IsNullOrWhiteSpace(result.CompatibilityOutputPath))
+            {
+                AddLog(
+                    $"LG-compatible copy was generated successfully: {result.CompatibilityOutputPath}",
+                    $"La copia compatible LG se genero correctamente: {result.CompatibilityOutputPath}");
+            }
+            else if (CreateLgCompatibilityCopy)
+            {
+                AddLog(
+                    "LG-compatible copy was not generated. The primary output remains available.",
+                    "La copia compatible LG no se genero. La salida principal sigue disponible.");
+            }
+
+            return;
+        }
+
+        if (result.WasCanceled)
+        {
+            return;
+        }
+
+        var detailLines = result.Logs
+            .Select(log => log.EnglishMessage)
+            .Where(message =>
+                message.StartsWith("stderr:", StringComparison.OrdinalIgnoreCase) ||
+                message.StartsWith("stdout:", StringComparison.OrdinalIgnoreCase))
+            .Reverse()
+            .Distinct()
+            .Take(5)
+            .Reverse()
+            .ToArray();
+
+        foreach (var detailLine in detailLines)
+        {
+            AddLog(detailLine, detailLine);
+        }
+    }
+
+    private IEnumerable<ConversionExecutionLogEntry> GetConversionResultLogsForLivePanel(
+        ConversionExecutionResult result)
+    {
+        if (!_hasLiveConversionOutput)
+        {
+            return result.Logs;
+        }
+
+        return result.Logs.Where(log => !IsProcessOutputLog(log.EnglishMessage));
+    }
+
+    private static bool IsProcessOutputLog(string message) =>
+        message.StartsWith("stderr:", StringComparison.OrdinalIgnoreCase) ||
+        message.StartsWith("stdout:", StringComparison.OrdinalIgnoreCase);
+
+    private void UpdateMetricText(ProcessMetricSample metrics)
+    {
+        _lastProcessMetricSample = metrics;
+        var displayText = ProcessMetricDisplayFormatter.Format(metrics, IsSpanish);
+        _cpuUsageText = displayText.Cpu;
+        _ramUsageText = displayText.Ram;
+        _gpuUsageText = displayText.Gpu;
+        _vramUsageText = displayText.Vram;
+        OnPropertyChanged(nameof(CpuUsageText));
+        OnPropertyChanged(nameof(RamUsageText));
+        OnPropertyChanged(nameof(GpuUsageText));
+        OnPropertyChanged(nameof(VramUsageText));
+    }
+
+    private void ResetMetricText()
+    {
+        _lastProcessMetricSample = null;
+        var displayText = ProcessMetricDisplayFormatter.Detecting(IsSpanish);
+        _cpuUsageText = displayText.Cpu;
+        _ramUsageText = displayText.Ram;
+        _gpuUsageText = displayText.Gpu;
+        _vramUsageText = displayText.Vram;
+        OnPropertyChanged(nameof(CpuUsageText));
+        OnPropertyChanged(nameof(RamUsageText));
+        OnPropertyChanged(nameof(GpuUsageText));
+        OnPropertyChanged(nameof(VramUsageText));
+    }
+
+    private void RefreshMetricLanguage()
+    {
+        if (_lastProcessMetricSample is null)
+        {
+            ResetMetricText();
+            return;
+        }
+
+        UpdateMetricText(_lastProcessMetricSample);
+    }
+
+    private void HandleOpenOutputWhenFinished(
+        ConversionExecutionResult result,
+        string finalOutputPath)
+    {
+        var openResult = _conversionOutputOpenService.OpenAfterSuccessfulConversion(
+            result,
+            finalOutputPath,
+            OpenOutputWhenFinished);
+
+        if (openResult.EnglishWarning is not null &&
+            openResult.SpanishWarning is not null)
+        {
+            AddLog(openResult.EnglishWarning, openResult.SpanishWarning);
+            AddConversionLog(openResult.EnglishWarning, openResult.SpanishWarning);
+        }
     }
 
     private static ConversionExecutionState CreateFinishedConversionState(
@@ -1848,8 +2394,12 @@ public sealed class MainWindowViewModel : ObservableObject
             DetailSpanish = "Se envio una solicitud de cancelacion al proceso local.",
         };
         RaiseConversionExecutionPropertiesChanged();
+        RaiseConversionRunningModePropertiesChanged();
         _conversionCancellationTokenSource?.Cancel();
         AddLog(
+            "Canceling local iw3 conversion.",
+            "Cancelando conversion local iw3.");
+        AddConversionLog(
             "Canceling local iw3 conversion.",
             "Cancelando conversion local iw3.");
     }
@@ -1897,6 +2447,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void BrowseOutputFolder()
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         var automaticPath = GetAutomaticOutputPath();
         if (automaticPath is null)
         {
@@ -1925,6 +2480,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ResetOutputPath()
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         if (!_outputPathState.ResetCustomOutputPath())
         {
             return;
@@ -1973,6 +2533,18 @@ public sealed class MainWindowViewModel : ObservableObject
                 inputPath,
                 SelectedOutputContainer,
                 SelectedThreeDOutputFormat);
+    }
+
+    private string? GetLgCompatibilityCopyPath()
+    {
+        if (!CreateLgCompatibilityCopy || _conversionPlan is null)
+        {
+            return null;
+        }
+
+        return LgCompatibilityCopyRequestBuilder.CreateCompatibilityOutputPath(
+            _conversionPlan.SuggestedOutputPath,
+            _conversionPlan.ThreeDOutputFormat);
     }
 
     private string? GetInitialOutputDirectory()
@@ -2069,9 +2641,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private static string ThreeDOutputFormatText(ThreeDOutputFormat value, bool useSpanish) => value switch
     {
-        ThreeDOutputFormat.HalfTopBottom => useSpanish ? "Medio Arriba-Abajo" : "Half Top-Bottom",
-        ThreeDOutputFormat.HalfSideBySide => useSpanish ? "Medio Lado a Lado" : "Half Side-by-Side",
-        ThreeDOutputFormat.FullSideBySide => useSpanish ? "Completo Lado a Lado" : "Full Side-by-Side",
+        ThreeDOutputFormat.HalfTopBottom => useSpanish ? "Medio arriba-abajo" : "Half Top-Bottom",
+        ThreeDOutputFormat.HalfSideBySide => useSpanish ? "Medio lado a lado" : "Half Side-by-Side",
+        ThreeDOutputFormat.FullSideBySide => useSpanish ? "Completo lado a lado" : "Full Side-by-Side",
         ThreeDOutputFormat.Anaglyph => useSpanish ? "Anaglifo" : "Anaglyph",
         _ => value.ToString(),
     };
@@ -2091,6 +2663,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private void UpdateLogLanguages()
     {
         foreach (var log in Logs)
+        {
+            log.SetLanguage(IsSpanish);
+        }
+
+        foreach (var log in ConversionLogs)
         {
             log.SetLanguage(IsSpanish);
         }
@@ -2154,6 +2731,19 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(RecommendedPresetTitle));
         OnPropertyChanged(nameof(OutputPresetLabel));
+        OnPropertyChanged(nameof(OutputProfileDisplayText));
+        OnPropertyChanged(nameof(IsLgOutputProfileSelected));
+        OnPropertyChanged(nameof(LgCompatibilityOptionsVisibility));
+        OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
+        OnPropertyChanged(nameof(LgCompatibilityCopyExplanationText));
+        OnPropertyChanged(nameof(CreateLgCompatibilityCopyText));
+        OnPropertyChanged(nameof(PreferLgCompatibilityCopyWhenOpeningText));
+        OnPropertyChanged(nameof(CanChangeLgCompatibilityCopyOptions));
+        OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
+        OnPropertyChanged(nameof(ConversionPlanPresetText));
+        OnPropertyChanged(nameof(ConversionPlanLgCompatibilityCopyPathText));
+        OnPropertyChanged(nameof(ConversionSummaryPresetText));
+        OnPropertyChanged(nameof(ConversionSummaryLgCompatibilityCopyText));
         OnPropertyChanged(nameof(PresetName));
         OnPropertyChanged(nameof(PresetDescriptionText));
         OnPropertyChanged(nameof(PresetBestForText));
@@ -2167,6 +2757,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(PresetCompatibilityNoteText));
         OnPropertyChanged(nameof(TvPlaybackTitle));
         OnPropertyChanged(nameof(TvPlaybackInstructions));
+        OnPropertyChanged(nameof(ProfileDetailsBodyText));
     }
 
     private void RaiseAnalysisPropertiesChanged()
@@ -2208,6 +2799,18 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedQualityPreset));
         OnPropertyChanged(nameof(SelectedThreeDIntensity));
         OnPropertyChanged(nameof(SelectedThreeDOutputFormat));
+        OnPropertyChanged(nameof(CreateLgCompatibilityCopy));
+        OnPropertyChanged(nameof(PreferLgCompatibilityCopyWhenOpening));
+        OnPropertyChanged(nameof(IsLgOutputProfileSelected));
+        OnPropertyChanged(nameof(LgCompatibilityOptionsVisibility));
+        OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
+        OnPropertyChanged(nameof(LgCompatibilityCopyExplanationText));
+        OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
+        OnPropertyChanged(nameof(OutputProfileDisplayText));
+        OnPropertyChanged(nameof(ConversionPlanPresetText));
+        OnPropertyChanged(nameof(ConversionPlanLgCompatibilityCopyPathText));
+        OnPropertyChanged(nameof(ConversionSummaryPresetText));
+        OnPropertyChanged(nameof(ConversionSummaryLgCompatibilityCopyText));
     }
 
     private void RaiseConversionPlanPropertiesChanged()
@@ -2216,6 +2819,16 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanOpenConversionPlanTab));
         OnPropertyChanged(nameof(PlanOptionsTitle));
         OnPropertyChanged(nameof(OutputContainerOptionLabel));
+        OnPropertyChanged(nameof(OutputPresetLabel));
+        OnPropertyChanged(nameof(ProfileDetailsButtonText));
+        OnPropertyChanged(nameof(CreateLgCompatibilityCopyText));
+        OnPropertyChanged(nameof(PreferLgCompatibilityCopyWhenOpeningText));
+        OnPropertyChanged(nameof(IsLgOutputProfileSelected));
+        OnPropertyChanged(nameof(LgCompatibilityOptionsVisibility));
+        OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
+        OnPropertyChanged(nameof(LgCompatibilityCopyExplanationText));
+        OnPropertyChanged(nameof(CanChangeLgCompatibilityCopyOptions));
+        OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
         OnPropertyChanged(nameof(QualityOptionLabel));
         OnPropertyChanged(nameof(ThreeDIntensityOptionLabel));
         OnPropertyChanged(nameof(ThreeDOutputFormatOptionLabel));
@@ -2227,10 +2840,14 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(OutputPathLabel));
         OnPropertyChanged(nameof(BrowseOutputFolderText));
         OnPropertyChanged(nameof(ResetOutputPathText));
+        OnPropertyChanged(nameof(OpenOutputWhenFinishedText));
+        OnPropertyChanged(nameof(CanChangeOpenOutputWhenFinished));
+        OnPropertyChanged(nameof(OutputProfileDisplayText));
         OnPropertyChanged(nameof(ConversionPlanStatusText));
         OnPropertyChanged(nameof(ConversionPlanPresetText));
         OnPropertyChanged(nameof(ConversionPlanLocalModelText));
         OnPropertyChanged(nameof(ConversionPlanOutputPathText));
+        OnPropertyChanged(nameof(ConversionPlanLgCompatibilityCopyPathText));
         OnPropertyChanged(nameof(ConversionPlanOutputFormatText));
         OnPropertyChanged(nameof(ConversionPlanResolutionText));
         OnPropertyChanged(nameof(ConversionPlanThreeDLayoutText));
@@ -2241,6 +2858,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionPlanStepsText));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewTitle));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewText));
+        OnPropertyChanged(nameof(ProfileDetailsBodyText));
+        OnPropertyChanged(nameof(ConversionSummaryPresetText));
+        OnPropertyChanged(nameof(ConversionSummaryLgCompatibilityCopyText));
         RaiseConversionExecutionPropertiesChanged();
         RaiseConversionReadinessPropertiesChanged();
     }
@@ -2263,7 +2883,56 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanCancelConversion));
         OnPropertyChanged(nameof(CancelConversionText));
         OnPropertyChanged(nameof(CanStartConversion));
+        OnPropertyChanged(nameof(CanStartOrCancelConversion));
+        OnPropertyChanged(nameof(StartConversionText));
+        OnPropertyChanged(nameof(ConversionSummaryCurrentStatusText));
+        OnPropertyChanged(nameof(CanChangeOpenOutputWhenFinished));
+        OnPropertyChanged(nameof(CanChangeLgCompatibilityCopyOptions));
+        OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
         StartConversionCommand.RaiseCanExecuteChanged();
+        ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseConversionRunningModePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(IsConversionRunning));
+        OnPropertyChanged(nameof(NormalSetupVisibility));
+        OnPropertyChanged(nameof(ConversionRunningVisibility));
+        OnPropertyChanged(nameof(ActivityLogVisibility));
+        OnPropertyChanged(nameof(ConversionSummaryVisibility));
+        OnPropertyChanged(nameof(ConversionRunningTitle));
+        OnPropertyChanged(nameof(ConversionRunningStatusText));
+        OnPropertyChanged(nameof(ConversionLiveLogEmptyText));
+        OnPropertyChanged(nameof(ConversionSummaryTitle));
+        OnPropertyChanged(nameof(ConversionSummaryPresetText));
+        OnPropertyChanged(nameof(ConversionSummaryOutputContainerText));
+        OnPropertyChanged(nameof(ConversionSummaryQualityText));
+        OnPropertyChanged(nameof(ConversionSummaryIntensityText));
+        OnPropertyChanged(nameof(ConversionSummaryLayoutText));
+        OnPropertyChanged(nameof(ConversionSummaryLocalModelText));
+        OnPropertyChanged(nameof(ConversionSummaryOutputPathText));
+        OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
+        OnPropertyChanged(nameof(ConversionSummaryLgCompatibilityCopyText));
+        OnPropertyChanged(nameof(ConversionSummaryCurrentStatusText));
+        OnPropertyChanged(nameof(OpenOutputWhenFinishedText));
+        OnPropertyChanged(nameof(CanChangeOpenOutputWhenFinished));
+        OnPropertyChanged(nameof(CanChangeLgCompatibilityCopyOptions));
+        OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
+        OnPropertyChanged(nameof(LgCompatibilityOptionsVisibility));
+        OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
+        OnPropertyChanged(nameof(CanUseSystemStatusActions));
+        OnPropertyChanged(nameof(CanOpenSystemStatusToolsTab));
+        OnPropertyChanged(nameof(CanStartOrCancelConversion));
+        OnPropertyChanged(nameof(StartConversionText));
+        SelectVideoCommand.RaiseCanExecuteChanged();
+        AnalyzeCommand.RaiseCanExecuteChanged();
+        BrowseOutputFolderCommand.RaiseCanExecuteChanged();
+        ResetOutputPathCommand.RaiseCanExecuteChanged();
+        RefreshEngineStatusCommand.RaiseCanExecuteChanged();
+        ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();
+        ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+        StartConversionCommand.RaiseCanExecuteChanged();
+        RaiseSystemStatusPropertiesChanged();
     }
 
     private void RaiseWorkflowAvailabilityPropertiesChanged()
@@ -2281,6 +2950,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SystemStatusConversionTabTitle));
         OnPropertyChanged(nameof(SystemStatusTechnicalDetailsTitle));
         OnPropertyChanged(nameof(SystemStatusDetailsButtonText));
+        OnPropertyChanged(nameof(ProfileDetailsTitleText));
+        OnPropertyChanged(nameof(ProfileDetailsButtonText));
         OnPropertyChanged(nameof(CloseDialogText));
         OnPropertyChanged(nameof(CancelDialogText));
         OnPropertyChanged(nameof(ReplaceSelectedVideoTitleText));
@@ -2288,9 +2959,13 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ReplaceVideoConfirmText));
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsBodyText));
+        OnPropertyChanged(nameof(ProfileDetailsBodyText));
         OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
+        OnPropertyChanged(nameof(CanOpenSystemStatusToolsTab));
+        OnPropertyChanged(nameof(CanUseSystemStatusActions));
         OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
         OnPropertyChanged(nameof(ConversionReadinessEmptyText));
+        OnPropertyChanged(nameof(VramUsageText));
     }
 
     private void RaiseModalStatePropertiesChanged()
@@ -2299,6 +2974,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ModalOverlayVisibility));
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsModalContentVisibility));
+        OnPropertyChanged(nameof(ProfileDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ReplaceVideoConfirmationModalContentVisibility));
     }
 
@@ -2315,6 +2991,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionReadinessRequiredComponentsText));
         OnPropertyChanged(nameof(ConversionBlockedReasonText));
         OnPropertyChanged(nameof(CanStartConversion));
+        OnPropertyChanged(nameof(CanStartOrCancelConversion));
         OnPropertyChanged(nameof(StartConversionText));
         RaiseSystemStatusPropertiesChanged();
         StartConversionCommand.RaiseCanExecuteChanged();

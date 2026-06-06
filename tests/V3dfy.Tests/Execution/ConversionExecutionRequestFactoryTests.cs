@@ -25,7 +25,7 @@ public sealed class ConversionExecutionRequestFactoryTests
             OutputContainer = OutputContainer.MKV,
             QualityPreset = AiQualityPreset.HighQuality,
             Intensity = ThreeDIntensity.High,
-            ThreeDOutputFormat = ThreeDOutputFormat.FullSideBySide,
+            ThreeDOutputFormat = ThreeDOutputFormat.HalfSideBySide,
         };
         var plan = CreatePlan(options: options);
 
@@ -37,10 +37,10 @@ public sealed class ConversionExecutionRequestFactoryTests
 
         Assert.Same(plan, request.Plan);
         Assert.Equal(@"C:\Videos\Movie.mp4", request.SourcePath);
-        Assert.Equal(@"C:\Videos\Movie.v3dfy.3d.sbs.mkv", request.OutputPath);
+        Assert.Equal(@"C:\Videos\Movie.v3dfy.3d.hsbs.mkv", request.OutputPath);
         Assert.Equal(TargetDevicePresets.General3dVideo, request.SelectedPreset);
         Assert.Equal(OutputContainer.MKV, request.OutputContainer);
-        Assert.Equal(ThreeDOutputFormat.FullSideBySide, request.ThreeDOutputFormat);
+        Assert.Equal(ThreeDOutputFormat.HalfSideBySide, request.ThreeDOutputFormat);
         Assert.Equal(ThreeDIntensity.High, request.Intensity);
         Assert.Equal(AiQualityPreset.HighQuality, request.QualityPreset);
         Assert.Equal(Paths, request.ExpectedToolPaths);
@@ -176,12 +176,13 @@ public sealed class ConversionExecutionRequestFactoryTests
 
     private static string GetOutputPath(VideoConversionPlanOptions options)
     {
-        var extension = options.OutputContainer == OutputContainer.MKV
-            ? "mkv"
-            : "mp4";
+        var extension = options.OutputContainer switch
+        {
+            OutputContainer.MKV => "mkv",
+            _ => "mp4",
+        };
         var layoutSuffix = options.ThreeDOutputFormat switch
         {
-            ThreeDOutputFormat.FullSideBySide => "sbs",
             ThreeDOutputFormat.HalfSideBySide => "hsbs",
             ThreeDOutputFormat.Anaglyph => "anaglyph",
             _ => "htab",

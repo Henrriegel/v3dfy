@@ -30,8 +30,9 @@ public sealed class TargetDevicePresetsTests
     [Fact]
     public void Lg3dFullHd2012_DescribesDeviceSpecificPlaybackGuidance()
     {
-        Assert.Contains("Device-specific profile", TargetDevicePresets.Lg3dFullHd2012.Description);
-        Assert.Contains("Top & Bottom", TargetDevicePresets.Lg3dFullHd2012.CompatibilityNote);
+        Assert.Contains("Device-specific", TargetDevicePresets.Lg3dFullHd2012.Description);
+        Assert.Contains("optional Full HD MP4 copy", TargetDevicePresets.Lg3dFullHd2012.CompatibilityNote);
+        Assert.Contains("Side-by-Side", TargetDevicePresets.Lg3dFullHd2012.PlaybackInstructions);
     }
 
     [Fact]
@@ -43,16 +44,35 @@ public sealed class TargetDevicePresetsTests
     }
 
     [Fact]
-    public void Lg3dFullHd2012_RecommendsHalfTopBottom()
+    public void Lg3dFullHd2012_RecommendsHalfSideBySide()
     {
         Assert.Equal(
-            ThreeDOutputFormat.HalfTopBottom,
+            ThreeDOutputFormat.HalfSideBySide,
             TargetDevicePresets.Lg3dFullHd2012.Recommendation.ThreeDOutputFormat);
     }
 
     [Fact]
     public void Lg3dFullHd2012_KeepsMkvAsAdvancedOption()
     {
+        Assert.Contains(
+            OutputContainer.MKV,
+            TargetDevicePresets.Lg3dFullHd2012.AdvancedOutputContainers);
+    }
+
+    [Fact]
+    public void OutputContainerOptions_IncludeOnlyPrimaryMp4AndMkv()
+    {
+        Assert.Equal(
+            [OutputContainer.MP4, OutputContainer.MKV],
+            OutputContainerOptions.All);
+    }
+
+    [Fact]
+    public void Lg3dFullHd2012_DoesNotExposeAviAsAdvancedPrimaryOption()
+    {
+        Assert.DoesNotContain(
+            TargetDevicePresets.Lg3dFullHd2012.AdvancedOutputContainers,
+            container => container.ToString().Equals("AVI", StringComparison.Ordinal));
         Assert.Contains(
             OutputContainer.MKV,
             TargetDevicePresets.Lg3dFullHd2012.AdvancedOutputContainers);

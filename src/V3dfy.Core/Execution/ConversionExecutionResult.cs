@@ -8,4 +8,8 @@ public sealed record ConversionExecutionResult(
     string SpanishSummary,
     DateTimeOffset StartedAt,
     DateTimeOffset FinishedAt,
-    IReadOnlyList<ConversionExecutionLogEntry> Logs);
+    IReadOnlyList<ConversionExecutionLogEntry> Logs,
+    string? PrimaryOutputPath = null,
+    string? CompatibilityOutputPath = null,
+    string? PreferredOpenOutputPath = null,
+    bool CompatibilityCopySucceeded = false);

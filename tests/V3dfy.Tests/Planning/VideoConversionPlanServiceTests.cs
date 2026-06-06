@@ -84,7 +84,7 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
-    public void Create_SelectedHalfSideBySide_UpdatesPlanOutputWithoutAddingUnconfirmedCommandFlag()
+    public void Create_SelectedHalfSideBySide_UpdatesPlanOutputAndCommandFlag()
     {
         var plan = CreatePlan(options: DefaultOptions() with
         {
@@ -93,13 +93,12 @@ public sealed class VideoConversionPlanServiceTests
 
         Assert.Equal(ThreeDOutputFormat.HalfSideBySide, plan.ThreeDOutputFormat);
         Assert.EndsWith(".v3dfy.3d.hsbs.mp4", plan.SuggestedOutputPath);
-        Assert.DoesNotContain("--half-sbs", plan.CommandPreview);
+        Assert.Contains("--half-sbs", plan.CommandPreview);
     }
 
     [Theory]
     [InlineData(ThreeDOutputFormat.HalfTopBottom, ".v3dfy.3d.htab.mp4")]
     [InlineData(ThreeDOutputFormat.HalfSideBySide, ".v3dfy.3d.hsbs.mp4")]
-    [InlineData(ThreeDOutputFormat.FullSideBySide, ".v3dfy.3d.sbs.mp4")]
     [InlineData(ThreeDOutputFormat.Anaglyph, ".v3dfy.3d.anaglyph.mp4")]
     public void Create_AutomaticOutputPath_UsesLayoutSuffix(
         ThreeDOutputFormat outputFormat,
@@ -111,6 +110,29 @@ public sealed class VideoConversionPlanServiceTests
         });
 
         Assert.EndsWith(expectedSuffix, plan.SuggestedOutputPath);
+    }
+
+    [Theory]
+    [InlineData(ThreeDOutputFormat.HalfTopBottom, ".v3dfy.3d.htab.mp4", "--half-tb", "Half Top-Bottom")]
+    [InlineData(ThreeDOutputFormat.HalfSideBySide, ".v3dfy.3d.hsbs.mp4", "--half-sbs", "Half Side-by-Side")]
+    [InlineData(ThreeDOutputFormat.Anaglyph, ".v3dfy.3d.anaglyph.mp4", "--anaglyph", "Anaglyph")]
+    public void Create_SelectedLayout_SuffixPlanTextAndCommandPreviewAgree(
+        ThreeDOutputFormat outputFormat,
+        string expectedSuffix,
+        string expectedCommandFlag,
+        string expectedPlanText)
+    {
+        var plan = CreatePlan(options: DefaultOptions() with
+        {
+            ThreeDOutputFormat = outputFormat,
+        });
+
+        Assert.Equal(outputFormat, plan.ThreeDOutputFormat);
+        Assert.EndsWith(expectedSuffix, plan.SuggestedOutputPath);
+        Assert.Contains(expectedCommandFlag, plan.CommandPreview);
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains(expectedPlanText, StringComparison.Ordinal));
     }
 
     [Theory]
@@ -148,7 +170,38 @@ public sealed class VideoConversionPlanServiceTests
         Assert.Equal("H.264", plan.VideoCodec);
         Assert.Equal("AAC or AC3", plan.AudioCodec);
         Assert.Equal(ThreeDOutputFormat.HalfTopBottom, plan.ThreeDOutputFormat);
-        Assert.DoesNotContain("--half-tb", plan.CommandPreview);
+        Assert.Contains("--half-tb", plan.CommandPreview);
+    }
+
+    [Fact]
+    public void Create_LgCompatibilityCopyOption_AddsPostProcessStepWithoutIw3EncodingFlags()
+    {
+        var plan = CreatePlan(
+            targetPreset: TargetDevicePresets.Lg3dFullHd2012,
+            options: DefaultOptions() with
+            {
+                ThreeDOutputFormat = ThreeDOutputFormat.HalfSideBySide,
+                CreateLgCompatibilityCopy = true,
+            });
+
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains(
+                "After the primary iw3 output succeeds",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains("yuv420p", StringComparison.Ordinal));
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains(
+                "copied audio from the primary output",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            plan.Steps,
+            step => step.EnglishText.Contains("AAC, yuv420p", StringComparison.Ordinal));
+        Assert.DoesNotContain("--pix_fmt", plan.CommandPreview);
+        Assert.DoesNotContain("--video-codec", plan.CommandPreview);
     }
 
     [Fact]

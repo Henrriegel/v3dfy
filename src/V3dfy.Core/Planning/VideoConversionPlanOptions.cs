@@ -7,4 +7,6 @@ public sealed record VideoConversionPlanOptions(
     AiQualityPreset QualityPreset,
     ThreeDIntensity Intensity,
     ThreeDOutputFormat ThreeDOutputFormat,
-    string? CustomOutputPath = null);
+    string? CustomOutputPath = null,
+    bool CreateLgCompatibilityCopy = false,
+    bool PreferLgCompatibilityCopyWhenOpening = false);

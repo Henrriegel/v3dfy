@@ -20,6 +20,8 @@ public sealed class Iw3CommandBuilder
             request.InputPath,
             request.OutputPath).ToList();
 
+        arguments.Add(GetLayoutSwitch(request.ThreeDOutputFormat));
+
         if (Iw3DepthModelMapper.TryMap(selectedLocalModel, out var depthModelMapping) &&
             depthModelMapping is not null)
         {
@@ -40,6 +42,23 @@ public sealed class Iw3CommandBuilder
             DryRun: !healthStatus.IsComplete,
             UnconfirmedPlanningOptions: Iw3CliContract.UnconfirmedPlanningOptions);
     }
+
+    private static string GetLayoutSwitch(ThreeDOutputFormat outputFormat) =>
+        outputFormat switch
+        {
+            ThreeDOutputFormat.HalfSideBySide =>
+                Iw3CliContract.HalfSideBySideSwitch,
+            ThreeDOutputFormat.HalfTopBottom =>
+                Iw3CliContract.HalfTopBottomSwitch,
+            ThreeDOutputFormat.Anaglyph =>
+                Iw3CliContract.AnaglyphSwitch,
+            ThreeDOutputFormat.FullSideBySide => throw new NotSupportedException(
+                "Full Side-by-Side is not exposed because the bundled iw3 contract has no verified direct SBS flag."),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(outputFormat),
+                outputFormat,
+                null),
+        };
 
     private static string BuildPreview(string executablePath, IEnumerable<string> arguments) =>
         string.Join(" ", [Quote(executablePath), .. arguments.Select(Quote)]);
