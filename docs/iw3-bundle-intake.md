@@ -55,8 +55,8 @@ CLI verification:
    folder. This includes embedded Python acquisition, repository files, Python
    dependencies, and pretrained model downloads. iw3 can download large model
    files on first run in upstream usage, so the preparation pass must trigger
-   or otherwise populate every model file that v3dfy intends to ship before
-   packaging.
+   or otherwise populate every model file and non-depth iw3 runtime dependency
+   that v3dfy intends to ship before packaging.
 
 3. Inspect the prepared folder structure and record the exact source paths for
    Python, iw3 entry files, Python packages, model files, configuration files,
@@ -132,6 +132,9 @@ Observed prepared package facts:
 - Model root: `nunif/iw3/pretrained_models`.
 - Large detected model file:
   `nunif/iw3/pretrained_models/hub/checkpoints/depth_anything_metric_depth_indoor.pt`.
+- Required default row-flow runtime dependency verified from
+  `nunif/iw3/stereo_model_factory.py`:
+  `nunif/iw3/pretrained_models/hub/checkpoints/iw3_row_flow_v3_20250627.pth`.
 - No top-level `iw3.py` was found in the prepared tree.
 
 Map the prepared nunif installation into this candidate bundle layout:
@@ -150,6 +153,7 @@ candidate-iw3/
       __main__.py
       pretrained_models/
         MODEL_CATALOG.json # optional v3dfy metadata
+        hub/checkpoints/iw3_row_flow_v3_20250627.pth
         <approved pretrained model files>
       <nunif/iw3 package files required for python -m iw3>
     <other nunif repository files required at runtime>
@@ -171,6 +175,7 @@ Required v3dfy paths after staging:
 - `engine/iw3/nunif/iw3`
 - `engine/iw3/nunif/iw3/__main__.py`
 - `engine/iw3/nunif/iw3/pretrained_models`
+- `engine/iw3/nunif/iw3/pretrained_models/hub/checkpoints/iw3_row_flow_v3_20250627.pth`
 - `engine/iw3/ENGINE_MANIFEST.json`
 - `engine/iw3/IW3_CLI_CAPABILITIES.json` for full capability-required
   packaging
@@ -196,6 +201,8 @@ Exclude these unless a later runtime verification proves they are required:
   and model set whenever the selected nunif package or commit changes.
 - Decide which pretrained model files are required for v3dfy's intended
   presets.
+- Confirm that non-depth iw3 runtime dependencies, including
+  `iw3_row_flow_v3_20250627.pth`, are present in the candidate before staging.
 - Whether PyAV or other video-related Python packages bring additional binary
   dependency and license requirements beyond the separate FFmpeg executables
   bundled by v3dfy.

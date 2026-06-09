@@ -21,4 +21,11 @@ public sealed record InternalToolPaths(
 
     public string Iw3CliCapabilitiesFile { get; init; } =
         Path.Combine(Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName);
+
+    public string Iw3DefaultStereoRuntimeDependencyFile { get; init; } =
+        Path.Combine(
+            ModelsDirectory,
+            "hub",
+            "checkpoints",
+            Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyFileName);
 }

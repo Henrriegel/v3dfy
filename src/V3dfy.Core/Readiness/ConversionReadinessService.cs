@@ -13,9 +13,9 @@ public sealed class ConversionReadinessService
     private const string SpanishBlockedStatus =
         "Conversión no disponible. Faltan componentes locales requeridos.";
     private const string EnglishRequiredComponents =
-        "Required components: FFmpeg, FFprobe, embedded Python runtime, local iw3 engine, local 3D models.";
+        "Required components: FFmpeg, FFprobe, embedded Python runtime, local iw3 engine, local 3D models, iw3 runtime dependencies.";
     private const string SpanishRequiredComponents =
-        "Componentes requeridos: FFmpeg, FFprobe, runtime de Python embebido, motor local iw3, modelos 3D locales.";
+        "Componentes requeridos: FFmpeg, FFprobe, runtime de Python embebido, motor local iw3, modelos 3D locales, dependencias de runtime iw3.";
 
     public ConversionReadiness Evaluate(EngineHealthStatus healthStatus)
     {
@@ -48,6 +48,11 @@ public sealed class ConversionReadinessService
             issues,
             "Local 3D models are missing.",
             "Faltan los modelos 3D locales.");
+        AddMissingIssue(
+            healthStatus.Iw3RuntimeDependencies,
+            issues,
+            "Missing iw3 runtime dependency.",
+            "Dependencia de runtime iw3 faltante.");
 
         var canConvert = issues.Count == 0;
 
@@ -91,6 +96,11 @@ public sealed class ConversionReadinessService
             issues,
             "Local 3D models are missing.",
             "Faltan los modelos 3D locales.");
+        AddDetailedMissingIssue(
+            dependencyHealth.Iw3RuntimeDependencies,
+            issues,
+            "Missing iw3 runtime dependency.",
+            "Dependencia de runtime iw3 faltante.");
 
         var canConvert = issues.Count == 0;
 
@@ -148,6 +158,8 @@ public sealed class ConversionReadinessService
                 $"Expected pretrained models directory: {dependencyHealth.ExpectedPath}",
             ToolHealthDetailKind.ModelFilesMissing =>
                 $"No supported model files were found under: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing =>
+                $"Expected bundled iw3 runtime dependency: {dependencyHealth.ExpectedPath}",
             _ => $"Expected local path: {dependencyHealth.ExpectedPath}",
         };
 
@@ -168,6 +180,8 @@ public sealed class ConversionReadinessService
                 $"Carpeta esperada de modelos preentrenados: {dependencyHealth.ExpectedPath}",
             ToolHealthDetailKind.ModelFilesMissing =>
                 $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}",
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing =>
+                $"Dependencia de runtime iw3 incluida esperada: {dependencyHealth.ExpectedPath}",
             _ => $"Ruta local esperada: {dependencyHealth.ExpectedPath}",
         };
 

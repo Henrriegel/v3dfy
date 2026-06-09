@@ -121,11 +121,28 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
         {
             OutputPath = outputPreparation.PartialOutputPath,
         };
+        var runtimeDownloadDetected = false;
+        IReadOnlyList<ConversionExecutionLogEntry> commandDiagnosticLogs = [];
         var processRequest = _processRequestBuilder.Build(processExecutionRequest) with
         {
-            OutputProgress = CreateOutputProgress(progress),
+            OutputProgress = CreateOutputProgress(
+                progress,
+                () => runtimeDownloadDetected = true),
             MetricsProgress = CreateMetricsProgress(progress),
         };
+        commandDiagnosticLogs = Iw3ProcessDiagnostics.CreateCommandLogs(
+            processRequest,
+            new(
+                EnglishOperationName: "Convert iw3",
+                SpanishOperationName: "Conversion iw3",
+                InputPath: processExecutionRequest.SourcePath,
+                ProcessOutputPath: processExecutionRequest.OutputPath,
+                FinalOutputPath: outputPreparation.FinalOutputPath,
+                OutputContainer: processExecutionRequest.OutputContainer,
+                QualityPreset: processExecutionRequest.QualityPreset,
+                Intensity: processExecutionRequest.Intensity,
+                ThreeDOutputFormat: processExecutionRequest.ThreeDOutputFormat,
+                SelectedLocalModel: processExecutionRequest.SelectedLocalModel));
         progress?.Report(new(
             ProgressPercent: 0,
             CurrentStep: new(StartingEnglishDetail, StartingSpanishDetail),
@@ -141,6 +158,7 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
         var processResult = await _processRunner.RunAsync(
             processRequest,
             linkedCancellationTokenSource.Token);
+        runtimeDownloadDetected |= Iw3RuntimeDownloadDetector.ContainsRuntimeDownload(processResult);
 
         var outputFinalization = _outputFinalizer.FinalizeAfterProcess(
             processResult,
@@ -156,14 +174,17 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
         progress?.Report(CreateFinalProgress(
             processResult,
             outputFinalization,
-            compatibilityCopyResult));
+            compatibilityCopyResult,
+            runtimeDownloadDetected));
         return CreateProcessResult(
             request,
             startedAt,
             processResult,
             outputPreparation,
             outputFinalization,
-            compatibilityCopyResult);
+            compatibilityCopyResult,
+            runtimeDownloadDetected,
+            commandDiagnosticLogs);
     }
 
     private static ConversionExecutionResult CreateInvalidRequestResult(
@@ -371,7 +392,8 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
     private static ConversionExecutionProgressUpdate CreateFinalProgress(
         ProcessExecutionResult processResult,
         ConversionOutputFinalizationResult outputFinalization,
-        LgCompatibilityCopyExecutionResult compatibilityCopyResult)
+        LgCompatibilityCopyExecutionResult compatibilityCopyResult,
+        bool runtimeDownloadDetected)
     {
         var success = processResult.Status == ProcessExecutionStatus.Completed &&
             processResult.ExitCode == 0 &&
@@ -381,22 +403,30 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
         return new(
             ProgressPercent: success ? 100 : 0,
             CurrentStep: new(
-                outputFinalization.FinalizationFailure
+                runtimeDownloadDetected
+                    ? Iw3RuntimeDownloadDetector.EnglishWarning
+                    : outputFinalization.FinalizationFailure
                     ? FailedEnglishSummary
                     : compatibilityCopyResult.WasCanceled
                         ? CanceledEnglishSummary
                     : GetEnglishSummary(processResult),
-                outputFinalization.FinalizationFailure
+                runtimeDownloadDetected
+                    ? Iw3RuntimeDownloadDetector.SpanishWarning
+                    : outputFinalization.FinalizationFailure
                     ? FailedSpanishSummary
                     : compatibilityCopyResult.WasCanceled
                         ? CanceledSpanishSummary
                     : GetSpanishSummary(processResult)),
-            DetailEnglish: outputFinalization.FinalizationFailure
+            DetailEnglish: runtimeDownloadDetected
+                ? Iw3RuntimeDownloadDetector.EnglishWarning
+                : outputFinalization.FinalizationFailure
                 ? "Final output promotion failed."
                 : compatibilityCopyResult.WasCanceled
                     ? "LG-compatible MP4 copy was canceled."
                 : processResult.EnglishSummary,
-            DetailSpanish: outputFinalization.FinalizationFailure
+            DetailSpanish: runtimeDownloadDetected
+                ? Iw3RuntimeDownloadDetector.SpanishWarning
+                : outputFinalization.FinalizationFailure
                 ? "La promocion de la salida final fallo."
                 : compatibilityCopyResult.WasCanceled
                     ? "La copia MP4 compatible con LG fue cancelada."
@@ -404,17 +434,32 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
     }
 
     private static IProgress<ProcessOutputLine>? CreateOutputProgress(
-        IProgress<ConversionExecutionProgressUpdate>? progress) =>
+        IProgress<ConversionExecutionProgressUpdate>? progress,
+        Action? onRuntimeDownloadDetected = null) =>
         progress is null
             ? null
-            : new DelegateProgress<ProcessOutputLine>(line => progress.Report(new(
-                ProgressPercent: 0,
-                CurrentStep: new(
-                    "Running local iw3 conversion.",
-                    "Ejecutando conversion local iw3."),
-                DetailEnglish: FormatOutputLine(line.Stream, line.Text),
-                DetailSpanish: FormatOutputLine(line.Stream, line.Text),
-                OutputLine: line)));
+            : new DelegateProgress<ProcessOutputLine>(line =>
+            {
+                var runtimeDownloadDetected = onRuntimeDownloadDetected is not null &&
+                    Iw3RuntimeDownloadDetector.IsRuntimeDownloadLine(line.Text);
+                if (runtimeDownloadDetected)
+                {
+                    onRuntimeDownloadDetected?.Invoke();
+                }
+
+                progress.Report(new(
+                    ProgressPercent: 0,
+                    CurrentStep: new(
+                        "Running local iw3 conversion.",
+                        "Ejecutando conversion local iw3."),
+                    DetailEnglish: runtimeDownloadDetected
+                        ? Iw3RuntimeDownloadDetector.EnglishWarning
+                        : FormatOutputLine(line.Stream, line.Text),
+                    DetailSpanish: runtimeDownloadDetected
+                        ? Iw3RuntimeDownloadDetector.SpanishWarning
+                        : FormatOutputLine(line.Stream, line.Text),
+                    OutputLine: line));
+            });
 
     private static IProgress<ProcessMetricSample>? CreateMetricsProgress(
         IProgress<ConversionExecutionProgressUpdate>? progress) =>
@@ -435,7 +480,9 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
         ProcessExecutionResult processResult,
         ConversionOutputPreparationResult outputPreparation,
         ConversionOutputFinalizationResult outputFinalization,
-        LgCompatibilityCopyExecutionResult compatibilityCopyResult)
+        LgCompatibilityCopyExecutionResult compatibilityCopyResult,
+        bool runtimeDownloadDetected,
+        IReadOnlyList<ConversionExecutionLogEntry> commandDiagnosticLogs)
     {
         var success = processResult.Status == ProcessExecutionStatus.Completed &&
             processResult.ExitCode == 0 &&
@@ -451,13 +498,26 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             : compatibilityCopyResult.WasCanceled
                 ? CanceledSpanishSummary
             : GetSpanishSummary(processResult);
+        englishSummary = AddRuntimeDownloadWarning(englishSummary, runtimeDownloadDetected, useSpanish: false);
+        spanishSummary = AddRuntimeDownloadWarning(spanishSummary, runtimeDownloadDetected, useSpanish: true);
         var logs = new List<ConversionExecutionLogEntry>
         {
             new(processResult.EndedAt, englishSummary, spanishSummary),
         };
 
         logs.AddRange(outputPreparation.Logs);
+        logs.AddRange(commandDiagnosticLogs);
+        logs.AddRange(Iw3ProcessDiagnostics.CreateTimingLogs(
+            "Convert iw3",
+            "Conversion iw3",
+            processResult));
         logs.AddRange(CreateOutputLogs(processResult));
+        if (runtimeDownloadDetected)
+        {
+            logs.Add(Iw3RuntimeDownloadDetector.CreateWarningLog(processResult.EndedAt));
+            logs.Add(Iw3RuntimeDownloadDetector.CreateTimingNoteLog(processResult.EndedAt));
+        }
+
         logs.AddRange(outputFinalization.Logs);
         logs.AddRange(compatibilityCopyResult.Logs);
 
@@ -501,6 +561,16 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             ProcessExecutionStatus.TimedOut => TimedOutSpanishSummary,
             _ => FailedSpanishSummary,
         };
+
+    private static string AddRuntimeDownloadWarning(
+        string summary,
+        bool runtimeDownloadDetected,
+        bool useSpanish) =>
+        runtimeDownloadDetected
+            ? useSpanish
+                ? $"{summary} {Iw3RuntimeDownloadDetector.SpanishWarning}"
+                : $"{summary} {Iw3RuntimeDownloadDetector.EnglishWarning}"
+            : summary;
 
     private static IEnumerable<ConversionExecutionLogEntry> CreateOutputLogs(
         ProcessExecutionResult processResult)

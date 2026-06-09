@@ -39,9 +39,7 @@ public sealed class VideoConversionPlanService
             ThreeDOutputFormat: options.ThreeDOutputFormat,
             AiQualityPreset: options.QualityPreset,
             ThreeDIntensity: options.Intensity);
-        var selectedLocalModelPlan = selectedLocalModel is null
-            ? null
-            : LocalModelPlanSelection.FromCandidate(selectedLocalModel);
+        var selectedLocalModelPlan = CreateLocalModelPlanSelection(selectedLocalModel);
         var audioCodec = GetAudioCodecForContainer(
             options.OutputContainer,
             recommendation.AudioCodec);
@@ -95,9 +93,15 @@ public sealed class VideoConversionPlanService
 
         if (selectedLocalModel is not null)
         {
+            var englishDepthModelDetail = string.IsNullOrWhiteSpace(selectedLocalModel.Iw3DepthModelName)
+                ? string.Empty
+                : $" iw3 depth model: {selectedLocalModel.Iw3DepthModelName}.";
+            var spanishDepthModelDetail = string.IsNullOrWhiteSpace(selectedLocalModel.Iw3DepthModelName)
+                ? string.Empty
+                : $" Modelo de profundidad iw3: {selectedLocalModel.Iw3DepthModelName}.";
             steps.Add(new(
-                $"Plan selected local model for future execution: {selectedLocalModel.DisplayName} ({selectedLocalModel.RelativePath}).",
-                $"Preparar el modelo local seleccionado para ejecuci\u00f3n futura: {selectedLocalModel.DisplayName} ({selectedLocalModel.RelativePath})."));
+                $"Plan selected local model for future execution: {selectedLocalModel.DisplayName} ({selectedLocalModel.RelativePath}).{englishDepthModelDetail}",
+                $"Preparar el modelo local seleccionado para ejecuci\u00f3n futura: {selectedLocalModel.DisplayName} ({selectedLocalModel.RelativePath}).{spanishDepthModelDetail}"));
         }
 
         steps.Add(new(
@@ -131,6 +135,28 @@ public sealed class VideoConversionPlanService
     private static string GetAudioCodecForContainer(
         OutputContainer outputContainer,
         string recommendedAudioCodec) => recommendedAudioCodec;
+
+    private static LocalModelPlanSelection? CreateLocalModelPlanSelection(
+        LocalModelSelectionCandidate? candidate)
+    {
+        if (candidate is null)
+        {
+            return null;
+        }
+
+        var selection = LocalModelPlanSelection.FromCandidate(candidate);
+        return Iw3DepthModelMapper.TryMap(candidate, out var mapping) && mapping is not null
+            ? selection with
+            {
+                DisplayName = mapping.EnglishName,
+                SpanishDisplayName = mapping.SpanishName,
+                Iw3DepthModelName = mapping.DepthModelName,
+                MappingKey = mapping.Key,
+                EnglishStatusNote = mapping.EnglishStatusNote,
+                SpanishStatusNote = mapping.SpanishStatusNote,
+            }
+            : selection;
+    }
 
     public static string CreateSuggestedOutputPath(
         string inputPath,
@@ -177,7 +203,8 @@ public sealed class VideoConversionPlanService
     {
         if (healthStatus.Python == ToolHealthStatus.Missing ||
             healthStatus.Iw3EngineDirectory == ToolHealthStatus.Missing ||
-            healthStatus.ModelsDirectory == ToolHealthStatus.Missing)
+            healthStatus.ModelsDirectory == ToolHealthStatus.Missing ||
+            healthStatus.Iw3RuntimeDependencies == ToolHealthStatus.Missing)
         {
             return ConversionDryRunReason.MissingLocalAiBundle;
         }

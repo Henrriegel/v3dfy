@@ -159,6 +159,28 @@ public sealed class LocalIw3ConversionExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_FinalConversionStillUsesSelectedOutputDirectoryForPartialOutput()
+    {
+        var files = new FakeConversionOutputFileService();
+        var finalOutputPath = @"E:\Converted\Movie.v3dfy.3d.htab.mp4";
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var runner = new FakeProcessRunner(
+            CompletedProcess(),
+            onRun: request => files.Add(GetProcessOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(outputPath: finalOutputPath));
+
+        Assert.True(result.Success);
+        Assert.Equal(finalOutputPath, result.PrimaryOutputPath);
+        Assert.Equal(partialOutputPath, GetProcessOutputPath(runner.LastRequest!));
+        Assert.StartsWith(@"E:\Converted\", partialOutputPath, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(@"\AppData\Local\v3dfy\previews\", partialOutputPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenLgCompatibilityCopyEnabled_RunsFfmpegAfterPrimaryPromotion()
     {
         var files = new FakeConversionOutputFileService();
@@ -275,6 +297,134 @@ public sealed class LocalIw3ConversionExecutorTests
             progress.Updates,
             update => update.Metrics == metricSample &&
                 update.DetailEnglish == "Process metrics updated.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RuntimeDownloadFromIw3Output_AddsOfflineWarning()
+    {
+        var files = new FakeConversionOutputFileService();
+        var runner = new FakeProcessRunner(
+            CompletedProcess(
+                standardError:
+                    "Downloading: \"https://github.com/nagadomi/nunif/releases/download/0.0.0/iw3_row_flow_v3_20250627\""),
+            onRun: request => files.Add(GetProcessOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest());
+
+        Assert.True(result.Success);
+        Assert.Contains(Iw3RuntimeDownloadDetector.EnglishWarning, result.EnglishSummary);
+        Assert.Contains(Iw3RuntimeDownloadDetector.EnglishWarning, result.Logs.Select(log => log.EnglishMessage));
+        Assert.Contains(Iw3RuntimeDownloadDetector.EnglishTimingNote, result.Logs.Select(log => log.EnglishMessage));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_LogsCommandAndTimingDiagnostics()
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        var files = new FakeConversionOutputFileService();
+        var processResult = new ProcessExecutionResult(
+            ExitCode: 0,
+            StandardOutput: string.Empty,
+            StandardError: string.Empty,
+            OutputLines:
+            [
+                new(
+                    ProcessOutputStream.StandardError,
+                    "1/367 [00:05<34:00, 5.67s/it]",
+                    startedAt.AddSeconds(6)),
+            ],
+            Status: ProcessExecutionStatus.Completed,
+            StartedAt: startedAt,
+            EndedAt: startedAt.AddMinutes(2));
+        var runner = new FakeProcessRunner(
+            processResult,
+            onRun: request => files.Add(GetProcessOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest());
+
+        Assert.True(result.Success);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                "Convert iw3 diagnostics: sanitized command line:",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                $"Python executable path: {Paths.PythonExecutable}",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                $"working directory: {Paths.NunifRootDirectory}",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains("NUNIF_HOME=", StringComparison.Ordinal) &&
+                log.EnglishMessage.Contains("TORCH_HOME=", StringComparison.Ordinal) &&
+                log.EnglishMessage.Contains("PYTHONNOUSERSITE=1", StringComparison.Ordinal));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                "iw3 depth model value: ZoeD_Any_N",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                "layout flag: --half-tb",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                "encoder flags set by v3dfy: none",
+                StringComparison.Ordinal));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                "Convert iw3 timing diagnostics:",
+                StringComparison.Ordinal) &&
+                log.EnglishMessage.Contains(
+                    "first process output",
+                    StringComparison.Ordinal) &&
+                log.EnglishMessage.Contains(
+                    "parsed frame count 367",
+                    StringComparison.Ordinal) &&
+                log.EnglishMessage.Contains(
+                    "average throughput",
+                    StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_LiveRuntimeDownloadLine_ReportsOfflineWarningThroughProgress()
+    {
+        var outputLine = new ProcessOutputLine(
+            ProcessOutputStream.StandardError,
+            "Downloading: \"https://github.com/nagadomi/nunif/releases/download/0.0.0/runtime.zip\"",
+            DateTimeOffset.UtcNow);
+        var files = new FakeConversionOutputFileService();
+        var runner = new FakeProcessRunner(
+            CompletedProcess(),
+            outputLineToReport: outputLine,
+            onRun: request => files.Add(GetProcessOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+        var progress = new CapturingProgress();
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(), progress);
+
+        Assert.True(result.Success);
+        Assert.Contains(
+            progress.Updates,
+            update => update.OutputLine == outputLine &&
+                update.DetailEnglish == Iw3RuntimeDownloadDetector.EnglishWarning);
+        Assert.Contains(Iw3RuntimeDownloadDetector.EnglishWarning, result.EnglishSummary);
     }
 
     [Fact]

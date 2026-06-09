@@ -21,11 +21,13 @@ public sealed class InternalToolPathResolver
         PythonExecutable: ResolvePath(Iw3EngineBundleContract.PythonExecutableRelativePath),
         Iw3EngineDirectory: ResolvePath(Iw3EngineBundleContract.EngineDirectoryRelativePath),
         ModelsDirectory: ResolvePath(Iw3EngineBundleContract.ModelsDirectoryRelativePath))
-    {
+        {
         NunifRootDirectory = ResolvePath(Iw3EngineBundleContract.NunifRootDirectoryRelativePath),
         Iw3PackageDirectory = ResolvePath(Iw3EngineBundleContract.Iw3PackageDirectoryRelativePath),
         ModelCatalogFile = ResolvePath(Iw3EngineBundleContract.ModelCatalogRelativePath),
         Iw3CliCapabilitiesFile = ResolvePath(Iw3EngineBundleContract.CliCapabilitiesRelativePath),
+        Iw3DefaultStereoRuntimeDependencyFile =
+            ResolvePath(Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyRelativePath),
     };
 
     private string ResolvePath(string relativePath) =>

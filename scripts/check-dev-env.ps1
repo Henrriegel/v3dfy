@@ -14,6 +14,7 @@ $runtimeDependencyPaths = [ordered]@{
     NunifRootDirectory = 'engine\iw3\nunif'
     Iw3PackageDirectory = 'engine\iw3\nunif\iw3'
     ModelsDirectory = 'engine\iw3\nunif\iw3\pretrained_models'
+    Iw3RowFlowRuntimeDependency = 'engine\iw3\nunif\iw3\pretrained_models\hub\checkpoints\iw3_row_flow_v3_20250627.pth'
     ModelCatalog = 'engine\iw3\nunif\iw3\pretrained_models\MODEL_CATALOG.json'
     Iw3CliCapabilities = 'engine\iw3\IW3_CLI_CAPABILITIES.json'
     EngineManifest = 'engine\iw3\ENGINE_MANIFEST.json'
@@ -182,6 +183,7 @@ function Test-RuntimeDependencyLayout {
     Test-RuntimeDirectory $runtimeDependencyPaths.NunifRootDirectory 'nunif root directory' | Out-Null
     Test-RuntimeDirectory $runtimeDependencyPaths.Iw3PackageDirectory 'iw3 package directory' | Out-Null
     Test-RuntimeDirectory $runtimeDependencyPaths.ModelsDirectory 'iw3 pretrained models directory' | Out-Null
+    Test-RuntimeFile $runtimeDependencyPaths.Iw3RowFlowRuntimeDependency 'iw3 row_flow_v3 runtime dependency'
     Test-Iw3Engine
     Test-Iw3Models
 

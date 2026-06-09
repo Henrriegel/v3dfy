@@ -16,6 +16,7 @@ engine/iw3/
       __main__.py
       pretrained_models/
         MODEL_CATALOG.json # optional v3dfy metadata
+        hub/checkpoints/iw3_row_flow_v3_20250627.pth
         <approved model files>
 tools/ffmpeg/win-x64/
   ffmpeg.exe
@@ -55,16 +56,59 @@ convergence/divergence options. These unconfirmed options must not be treated
 as executable iw3 arguments until the bundled CLI is verified, for example with
 `python -m iw3 -h` during engine-bundle preparation.
 
-The first conservative runtime model mapping is intentionally narrow: when the
-selected local model path is
-`hub/checkpoints/depth_anything_metric_depth_indoor.pt`, v3dfy maps it to the
-iw3 depth model name `ZoeD_Any_N` and adds `--depth-model ZoeD_Any_N`.
+Runtime model mapping is registry based and intentionally conservative. The
+current verified selectable mapping is:
+
+- `hub/checkpoints/depth_anything_metric_depth_indoor.pt` -> iw3
+  `--depth-model ZoeD_Any_N`
+
 No model file path is passed to iw3, and no generic `--model` argument is
-emitted.
+emitted. Compatible model files that do not match a verified registry entry are
+reported diagnostically but are not selectable for conversion.
+
+The registry records friendly English and Spanish names, the verified iw3
+`--depth-model` value, expected local file paths or catalog identifiers, status
+notes, whether a local file is required, and whether the mapping is selectable.
+Do not add new selectable entries unless the exact iw3 depth-model value has
+been verified against the bundled CLI during bundle preparation.
 
 iw3 can download large model files on first run in upstream usage. v3dfy final
 offline packaging must avoid first-run downloads by bundling the required
 runtime and approved model files before release.
+
+The verified nunif build used during development loads the default stereo
+method `row_flow_v3` through `iw3/stereo_model_factory.py`, which calls
+`torch.hub.load_state_dict_from_url` for
+`iw3_row_flow_v3_20250627.pth`. Because iw3 sets its torch hub directory to
+`nunif/iw3/pretrained_models/hub`, the offline bundle must include:
+
+```text
+engine/iw3/nunif/iw3/pretrained_models/hub/checkpoints/iw3_row_flow_v3_20250627.pth
+```
+
+This is a non-depth iw3 runtime dependency. It is not a selectable local depth
+model and must not be downloaded by the installed app at preview or final
+conversion time. Preview and final conversion must resolve this dependency
+from the same bundled runtime layout.
+
+## Preview and conversion parity
+
+The selected-configuration preview must remain pipeline-equivalent to final
+iw3 conversion unless a separate explicit fast-preview mode is introduced and
+documented later. Preview may use a short source clip and preview-specific
+input/output paths, but the bundled Python executable, `engine/iw3/nunif`
+working directory, required offline environment variables, verified depth-model
+mapping, layout flag, and iw3 command flags must match final conversion.
+
+Preview and final conversion record command and timing diagnostics for direct
+comparison. The detailed logs include the sanitized command line, Python path,
+working directory, `NUNIF_HOME`, `TORCH_HOME`, `PYTHONNOUSERSITE`, input and
+output paths, selected model, iw3 depth-model value, layout flag, selected
+quality/intensity/container, start time, first process output time, first
+progress/frame line time, total processing time, parsed frame count when
+available, and average throughput when it can be computed. Preview also records
+the source-clip command and timing so FFmpeg source preparation can be separated
+from bundled Python/iw3 processing.
 
 `IW3_CLI_CAPABILITIES.json` is optional metadata for the exact bundled iw3 CLI.
 It does not replace `ENGINE_MANIFEST.json`, does not make the engine ready by
@@ -110,6 +154,7 @@ Example catalog shape:
     {
       "id": "depth-default",
       "displayName": "Default depth model",
+      "spanishDisplayName": "Modelo de profundidad predeterminado",
       "file": "depth-default.onnx",
       "modelType": "depth-estimation",
       "purpose": "2D to 3D depth generation",
@@ -120,14 +165,15 @@ Example catalog shape:
 ```
 
 When the catalog is missing, compatible model files are treated as unmanaged
-local models. Invalid or placeholder catalogs are reported for diagnostics but
-must not enable model readiness.
+local files for diagnostics. Invalid or placeholder catalogs are reported for
+diagnostics but must not enable model readiness.
 
 Local model selection candidates are derived from compatible files only:
 catalog entries with existing compatible files can provide friendly names, and
-compatible files not listed in the catalog remain selectable as unmanaged local
-models. Building this selection list must not read model binary contents or
-load/run model frameworks.
+compatible files not listed in the catalog remain unmanaged local files. Only
+candidates that also match a verified iw3 depth-model registry entry are
+selectable for conversion. Building this selection list must not read model
+binary contents or load/run model frameworks.
 
 ## Directories
 
@@ -149,6 +195,8 @@ Expected resolved runtime paths:
 - `engine/iw3/nunif/iw3/__main__.py`: iw3 module entry file.
 - `engine/iw3/nunif/iw3/pretrained_models`: approved pretrained models used by
   iw3.
+- `engine/iw3/nunif/iw3/pretrained_models/hub/checkpoints/iw3_row_flow_v3_20250627.pth`:
+  required default iw3 row-flow runtime dependency.
 - `engine/iw3/nunif/iw3/pretrained_models/MODEL_CATALOG.json`: optional local
   model metadata.
 - `engine/iw3/IW3_CLI_CAPABILITIES.json`: optional verified CLI metadata.

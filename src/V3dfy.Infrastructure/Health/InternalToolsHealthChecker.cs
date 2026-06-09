@@ -24,7 +24,11 @@ public sealed class InternalToolsHealthChecker
             Iw3EngineDirectory: GetIw3EngineHealth(paths.Iw3EngineDirectory),
             ModelsDirectory: GetModelsHealth(modelInventory),
             ModelInventory: modelInventory,
-            Iw3CliCapabilities: cliCapabilities);
+            Iw3CliCapabilities: cliCapabilities)
+        {
+            Iw3RuntimeDependencies =
+                GetIw3RuntimeDependenciesHealth(paths.Iw3DefaultStereoRuntimeDependencyFile),
+        };
     }
 
     private static ToolDependencyHealth GetBundledFileHealth(string path) =>
@@ -89,6 +93,17 @@ public sealed class InternalToolsHealthChecker
             ? new(ToolHealthStatus.Found, ToolHealthDetailKind.ModelFilesFound, inventory.ModelsDirectory)
             : new(ToolHealthStatus.Missing, ToolHealthDetailKind.ModelFilesMissing, inventory.ModelsDirectory);
     }
+
+    private static ToolDependencyHealth GetIw3RuntimeDependenciesHealth(string path) =>
+        File.Exists(path)
+            ? new(
+                ToolHealthStatus.Found,
+                ToolHealthDetailKind.Iw3RuntimeDependenciesFound,
+                path)
+            : new(
+                ToolHealthStatus.Missing,
+                ToolHealthDetailKind.Iw3RuntimeDependenciesMissing,
+                path);
 
     private static Iw3CliCapabilitiesManifest GetIw3CliCapabilities(
         string manifestPath)
@@ -300,6 +315,9 @@ public sealed class InternalToolsHealthChecker
         return new(
             Id: GetOptionalString(element, "id"),
             DisplayName: GetOptionalString(element, "displayName"),
+            SpanishDisplayName: FirstNonEmpty(
+                GetOptionalString(element, "spanishDisplayName"),
+                GetOptionalString(element, "displayNameEs")),
             File: normalizedFile,
             ModelType: GetOptionalString(element, "modelType"),
             Purpose: GetOptionalString(element, "purpose"),
@@ -340,6 +358,9 @@ public sealed class InternalToolsHealthChecker
         value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? string.Empty
             : string.Empty;
+
+    private static string FirstNonEmpty(params string[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 
     private static bool GetOptionalBoolean(JsonElement element, string propertyName) =>
         element.TryGetProperty(propertyName, out var value) &&
@@ -429,7 +450,8 @@ public sealed class InternalToolsHealthChecker
     private static bool IsCompatibleModelFile(string file)
     {
         var fileName = Path.GetFileName(file);
-        if (IsPlaceholderOrContractModelFile(fileName))
+        if (IsPlaceholderOrContractModelFile(fileName) ||
+            IsRuntimeDependencyFile(fileName))
         {
             return false;
         }
@@ -452,6 +474,12 @@ public sealed class InternalToolsHealthChecker
         return string.Equals(fileName, ".gitkeep", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(nameWithoutExtension, "placeholder", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsRuntimeDependencyFile(string fileName) =>
+        string.Equals(
+            fileName,
+            Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyFileName,
+            StringComparison.OrdinalIgnoreCase);
 
     private static LocalModelFile CreateLocalModelFile(string modelsDirectory, string file)
     {

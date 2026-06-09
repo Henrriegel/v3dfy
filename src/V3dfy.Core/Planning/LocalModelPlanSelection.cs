@@ -11,7 +11,14 @@ public enum LocalModelPlanSource
 public sealed record LocalModelPlanSelection(
     string DisplayName,
     string RelativePath,
-    LocalModelPlanSource Source)
+    LocalModelPlanSource Source,
+    string Id = "",
+    string FileName = "",
+    string SpanishDisplayName = "",
+    string? Iw3DepthModelName = null,
+    string? MappingKey = null,
+    string EnglishStatusNote = "",
+    string SpanishStatusNote = "")
 {
     public string EnglishSourceText => Source switch
     {
@@ -37,6 +44,13 @@ public sealed record LocalModelPlanSelection(
             RelativePath: candidate.RelativePath,
             Source: candidate.IsCatalogManaged
                 ? LocalModelPlanSource.CatalogMetadata
-                : LocalModelPlanSource.UnmanagedLocalFile);
+                : LocalModelPlanSource.UnmanagedLocalFile,
+            Id: candidate.Id,
+            FileName: candidate.FileName,
+            SpanishDisplayName: candidate.SpanishDisplayName,
+            Iw3DepthModelName: candidate.Iw3DepthModelName,
+            MappingKey: candidate.MappingKey,
+            EnglishStatusNote: candidate.EnglishStatusNote,
+            SpanishStatusNote: candidate.SpanishStatusNote);
     }
 }

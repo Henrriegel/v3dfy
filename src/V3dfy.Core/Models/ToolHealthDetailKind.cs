@@ -12,4 +12,6 @@ public enum ToolHealthDetailKind
     ModelFilesFound,
     ModelsDirectoryMissing,
     ModelFilesMissing,
+    Iw3RuntimeDependenciesFound,
+    Iw3RuntimeDependenciesMissing,
 }

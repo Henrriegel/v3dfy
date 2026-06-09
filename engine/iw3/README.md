@@ -13,5 +13,8 @@ Expected readiness contract:
 - `python/python312._pth` preserving the sibling `..\nunif` import path.
 - `nunif/iw3/__main__.py` as the local iw3 package entry file.
 - Supported model files under `nunif/iw3/pretrained_models`.
+- Required iw3 runtime dependencies under `nunif/iw3/pretrained_models`, including
+  `hub/checkpoints/iw3_row_flow_v3_20250627.pth` for the verified default
+  `row_flow_v3` stereo method.
 
 This README is documentation only and does not make the engine ready.

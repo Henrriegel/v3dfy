@@ -43,6 +43,17 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     }
 
     [Fact]
+    public void Build_UsesBundledRuntimeEnvironment()
+    {
+        var processRequest = _builder.Build(CreateRequest());
+
+        Assert.NotNull(processRequest.EnvironmentVariables);
+        Assert.Equal(Paths.NunifRootDirectory, processRequest.EnvironmentVariables["NUNIF_HOME"]);
+        Assert.Equal("1", processRequest.EnvironmentVariables["PYTHONNOUSERSITE"]);
+        Assert.Equal(Paths.ModelsDirectory, processRequest.EnvironmentVariables["TORCH_HOME"]);
+    }
+
+    [Fact]
     public void Build_SetsIw3EngineDirectoryAsAllowedRootForRealBundle()
     {
         var processRequest = _builder.Build(CreateRequest());

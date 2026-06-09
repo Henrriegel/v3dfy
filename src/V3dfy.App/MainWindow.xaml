@@ -30,14 +30,17 @@
         <Style x:Key="MutedTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
         </Style>
-        <Style TargetType="CheckBox">
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0" />
+        <Style x:Key="TechnicalLogScrollBarStyle"
+               BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+               TargetType="ScrollBar">
             <Style.Triggers>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Opacity" Value="0.58" />
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto" />
+                    <Setter Property="MinWidth" Value="0" />
+                    <Setter Property="Height" Value="10" />
+                    <Setter Property="MinHeight" Value="10" />
+                    <Setter Property="Template"
+                            Value="{StaticResource ModernHorizontalScrollBarTemplate}" />
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -484,11 +487,23 @@
                                         BorderBrush="{DynamicResource CardBorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="4">
-                                    <TextBlock FontFamily="Consolas"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               Text="{Binding ConversionPlanCommandPreviewText}"
-                                               TextWrapping="Wrap" />
+                                    <TextBox MinHeight="70"
+                                             MaxHeight="130"
+                                             AcceptsReturn="True"
+                                             Background="{DynamicResource LogBackgroundBrush}"
+                                             BorderThickness="0"
+                                             FontFamily="Consolas"
+                                             FontSize="11"
+                                             HorizontalScrollBarVisibility="Auto"
+                                             IsReadOnly="True"
+                                             Text="{Binding ConversionPlanCommandPreviewText, Mode=OneWay}"
+                                             TextWrapping="NoWrap"
+                                             VerticalScrollBarVisibility="Auto">
+                                        <TextBox.Resources>
+                                            <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
+                                                   TargetType="ScrollBar" />
+                                        </TextBox.Resources>
+                                    </TextBox>
                                 </Border>
                             </StackPanel>
                         </TabItem>
@@ -528,10 +543,10 @@
                              FontSize="12"
                              Foreground="{DynamicResource PrimaryTextBrush}"
                              ItemsSource="{Binding ConversionLogs}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
                              ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBox.Resources>
-                            <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                            <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
                                    TargetType="ScrollBar" />
                         </ListBox.Resources>
                         <ListBox.ItemContainerStyle>
@@ -546,7 +561,7 @@
                             <DataTemplate>
                                 <TextBlock Foreground="{DynamicResource PrimaryTextBrush}"
                                            Text="{Binding DisplayText}"
-                                           TextWrapping="Wrap" />
+                                           TextWrapping="NoWrap" />
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -671,6 +686,52 @@
                                                    TargetType="ScrollBar" />
                                         </ScrollViewer.Resources>
                                         <StackPanel>
+                                            <Border Margin="0,0,0,12"
+                                                    Padding="10"
+                                                    Background="{DynamicResource InputBackgroundBrush}"
+                                                    BorderBrush="{DynamicResource CardBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="5"
+                                                    Visibility="{Binding PreviewRequirementVisibility}">
+                                                <StackPanel>
+                                                    <TextBlock Margin="0,0,0,6"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding PreviewStepTitleText}" />
+                                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                                               Margin="0,0,0,8"
+                                                               Text="{Binding PreviewRequiredInstructionText}"
+                                                               TextWrapping="Wrap" />
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="8" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                                       Text="{Binding PreviewFromLabel}" />
+                                                            <TextBox Text="{Binding PreviewFromText,
+                                                                                    Mode=TwoWay,
+                                                                                    UpdateSourceTrigger=PropertyChanged}"
+                                                                     IsEnabled="{Binding CanEditPreviewTimeRange}" />
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="2">
+                                                            <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                                       Text="{Binding PreviewToLabel}" />
+                                                            <TextBox Text="{Binding PreviewToText,
+                                                                                    Mode=TwoWay,
+                                                                                    UpdateSourceTrigger=PropertyChanged}"
+                                                                     IsEnabled="{Binding CanEditPreviewTimeRange}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                    <TextBlock Margin="0,4,0,0"
+                                                               Foreground="#B91C1C"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding PreviewTimeRangeValidationText}"
+                                                               TextWrapping="Wrap"
+                                                               Visibility="{Binding PreviewTimeRangeValidationVisibility}" />
+                                                </StackPanel>
+                                            </Border>
                                             <TextBlock Text="{Binding ConversionReadinessStatusLabel}"
                                                        Style="{StaticResource MutedTextStyle}" />
                                             <TextBlock Margin="0,2,0,8"
@@ -692,25 +753,27 @@
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </ScrollViewer>
-                                    <Button HorizontalAlignment="Stretch"
-                                            Grid.Row="1"
-                                            Margin="0,10,0,0"
-                                            AutomationProperties.AutomationId="StartConversionButton"
-                                            Command="{Binding StartConversionCommand}"
-                                            Content="{Binding StartConversionText}">
-                                        <Button.Style>
-                                            <Style BasedOn="{StaticResource PrimaryCtaButtonStyle}"
-                                                   TargetType="Button">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsConversionRunning}"
-                                                                 Value="True">
-                                                        <Setter Property="Background" Value="#B91C1C" />
-                                                        <Setter Property="BorderBrush" Value="#B91C1C" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
+                                    <Grid Grid.Row="1"
+                                          Margin="0,10,0,0">
+                                        <Button HorizontalAlignment="Stretch"
+                                                AutomationProperties.AutomationId="GeneratePreviewPrimaryActionButton"
+                                                Command="{Binding GeneratePreviewCommand}"
+                                                Content="{Binding GeneratePreviewText}"
+                                                Style="{StaticResource PrimaryCtaButtonStyle}"
+                                                Visibility="{Binding GeneratePreviewPrimaryActionVisibility}" />
+                                        <Button HorizontalAlignment="Stretch"
+                                                AutomationProperties.AutomationId="StartConversionButton"
+                                                Command="{Binding StartConversionCommand}"
+                                                Content="{Binding StartConversionText}"
+                                                Style="{StaticResource PrimaryCtaButtonStyle}"
+                                                Visibility="{Binding ConvertPrimaryActionVisibility}" />
+                                        <Button HorizontalAlignment="Stretch"
+                                                AutomationProperties.AutomationId="CancelConversionPrimaryActionButton"
+                                                Command="{Binding CancelConversionCommand}"
+                                                Content="{Binding CancelConversionText}"
+                                                Style="{StaticResource DestructiveButtonStyle}"
+                                                Visibility="{Binding CancelConversionPrimaryActionVisibility}" />
+                                    </Grid>
                                 </Grid>
                             </TabItem>
                         </TabControl>
@@ -734,50 +797,36 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Style="{StaticResource SectionTitleStyle}"
                                        Text="{Binding ActivityLogTitle}" />
-                            <Button Grid.Column="1"
-                                    Margin="0,0,0,8"
-                                    Padding="10,5"
-                                    Command="{Binding ClearLogsCommand}"
-                                    Content="{Binding ClearText}" />
+                            <StackPanel Grid.Column="1"
+                                        Margin="0,0,0,8"
+                                        Orientation="Horizontal">
+                                <Button Margin="0,0,8,0"
+                                        Padding="10,5"
+                                        Command="{Binding ViewActivityLogCommand}"
+                                        Content="{Binding ViewLogText}"
+                                        Style="{StaticResource SecondaryButtonStyle}" />
+                                <Button Padding="10,5"
+                                        Command="{Binding ClearLogsCommand}"
+                                        Content="{Binding ClearText}" />
+                            </StackPanel>
                         </Grid>
-                        <ListBox Grid.Row="1"
-                                 Padding="8"
+                        <TextBox Grid.Row="1"
+                                 MinHeight="160"
+                                 AcceptsReturn="True"
                                  Background="{DynamicResource LogBackgroundBrush}"
                                  BorderBrush="{DynamicResource CardBorderBrush}"
-                                 Foreground="{DynamicResource PrimaryTextBrush}"
-                                 ItemsSource="{Binding Logs}"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
-                            <ListBox.Resources>
-                                <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
-                                       TargetType="ScrollBar">
-                                    <Style.Triggers>
-                                        <Trigger Property="Orientation" Value="Horizontal">
-                                            <Setter Property="Width" Value="Auto" />
-                                            <Setter Property="MinWidth" Value="0" />
-                                            <Setter Property="Height" Value="10" />
-                                            <Setter Property="MinHeight" Value="10" />
-                                            <Setter Property="Template"
-                                                    Value="{StaticResource ModernHorizontalScrollBarTemplate}" />
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ListBox.Resources>
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="Foreground"
-                                            Value="{DynamicResource PrimaryTextBrush}" />
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="Padding" Value="2" />
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Foreground="{DynamicResource PrimaryTextBrush}"
-                                               Text="{Binding DisplayText}"
-                                               TextWrapping="Wrap" />
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                                 FontFamily="Consolas"
+                                 FontSize="12"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 IsReadOnly="True"
+                                 Text="{Binding ActivityLogPanelText, Mode=OneWay}"
+                                 TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto">
+                            <TextBox.Resources>
+                                <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
+                                       TargetType="ScrollBar" />
+                            </TextBox.Resources>
+                        </TextBox>
                     </Grid>
                 </Border>
 
@@ -841,12 +890,32 @@
             </Grid>
         </Grid>
 
+        <Border Grid.RowSpan="2"
+                Panel.ZIndex="20"
+                MaxWidth="420"
+                Margin="0,8,0,0"
+                Padding="14,9"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                AutomationProperties.AutomationId="LogCopyNotification"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource AccentBrush}"
+                BorderThickness="1"
+                CornerRadius="6"
+                IsHitTestVisible="False"
+                Visibility="{Binding LogCopyNotificationVisibility}">
+            <TextBlock FontWeight="SemiBold"
+                       Text="{Binding LogCopyNotificationText}"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap" />
+        </Border>
+
         <Grid Grid.RowSpan="2"
               Panel.ZIndex="10"
               Style="{StaticResource V3dfyModalOverlayStyle}"
               Visibility="{Binding ModalOverlayVisibility}">
-            <Border Width="680"
-                    MaxHeight="520"
+            <Border Width="760"
+                    MaxHeight="650"
                     MinHeight="360"
                     Margin="24"
                     HorizontalAlignment="Center"
@@ -860,8 +929,27 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Style="{StaticResource V3dfyModalTitleTextStyle}"
-                               Text="{Binding ActiveModalTitleText}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource V3dfyModalTitleTextStyle}"
+                                   Text="{Binding ActiveModalTitleText}" />
+                        <StackPanel Grid.Column="1"
+                                    Margin="16,0,0,10"
+                                    HorizontalAlignment="Right"
+                                    Orientation="Horizontal"
+                                    Visibility="{Binding PreviewMetricsHeaderVisibility}">
+                            <TextBlock Margin="0,0,10,0"
+                                       Text="{Binding PreviewCpuUsageText}" />
+                            <TextBlock Margin="0,0,10,0"
+                                       Text="{Binding PreviewRamUsageText}" />
+                            <TextBlock Margin="0,0,10,0"
+                                       Text="{Binding PreviewGpuUsageText}" />
+                            <TextBlock Text="{Binding PreviewVramUsageText}" />
+                        </StackPanel>
+                    </Grid>
 
                     <TextBox Grid.Row="1"
                              MinHeight="220"
@@ -870,14 +958,14 @@
                              BorderBrush="{DynamicResource CardBorderBrush}"
                              FontFamily="Consolas"
                              FontSize="12"
-                             HorizontalScrollBarVisibility="Disabled"
+                             HorizontalScrollBarVisibility="Auto"
                              IsReadOnly="True"
                              Text="{Binding TechnicalDetailsBodyText, Mode=OneWay}"
-                             TextWrapping="Wrap"
+                             TextWrapping="NoWrap"
                              VerticalScrollBarVisibility="Auto"
                              Visibility="{Binding TechnicalDetailsModalContentVisibility}">
                         <TextBox.Resources>
-                            <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                            <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
                                    TargetType="ScrollBar" />
                         </TextBox.Resources>
                     </TextBox>
@@ -901,6 +989,217 @@
                         </TextBox.Resources>
                     </TextBox>
 
+                    <TextBox Grid.Row="1"
+                             MinHeight="220"
+                             AcceptsReturn="True"
+                             Background="{DynamicResource LogBackgroundBrush}"
+                             BorderBrush="{DynamicResource CardBorderBrush}"
+                             FontFamily="Consolas"
+                             FontSize="12"
+                             HorizontalScrollBarVisibility="Auto"
+                             IsReadOnly="True"
+                             Text="{Binding ActivityLogModalText, Mode=OneWay}"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             Visibility="{Binding ActivityLogModalContentVisibility}">
+                        <TextBox.Resources>
+                            <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
+                                   TargetType="ScrollBar" />
+                        </TextBox.Resources>
+                    </TextBox>
+
+                    <Grid Grid.Row="1"
+                          Visibility="{Binding PreviewGeneratingModalContentVisibility}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="10" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PreviewGeneratingMessageText}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,8,0,0"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding PreviewStageText}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="2"
+                                   Margin="0,4,0,0"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding PreviewStatusText}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="3"
+                                   Margin="0,4,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PreviewModalDetailText}"
+                                   TextWrapping="Wrap" />
+                        <StackPanel Grid.Row="4"
+                                    Margin="0,8,0,0">
+                            <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Text="{Binding PreviewEngineText}"
+                                       ToolTip="{Binding PreviewRunningWithText}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Margin="0,2,0,0"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Text="{Binding PreviewGpuMetricsNoteText}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Margin="0,2,0,0"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Text="{Binding PreviewGpuMetricsStatusText}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ListBox x:Name="PreviewGenerationLogList"
+                                 Grid.Row="6"
+                                 MinHeight="240"
+                                 Padding="8"
+                                 Background="{DynamicResource LogBackgroundBrush}"
+                                 BorderBrush="{DynamicResource CardBorderBrush}"
+                                 FontFamily="Consolas"
+                                 FontSize="12"
+                                 Foreground="{DynamicResource PrimaryTextBrush}"
+                                 ItemsSource="{Binding PreviewGenerationLogs}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.Resources>
+                                <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
+                                       TargetType="ScrollBar" />
+                            </ListBox.Resources>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="Padding" Value="0" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBox Background="Transparent"
+                                             BorderThickness="0"
+                                             FontFamily="Consolas"
+                                             FontSize="12"
+                                             HorizontalScrollBarVisibility="Disabled"
+                                             IsReadOnly="True"
+                                             Padding="0"
+                                             Text="{Binding ., Mode=OneWay}"
+                                             TextWrapping="NoWrap" />
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+
+                    <Grid Grid.Row="1"
+                          IsVisibleChanged="OnPreviewReadyModalVisibilityChanged"
+                          Visibility="{Binding PreviewReadyModalContentVisibility}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="12" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PreviewReadyMessageText}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,12,0,0"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding PreviewStatusText}"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Grid.Row="2"
+                                   Margin="0,4,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PreviewOutputPathText}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding PreviewOutputPathVisibility}" />
+                        <Border Grid.Row="4"
+                                MinHeight="280"
+                                Background="{DynamicResource LogBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Visibility="{Binding EmbeddedPreviewVisibility}">
+                            <MediaElement x:Name="PreviewMediaElement"
+                                          LoadedBehavior="Manual"
+                                          MediaEnded="OnPreviewMediaEnded"
+                                          MediaFailed="OnPreviewMediaFailed"
+                                          MediaOpened="OnPreviewMediaOpened"
+                                          ScrubbingEnabled="True"
+                                          Source="{Binding PreviewMediaSource}"
+                                          Stretch="Uniform"
+                                          UnloadedBehavior="Manual"
+                                          Volume="0.7" />
+                        </Border>
+                        <Grid Grid.Row="5"
+                              Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="90" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="PreviewPlayPauseButton"
+                                    Margin="0,0,8,0"
+                                    AutomationProperties.Name="{Binding PreviewPlayText}"
+                                    Click="OnPreviewPlayPauseClicked"
+                                    Content="&#xE768;"
+                                    Style="{StaticResource IconButtonStyle}"
+                                    ToolTip="{Binding PreviewPlayText}" />
+                            <Slider x:Name="PreviewTimelineSlider"
+                                    Grid.Column="1"
+                                    Margin="0,0,8,0"
+                                    Minimum="0"
+                                    PreviewMouseDown="OnPreviewTimelinePreviewMouseDown"
+                                    PreviewMouseUp="OnPreviewTimelinePreviewMouseUp"
+                                    Style="{StaticResource PreviewSliderStyle}"
+                                    ValueChanged="OnPreviewTimelineValueChanged" />
+                            <TextBlock x:Name="PreviewTimeText"
+                                       Grid.Column="2"
+                                       MinWidth="92"
+                                       Margin="0,0,12,0"
+                                       VerticalAlignment="Center"
+                                       Text="00:00 / 00:00" />
+                            <TextBlock x:Name="PreviewVolumeIcon"
+                                       Grid.Column="3"
+                                       Margin="0,0,8,0"
+                                       AutomationProperties.Name="{Binding PreviewVolumeText}"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="15"
+                                       VerticalAlignment="Center"
+                                       Text="&#xE767;"
+                                       ToolTip="{Binding PreviewVolumeText}" />
+                            <Slider x:Name="PreviewVolumeSlider"
+                                    Grid.Column="4"
+                                    Minimum="0"
+                                    Maximum="1"
+                                    PreviewMouseLeftButtonDown="OnPreviewVolumeSliderPreviewMouseLeftButtonDown"
+                                    Style="{StaticResource PreviewSliderStyle}"
+                                    Value="0.7"
+                                    ValueChanged="OnPreviewVolumeValueChanged" />
+                            <ToggleButton x:Name="PreviewMuteToggleButton"
+                                          Grid.Column="5"
+                                          Margin="8,0,0,0"
+                                          AutomationProperties.Name="{Binding PreviewMuteText}"
+                                          Checked="OnPreviewMuteChanged"
+                                          Content="&#xE74F;"
+                                          Style="{StaticResource IconToggleButtonStyle}"
+                                          ToolTip="{Binding PreviewMuteText}"
+                                          Unchecked="OnPreviewMuteChanged" />
+                        </Grid>
+                        <TextBlock x:Name="PreviewPlaybackStatusText"
+                                   Grid.Row="6"
+                                   Margin="0,8,0,0"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   Text="{Binding PreviewPlaybackFallbackText}"
+                                   TextWrapping="Wrap" />
+                    </Grid>
+
                     <TextBlock Grid.Row="1"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                Text="{Binding ReplaceSelectedVideoBodyText}"
@@ -920,6 +1219,38 @@
                                 Command="{Binding ConfirmReplaceVideoCommand}"
                                 Content="{Binding ReplaceVideoConfirmText}"
                                 Visibility="{Binding ReplaceVideoConfirmationModalContentVisibility}" />
+                        <Button AutomationProperties.AutomationId="CopyFullLogButton"
+                                Command="{Binding CopyFullLogCommand}"
+                                Content="{Binding CopyFullLogText}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding ActivityLogModalContentVisibility}" />
+                        <Button Margin="8,0,0,0"
+                                AutomationProperties.AutomationId="CloseActivityLogButton"
+                                Command="{Binding CloseActivityLogCommand}"
+                                Content="{Binding CloseDialogText}"
+                                Visibility="{Binding ActivityLogModalContentVisibility}" />
+                        <Button AutomationProperties.AutomationId="CopyPreviewLogButton"
+                                Margin="8,0,0,0"
+                                Command="{Binding CopyPreviewLogCommand}"
+                                Content="{Binding CopyPreviewLogText}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding PreviewGeneratingModalContentVisibility}" />
+                        <Button AutomationProperties.AutomationId="CancelPreviewButton"
+                                Margin="8,0,0,0"
+                                Command="{Binding CancelPreviewCommand}"
+                                Content="{Binding CancelPreviewText}"
+                                Style="{StaticResource DestructiveButtonStyle}"
+                                Visibility="{Binding PreviewGeneratingModalContentVisibility}" />
+                        <Button AutomationProperties.AutomationId="OpenPreviewExternallyButton"
+                                Command="{Binding OpenPreviewCommand}"
+                                Content="{Binding OpenPreviewExternallyText}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding PreviewReadyModalContentVisibility}" />
+                        <Button Margin="8,0,0,0"
+                                AutomationProperties.AutomationId="ContinuePreviewButton"
+                                Command="{Binding ContinuePreviewCommand}"
+                                Content="{Binding ContinuePreviewText}"
+                                Visibility="{Binding PreviewReadyModalContentVisibility}" />
                         <Button AutomationProperties.AutomationId="CloseTechnicalDetailsButton"
                                 Command="{Binding CloseTechnicalDetailsCommand}"
                                 Content="{Binding CloseDialogText}"

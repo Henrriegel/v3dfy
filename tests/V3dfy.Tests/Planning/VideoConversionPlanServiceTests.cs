@@ -219,6 +219,18 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
+    public void Create_MissingIw3RuntimeDependency_ProducesDryRun()
+    {
+        var plan = CreatePlan(healthStatus: CompleteHealth() with
+        {
+            Iw3RuntimeDependencies = ToolHealthStatus.Missing,
+        });
+
+        Assert.True(plan.IsDryRun);
+        Assert.Equal(ConversionDryRunReason.MissingLocalAiBundle, plan.DryRunReason);
+    }
+
+    [Fact]
     public void Create_CompleteHealth_ProducesReadyPlan()
     {
         var plan = CreatePlan();
@@ -285,6 +297,16 @@ public sealed class VideoConversionPlanServiceTests
     {
         var plan = CreatePlan(selectedLocalModel: RecognizedDepthModel());
 
+        Assert.NotNull(plan.SelectedLocalModel);
+        Assert.Equal("Depth Anything Metric Indoor", plan.SelectedLocalModel.DisplayName);
+        Assert.Equal(
+            Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
+            plan.SelectedLocalModel.Iw3DepthModelName);
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains(
+                $"iw3 depth model: {Iw3DepthModelMapper.ZoeDAnyNDepthModelName}",
+                StringComparison.Ordinal));
         Assert.Contains("--depth-model ZoeD_Any_N", plan.CommandPreview);
         Assert.DoesNotContain("--model", plan.CommandPreview);
         Assert.DoesNotContain(

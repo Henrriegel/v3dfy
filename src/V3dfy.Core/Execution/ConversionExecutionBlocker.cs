@@ -8,4 +8,5 @@ public enum ConversionExecutionBlocker
     ReadinessUnknown,
     MissingLocalDependencies,
     FeatureDisabled,
+    PreviewRequired,
 }

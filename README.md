@@ -47,6 +47,10 @@ still in progress.
 - Conversion plan with output profile, container, quality, 3D intensity, layout,
   local model, and open-after-finish options.
 - Generated iw3 command preview.
+- Required selected-configuration preview generation for the currently selected
+  source, model, layout, intensity, quality, and profile before final
+  conversion can start.
+- Copyable Activity log modal for diagnostics.
 - Live conversion mode with stdout/stderr log, summary, cancel button, and
   process metrics.
 - Safer partial output handling so failed or canceled conversions do not leave a
@@ -105,13 +109,15 @@ unless they are intentionally handled through an approved artifact strategy.
 4. Review visible, editable settings such as container, quality, intensity,
    3D layout, local model, LG copy options, and open-after-finish behavior.
 5. Review the conversion plan and iw3 command preview.
-6. Start conversion.
-7. v3dfy runs iw3 against a temporary partial output path.
-8. If iw3 succeeds and the partial output exists, v3dfy promotes the partial file
+6. Generate a short preview for the currently selected configuration.
+7. Review the preview and click Continue to accept it.
+8. Start conversion.
+9. v3dfy runs iw3 against a temporary partial output path.
+10. If iw3 succeeds and the partial output exists, v3dfy promotes the partial file
    to the final primary output path.
-9. If enabled, v3dfy creates an optional LG-compatible MP4 copy from the
+11. If enabled, v3dfy creates an optional LG-compatible MP4 copy from the
    completed primary output using bundled FFmpeg.
-10. If requested, v3dfy opens the successful final output with the OS default
+12. If requested, v3dfy opens the successful final output with the OS default
     player.
 
 Canceled or failed conversions clean up partial outputs and do not overwrite a
@@ -170,6 +176,56 @@ successful process exit and finalization check.
 
 Canceled or failed conversions delete partial outputs when safe. Source videos
 are not deleted.
+
+### Preview outputs
+
+The Preview step in the right-side Conversion area generates one short clip for
+the currently selected configuration only. It does not preview all models, does
+not create a comparison table, and does not score or benchmark models for end
+users.
+
+Preview generation first asks bundled FFmpeg to create a short source clip, then
+runs bundled Python/iw3 against that short clip. The preview source clip uses a
+fast temporary MKV stream-copy path first, mapping only the first video stream
+and optional first audio stream while excluding subtitles, data streams, and
+attachments. If that safe stream-copy attempt fails, v3dfy retries once with a
+safe H.264/AAC reencode into the same temporary preview cache. The default
+editable range is 00:10:00 to 00:10:15 when analysis shows the source is long
+enough; otherwise it starts at 00:00:00 and uses up to 15 seconds. The maximum
+preview duration is 1 minute 30 seconds.
+
+Preview files are stored under:
+
+```text
+%LOCALAPPDATA%\v3dfy\previews
+```
+
+Preview output names include the source base name, mapped model key, 3D layout
+suffix, intensity, and timestamp. Preview partial files are promoted only after
+the process succeeds. Canceled or failed previews clean up partial/temp preview
+files. Source videos and final conversion outputs are never deleted by preview
+cleanup.
+
+A ready preview must be accepted with Continue before final conversion unlocks.
+It becomes outdated when the source, selected mapped model, output profile,
+output container, 3D layout, 3D intensity, quality, or preview range changes.
+Outdated previews lock final conversion again until a new preview is generated
+and accepted. On app startup, stale files in the preview cache older than 24
+hours are deleted.
+
+### Local depth model mapping
+
+v3dfy uses an explicit iw3 depth-model registry. The current selectable mapping
+is:
+
+```text
+hub/checkpoints/depth_anything_metric_depth_indoor.pt -> --depth-model ZoeD_Any_N
+```
+
+The UI shows mapped local models with friendly names and the conversion plan
+shows the raw local file/catalog source plus the exact iw3 `--depth-model` value.
+Compatible model files that are not mapped remain diagnostic only and are not
+selectable for conversion.
 
 ## Known limitations
 

@@ -40,6 +40,18 @@ public sealed class InternalToolsTests
         Assert.Equal(
             Path.Combine(baseDirectory, "engine", "iw3", "IW3_CLI_CAPABILITIES.json"),
             paths.Iw3CliCapabilitiesFile);
+        Assert.Equal(
+            Path.Combine(
+                baseDirectory,
+                "engine",
+                "iw3",
+                "nunif",
+                "iw3",
+                "pretrained_models",
+                "hub",
+                "checkpoints",
+                "iw3_row_flow_v3_20250627.pth"),
+            paths.Iw3DefaultStereoRuntimeDependencyFile);
     }
 
     [Fact]
@@ -61,6 +73,18 @@ public sealed class InternalToolsTests
         Assert.Equal(
             Path.Combine(normalizedBaseDirectory, "engine", "iw3", "IW3_CLI_CAPABILITIES.json"),
             paths.Iw3CliCapabilitiesFile);
+        Assert.Equal(
+            Path.Combine(
+                normalizedBaseDirectory,
+                "engine",
+                "iw3",
+                "nunif",
+                "iw3",
+                "pretrained_models",
+                "hub",
+                "checkpoints",
+                "iw3_row_flow_v3_20250627.pth"),
+            paths.Iw3DefaultStereoRuntimeDependencyFile);
     }
 
     [Fact]
@@ -149,10 +173,13 @@ public sealed class InternalToolsTests
             """{"version":"1.0.0"}""");
         File.WriteAllText(Path.Combine(paths.Iw3PackageDirectory, "__main__.py"), "# entrypoint");
         File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.pt"), "model");
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.Iw3DefaultStereoRuntimeDependencyFile)!);
+        File.WriteAllText(paths.Iw3DefaultStereoRuntimeDependencyFile, "row-flow");
 
         var health = new InternalToolsHealthChecker().CheckDetailed(paths);
 
         Assert.True(health.IsComplete);
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3RuntimeDependencies.Status);
         Assert.Equal(ToolHealthStatus.Found, health.Iw3EngineDirectory.Status);
         Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
         var model = Assert.Single(health.ModelInventory.CompatibleModelFiles);
@@ -438,6 +465,31 @@ public sealed class InternalToolsTests
 
         Assert.Equal(ToolHealthStatus.Found, health.ModelsDirectory.Status);
         Assert.Equal(ToolHealthDetailKind.ModelFilesFound, health.ModelsDirectory.DetailKind);
+        Assert.Equal(ToolHealthStatus.Missing, health.Iw3RuntimeDependencies.Status);
+        Assert.False(health.IsComplete);
+        Assert.Equal(
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing,
+            health.Iw3RuntimeDependencies.DetailKind);
+        Assert.Equal(
+            paths.Iw3DefaultStereoRuntimeDependencyFile,
+            health.Iw3RuntimeDependencies.ExpectedPath);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_MarksRuntimeDependenciesFound_WhenRowFlowCheckpointExists()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(paths.ModelsDirectory);
+        File.WriteAllText(Path.Combine(paths.ModelsDirectory, "depth-model.safetensors"), "model");
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.Iw3DefaultStereoRuntimeDependencyFile)!);
+        File.WriteAllText(paths.Iw3DefaultStereoRuntimeDependencyFile, "row-flow");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Found, health.Iw3RuntimeDependencies.Status);
+        Assert.Equal(
+            ToolHealthDetailKind.Iw3RuntimeDependenciesFound,
+            health.Iw3RuntimeDependencies.DetailKind);
     }
 
     [Fact]

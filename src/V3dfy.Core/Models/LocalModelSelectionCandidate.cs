@@ -8,13 +8,19 @@ public sealed record LocalModelSelectionCandidate(
     string Extension,
     string ModelType,
     string Purpose,
-    bool IsCatalogManaged)
+    bool IsCatalogManaged,
+    string SpanishDisplayName = "",
+    string? Iw3DepthModelName = null,
+    string? MappingKey = null,
+    string EnglishStatusNote = "",
+    string SpanishStatusNote = "")
 {
     public static LocalModelSelectionCandidate FromCatalogEntry(
         LocalModelCatalogEntry entry,
         LocalModelFile modelFile)
     {
         var displayName = FirstNonEmpty(entry.DisplayName, entry.Id, modelFile.FileName);
+        var spanishDisplayName = FirstNonEmpty(entry.SpanishDisplayName, displayName);
 
         return new(
             Id: FirstNonEmpty(entry.Id, modelFile.RelativePath),
@@ -24,7 +30,8 @@ public sealed record LocalModelSelectionCandidate(
             Extension: modelFile.Extension,
             ModelType: entry.ModelType,
             Purpose: entry.Purpose,
-            IsCatalogManaged: true);
+            IsCatalogManaged: true,
+            SpanishDisplayName: spanishDisplayName);
     }
 
     public static LocalModelSelectionCandidate FromUnmanagedFile(LocalModelFile modelFile) => new(

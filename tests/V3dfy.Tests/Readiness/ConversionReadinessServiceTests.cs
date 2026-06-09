@@ -50,6 +50,20 @@ public sealed class ConversionReadinessServiceTests
     }
 
     [Fact]
+    public void Evaluate_WhenIw3RuntimeDependencyIsMissing_BlocksConversion()
+    {
+        var readiness = _service.Evaluate(CompleteHealth() with
+        {
+            Iw3RuntimeDependencies = ToolHealthStatus.Missing,
+        });
+
+        Assert.False(readiness.CanConvert);
+        Assert.Contains(
+            readiness.Issues,
+            issue => issue.EnglishMessage == "Missing iw3 runtime dependency.");
+    }
+
+    [Fact]
     public void Evaluate_WhenFfmpegOrFfprobeAreMissing_BlocksConversion()
     {
         var readiness = _service.Evaluate(CompleteHealth() with
@@ -90,7 +104,12 @@ public sealed class ConversionReadinessServiceTests
                 @"C:\v3dfy\engine\iw3"),
             ModelsDirectory: MissingDependency(
                 ToolHealthDetailKind.ModelFilesMissing,
-                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models")));
+                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models"))
+        {
+            Iw3RuntimeDependencies = MissingDependency(
+                ToolHealthDetailKind.Iw3RuntimeDependenciesMissing,
+                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models\hub\checkpoints\iw3_row_flow_v3_20250627.pth"),
+        });
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(
@@ -108,6 +127,14 @@ public sealed class ConversionReadinessServiceTests
             issue => issue.EnglishMessage.Contains(
                 @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models",
                 StringComparison.Ordinal));
+        Assert.Contains(
+            readiness.Issues,
+            issue => issue.EnglishMessage.Contains(
+                "Missing iw3 runtime dependency",
+                StringComparison.Ordinal) &&
+                issue.EnglishMessage.Contains(
+                    "iw3_row_flow_v3_20250627.pth",
+                    StringComparison.Ordinal));
     }
 
     [Fact]

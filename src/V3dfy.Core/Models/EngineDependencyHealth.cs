@@ -33,7 +33,19 @@ public sealed record EngineDependencyHealth(
         Ffprobe.Status,
         Python.Status,
         Iw3EngineDirectory.Status,
-        ModelsDirectory.Status);
+        ModelsDirectory.Status)
+    {
+        Iw3RuntimeDependencies = Iw3RuntimeDependencies.Status,
+    };
 
     public bool IsComplete => Summary.IsComplete;
+
+    public ToolDependencyHealth Iw3RuntimeDependencies { get; init; } = new(
+        ToolHealthStatus.Found,
+        ToolHealthDetailKind.Iw3RuntimeDependenciesFound,
+        Path.Combine(
+            ModelsDirectory.ExpectedPath,
+            "hub",
+            "checkpoints",
+            Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyFileName));
 }

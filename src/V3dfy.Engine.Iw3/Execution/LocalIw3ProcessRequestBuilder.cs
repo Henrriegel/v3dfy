@@ -37,6 +37,7 @@ public class LocalIw3ProcessRequestBuilder
             ExecutablePath: command.ExecutablePath,
             Arguments: command.Arguments,
             WorkingDirectory: request.ExpectedToolPaths.NunifRootDirectory,
+            EnvironmentVariables: Iw3BundledRuntimeEnvironment.Create(request.ExpectedToolPaths),
             AllowedRootDirectory: request.ExpectedToolPaths.Iw3EngineDirectory);
     }
 

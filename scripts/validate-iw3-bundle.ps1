@@ -288,6 +288,13 @@ function Test-ModelsDirectory {
         -Message "no compatible model files found under: $modelsPath"
 }
 
+function Test-Iw3RuntimeDependencies {
+    param([string]$EngineRoot)
+
+    $dependencyPath = Join-Path $EngineRoot 'nunif\iw3\pretrained_models\hub\checkpoints\iw3_row_flow_v3_20250627.pth'
+    Test-RequiredFile $dependencyPath 'iw3 row_flow_v3 runtime dependency' | Out-Null
+}
+
 function Test-CliCapabilities {
     param([string]$EngineRoot)
 
@@ -375,6 +382,7 @@ else {
     Test-RequiredFile (Join-Path $bundlePath 'python\python312._pth') 'embedded Python path file' | Out-Null
     Test-EngineEntry $bundlePath
     Test-ModelsDirectory $bundlePath
+    Test-Iw3RuntimeDependencies $bundlePath
     Test-CliCapabilities $bundlePath
 }
 

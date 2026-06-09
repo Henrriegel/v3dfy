@@ -26,7 +26,9 @@ Packaging must preserve that inspectable layout, including
 `engine/iw3/ENGINE_MANIFEST.json`, `engine/iw3/python/python.exe`,
 `engine/iw3/python/python312._pth`, an iw3 entry file at
 `engine/iw3/nunif/iw3/__main__.py`, and
-`engine/iw3/nunif/iw3/pretrained_models`.
+`engine/iw3/nunif/iw3/pretrained_models`, including required non-depth iw3
+runtime dependencies such as
+`engine/iw3/nunif/iw3/pretrained_models/hub/checkpoints/iw3_row_flow_v3_20250627.pth`.
 
 The staged bundle root contains `python` and `nunif` as sibling folders. Keep
 that relationship intact because the embedded `python312._pth` uses

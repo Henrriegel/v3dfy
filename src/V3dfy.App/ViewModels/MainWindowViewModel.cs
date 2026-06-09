@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Windows;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
@@ -12,10 +13,12 @@ using V3dfy.Core.Execution;
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
+using V3dfy.Core.Preview;
 using V3dfy.Core.Processes;
 using V3dfy.Core.Recommendations;
 using V3dfy.Core.Readiness;
 using V3dfy.Core.Workflow;
+using V3dfy.Engine.Iw3.Commands;
 using V3dfy.Engine.Iw3.Execution;
 using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
@@ -44,6 +47,7 @@ public sealed class MainWindowViewModel : ObservableObject
         EmbeddedPython,
         Iw3Engine,
         Models,
+        Iw3RuntimeDependency,
     }
 
     private readonly InternalToolPaths _toolPaths;
@@ -59,9 +63,16 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ConversionExecutionRequestValidator _conversionExecutionRequestValidator = new();
     private readonly IConversionExecutor _conversionExecutor;
     private readonly ConversionOutputOpenService _conversionOutputOpenService;
+    private readonly IIw3PreviewExecutor _previewExecutor;
+    private readonly PreviewCachePathService _previewCachePathService;
+    private readonly PreviewCacheCleaner _previewCacheCleaner;
+    private readonly IPreviewCacheFileService _previewCacheFileService;
+    private readonly IPreviewCachePathProvider _previewCachePathProvider;
+    private readonly PreviewOutputOpenService _previewOutputOpenService;
     private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
     private readonly ConversionWorkflowState _workflowState = new();
+    private readonly StringBuilder _previewGenerationLogTextBuilder = new();
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
@@ -72,25 +83,52 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoConversionPlan? _conversionPlan;
     private ConversionReadiness? _conversionReadiness;
     private ConversionExecutionState _conversionExecutionState = ConversionExecutionState.NotStarted();
+    private PreviewWorkflowState _previewState =
+        PreviewWorkflowState.NotGenerated(TimeSpan.Zero, PreviewTimeRangeService.DefaultDuration);
     private LocalModelSelectionCandidate? _selectedLocalModelCandidate;
     private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
     private string _outputPathText = string.Empty;
     private string _technicalDetailsBodyText = string.Empty;
+    private string _activityLogModalText = string.Empty;
+    private string _logCopyNotificationEnglishText = string.Empty;
+    private string _logCopyNotificationSpanishText = string.Empty;
+    private string _previewFromText = PreviewTimeRangeService.Format(TimeSpan.Zero);
+    private string _previewToText = PreviewTimeRangeService.Format(PreviewTimeRangeService.DefaultDuration);
     private string _lastConversionOutputLine = string.Empty;
     private string _cpuUsageText = "CPU: Detecting...";
     private string _ramUsageText = "RAM: Detecting...";
     private string _gpuUsageText = "GPU: Detecting...";
     private string _vramUsageText = string.Empty;
+    private string _previewCpuUsageText = "CPU: Detecting...";
+    private string _previewRamUsageText = "RAM: Detecting...";
+    private string _previewGpuUsageText = "GPU: Detecting...";
+    private string _previewVramUsageText = "VRAM: Detecting...";
+    private string _previewGpuMetricsStatusText = "GPU metrics: Detecting...";
+    private string _previewStageEnglishText = "Preparing preview";
+    private string _previewStageSpanishText = "Preparando vista previa";
     private ProcessMetricSample? _lastProcessMetricSample;
+    private ProcessMetricSample? _lastPreviewMetricSample;
+    private PreviewCachePaths? _lastPreviewCachePaths;
     private TaskCompletionSource<bool>? _replaceVideoConfirmationCompletion;
     private CancellationTokenSource? _conversionCancellationTokenSource;
+    private CancellationTokenSource? _previewCancellationTokenSource;
+    private CancellationTokenSource? _logCopyNotificationCancellationTokenSource;
     private bool _isUpdatingOutputPathText;
     private bool _isAnalyzing;
     private bool _isTechnicalDetailsModalOpen;
     private bool _isProfileDetailsModalOpen;
     private bool _isReplaceVideoConfirmationModalOpen;
+    private bool _isActivityLogModalOpen;
+    private bool _isPreviewGeneratingModalOpen;
+    private bool _isPreviewReadyModalOpen;
+    private bool _isLogCopyNotificationVisible;
     private bool _hasLiveConversionOutput;
     private bool _openOutputWhenFinished;
+    private bool _hasUserEditedPreviewRange;
+    private bool _hasLoggedPreviewOfflineDependencyWarning;
+    private bool _hasLoggedConversionOfflineDependencyWarning;
+    private bool _isPreviewCancellationRequested;
+    private bool _hasLoggedPreviewCancellationSummary;
 
     public MainWindowViewModel()
     {
@@ -116,39 +154,62 @@ public sealed class MainWindowViewModel : ObservableObject
         _conversionOutputOpenService = new(
             new FileSystemConversionOutputFileService(),
             new ShellOutputFileOpenService());
+        var previewCacheFileService = new FileSystemPreviewCacheFileService();
+        _previewCacheFileService = previewCacheFileService;
+        _previewCachePathProvider = new LocalAppDataPreviewCachePathProvider();
+        _previewCachePathService = new PreviewCachePathService(_previewCachePathProvider);
+        _previewCacheCleaner = new PreviewCacheCleaner(previewCacheFileService);
+        _previewExecutor = new LocalIw3PreviewExecutor(
+            processRunner: new BundledLocalProcessRunner(new LocalProcessRunner()),
+            fileService: previewCacheFileService);
+        _previewOutputOpenService = new(
+            new FileSystemConversionOutputFileService(),
+            new ShellOutputFileOpenService());
 
-        SelectVideoCommand = new RelayCommand(SelectVideo, () => !IsConversionRunning);
+        SelectVideoCommand = new RelayCommand(SelectVideo, () => !IsConversionRunning && !IsPreviewGenerating);
         AnalyzeCommand = new AsyncRelayCommand(
             AnalyzeAsync,
-            () => !IsAnalyzing && !IsConversionRunning);
-        RefreshEngineStatusCommand = new RelayCommand(
-            RefreshEngineStatus,
+            () => !IsAnalyzing && !IsConversionRunning && !IsPreviewGenerating);
+        RefreshEngineStatusCommand = new AsyncRelayCommand(
+            () => RefreshEngineStatusAsync(logRefresh: true),
             () => CanUseSystemStatusActions);
         OpenEngineFolderCommand = new RelayCommand(OpenEngineFolder);
-        ClearLogsCommand = new RelayCommand(Logs.Clear);
+        ClearLogsCommand = new RelayCommand(ClearLogs);
         BrowseOutputFolderCommand = new RelayCommand(
             BrowseOutputFolder,
-            () => !IsConversionRunning);
+            () => !IsConversionRunning && !IsPreviewGenerating);
         ResetOutputPathCommand = new RelayCommand(
             ResetOutputPath,
-            () => !IsConversionRunning);
+            () => !IsConversionRunning && !IsPreviewGenerating);
         StartConversionCommand = new RelayCommand(
             StartOrCancelConversion,
             () => CanStartOrCancelConversion);
         CancelConversionCommand = new RelayCommand(CancelConversion);
+        GeneratePreviewCommand = new AsyncRelayCommand(
+            GeneratePreviewAsync,
+            () => CanGeneratePreview);
+        CancelPreviewCommand = new RelayCommand(CancelPreview, () => CanCancelPreview);
+        OpenPreviewCommand = new RelayCommand(OpenPreview, () => CanOpenPreview);
+        DeletePreviewCommand = new RelayCommand(DeletePreview, () => CanDeletePreview);
+        ContinuePreviewCommand = new RelayCommand(ContinuePreview, () => CanContinuePreview);
+        ViewActivityLogCommand = new RelayCommand(ViewActivityLog);
+        CopyFullLogCommand = new RelayCommand(CopyFullLog);
+        CopyPreviewLogCommand = new RelayCommand(CopyPreviewLog);
+        CloseActivityLogCommand = new RelayCommand(CloseActivityLog);
         ShowTechnicalDetailsCommand = new RelayCommand(
             ShowTechnicalDetails,
             () => CanUseSystemStatusActions);
         CloseTechnicalDetailsCommand = new RelayCommand(CloseTechnicalDetails);
         ShowProfileDetailsCommand = new RelayCommand(
             ShowProfileDetails,
-            () => !IsConversionRunning);
+            () => !IsConversionRunning && !IsPreviewGenerating);
         CloseProfileDetailsCommand = new RelayCommand(CloseProfileDetails);
         ConfirmReplaceVideoCommand = new RelayCommand(ConfirmReplaceVideo);
         CancelReplaceVideoCommand = new RelayCommand(CancelReplaceVideo);
 
         _themeService.Apply(_selectedTheme);
-        RefreshEngineStatus();
+        _ = CleanStalePreviewFilesAsync();
+        _ = RefreshEngineStatusAsync(logRefresh: true);
         AddLog(
             "Application shell ready. Select a video to begin.",
             "La aplicación está lista. Selecciona un video para comenzar.");
@@ -191,6 +252,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
                 RaiseWorkflowAvailabilityPropertiesChanged();
                 RaiseConversionReadinessPropertiesChanged();
+                RaisePreviewPropertiesChanged();
             }
         }
     }
@@ -207,6 +269,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 RaiseLocalizedPropertiesChanged();
                 UpdateToolStatuses();
                 UpdatePlanOptionLanguages();
+                UpdateLocalModelSelectionCandidates(regenerateCurrentPlan: false);
                 UpdateLogLanguages();
                 RefreshMetricLanguage();
                 AddLog("Language selected: English.", "Idioma seleccionado: Español.");
@@ -435,10 +498,11 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public bool CanChangeLgCompatibilityCopyOptions =>
-        !IsConversionRunning && IsLgOutputProfileSelected;
+        !IsConversionRunning && !IsPreviewGenerating && IsLgOutputProfileSelected;
 
     public bool CanPreferLgCompatibilityCopyWhenOpening =>
         !IsConversionRunning &&
+        !IsPreviewGenerating &&
         IsLgOutputProfileSelected &&
         CreateLgCompatibilityCopy;
 
@@ -479,7 +543,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool CanOpenSystemStatusConversionTab =>
         _workflowState.CanOpenSystemStatusConversionTab;
 
-    public bool CanOpenSystemStatusToolsTab => !IsConversionRunning;
+    public bool CanOpenSystemStatusToolsTab => !IsConversionRunning && !IsPreviewGenerating;
 
     public bool IsAnalyzing
     {
@@ -654,10 +718,20 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public string LocalModelSelectionStatusText => SelectedLocalModelCandidate is null
-        ? Text("No local models detected yet.", "A\u00fan no se detectan modelos locales.")
+        ? HasUnmappedLocalModelCandidates
+            ? Text(
+                "Unmapped model files were found. Add a model catalog entry or mapping before using them.",
+                "Se encontraron modelos no mapeados. Agrega una entrada de catalogo o mapeo antes de usarlos.")
+            : Text(
+                "No mapped local depth models are available yet.",
+                "Aun no hay modelos locales de profundidad mapeados disponibles.")
         : Text(
-            $"Selected local model: {SelectedLocalModelCandidate.DisplayName}",
-            $"Modelo local seleccionado: {SelectedLocalModelCandidate.DisplayName}");
+            $"Selected local model: {SelectedLocalModelCandidate.DisplayName}. iw3 depth model: {SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"}",
+            $"Modelo local seleccionado: {SelectedLocalModelCandidate.DisplayName}. Modelo de profundidad iw3: {SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"}");
+
+    public bool HasUnmappedLocalModelCandidates =>
+        (_dependencyHealth?.ModelInventory.SelectionCandidates.Count ?? 0) >
+        LocalModelCandidates.Count;
 
     public string OutputPathLabel => Text("Output path", "Ruta de salida");
 
@@ -674,7 +748,7 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _openOutputWhenFinished;
         set
         {
-            if (IsConversionRunning)
+            if (IsConversionRunning || IsPreviewGenerating)
             {
                 OnPropertyChanged();
                 return;
@@ -684,7 +758,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public bool CanChangeOpenOutputWhenFinished => !IsConversionRunning;
+    public bool CanChangeOpenOutputWhenFinished => !IsConversionRunning && !IsPreviewGenerating;
 
     public bool HasCustomOutputPath => _outputPathState.HasCustomOutputPath;
 
@@ -721,8 +795,8 @@ public sealed class MainWindowViewModel : ObservableObject
             "Local model: Not selected / not available yet.",
             "Modelo local: No seleccionado / a\u00fan no disponible.")
         : Text(
-            $"Local model: {_conversionPlan.SelectedLocalModel.DisplayName} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.EnglishSourceText})",
-            $"Modelo local: {_conversionPlan.SelectedLocalModel.DisplayName} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.SpanishSourceText})");
+            $"Local model: {_conversionPlan.SelectedLocalModel.DisplayName} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.EnglishSourceText}). iw3 depth model: {_conversionPlan.SelectedLocalModel.Iw3DepthModelName ?? "-"}",
+            $"Modelo local: {GetSpanishModelDisplayName(_conversionPlan.SelectedLocalModel)} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.SpanishSourceText}). Modelo de profundidad iw3: {_conversionPlan.SelectedLocalModel.Iw3DepthModelName ?? "-"}");
 
     public string ConversionPlanOutputPathText => ConversionPlanLabelValue(
         "Primary output",
@@ -795,6 +869,323 @@ public sealed class MainWindowViewModel : ObservableObject
         "Vista previa del futuro comando iw3");
 
     public string ConversionPlanCommandPreviewText => _conversionPlan?.CommandPreview ?? "-";
+
+    public string PreviewTitleText => Text("Preview", "Vista previa");
+
+    public string PreviewRequiredTitleText => Text("Preview required", "Vista previa requerida");
+
+    public string PreviewAcceptedTitleText => Text("Preview accepted", "Vista previa aceptada");
+
+    public string PreviewStepTitleText =>
+        PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration()).CanStart
+            ? PreviewAcceptedTitleText
+            : PreviewRequiredTitleText;
+
+    public string GeneratePreviewText => Text("Generate preview", "Generar vista previa");
+
+    public string PreviewRequiredInstructionText => _previewState.Status == PreviewGenerationStatus.Outdated
+        ? Text(
+            "Settings changed. Generate a new preview for the current settings.",
+            "La configuracion cambio. Genera una nueva vista previa para la configuracion actual.")
+        : Text(
+            "Generate and review a short preview before final conversion.",
+            "Genera y revisa una vista previa corta antes de la conversion final.");
+
+    public Visibility PreviewRequirementVisibility =>
+        IsCurrentPreviewAccepted
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+    public Visibility GeneratePreviewPrimaryActionVisibility =>
+        IsCurrentPreviewAccepted
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+    public Visibility ConvertPrimaryActionVisibility =>
+        IsCurrentPreviewAccepted && !IsConversionRunning
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility CancelConversionPrimaryActionVisibility =>
+        IsConversionRunning
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string CancelPreviewText => Text("Cancel preview", "Cancelar vista previa");
+
+    public string OpenPreviewText => Text("Open preview", "Abrir vista previa");
+
+    public string OpenPreviewExternallyText => Text("Open externally", "Abrir externamente");
+
+    public string DeletePreviewText => Text("Delete preview", "Eliminar vista previa");
+
+    public string ContinuePreviewText => Text("Continue", "Continuar");
+
+    public string PreviewGeneratingTitleText => Text("Generating preview", "Generando vista previa");
+
+    public string PreviewGeneratingMessageText => Text(
+        "Please wait while v3dfy creates a short 3D preview.",
+        "Espera mientras v3dfy crea una vista previa 3D corta.");
+
+    public string PreviewReadyTitleText => Text("Preview ready", "Vista previa lista");
+
+    public string PreviewReadyMessageText => Text(
+        "Review the preview before continuing to final conversion.",
+        "Revisa la vista previa antes de continuar con la conversion final.");
+
+    public string PreviewPlaybackFallbackText => Text(
+        "If embedded playback is unavailable, use Open externally.",
+        "Si la reproduccion integrada no esta disponible, usa Abrir externamente.");
+
+    public string PreviewPlayText => Text("Play", "Reproducir");
+
+    public string PreviewPauseText => Text("Pause", "Pausar");
+
+    public string PreviewReplayText => Text("Replay", "Repetir");
+
+    public string PreviewVolumeText => Text("Volume", "Volumen");
+
+    public string PreviewMutedText => Text("Muted", "Silenciado");
+
+    public string PreviewMuteText => Text("Mute", "Silenciar");
+
+    public string PreviewUnmuteText => Text("Unmute", "Activar sonido");
+
+    public string PreviewEndedText => Text("Preview ended", "Vista previa finalizada");
+
+    public string EmbeddedPlaybackUnavailableText => Text(
+        "Embedded playback unavailable",
+        "Reproduccion integrada no disponible");
+
+    public Uri? PreviewMediaSource
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_previewState.OutputPath))
+            {
+                return null;
+            }
+
+            return Uri.TryCreate(_previewState.OutputPath, UriKind.Absolute, out var uri)
+                ? uri
+                : null;
+        }
+    }
+
+    public Visibility EmbeddedPreviewVisibility =>
+        PreviewMediaSource is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility PreviewMetricsHeaderVisibility =>
+        IsPreviewGenerating ? Visibility.Visible : Visibility.Collapsed;
+
+    public string PreviewEngineText => Text(
+        "Preview engine: FFmpeg source clip + bundled Python/iw3",
+        "Motor de vista previa: clip fuente FFmpeg + Python/iw3 incluido");
+
+    public string PreviewRunningWithText => Text(
+        "Running with: FFmpeg source clip + bundled Python/iw3",
+        "Ejecutando con: clip fuente FFmpeg + Python/iw3 incluido");
+
+    public string PreviewGpuMetricsNoteText => Text(
+        "GPU metrics show global adapter activity, not guaranteed per-process attribution.",
+        "Las metricas de GPU muestran actividad global del adaptador, no atribucion garantizada por proceso.");
+
+    public string PreviewStageText => ConversionPlanLabelValue(
+        "Stage",
+        "Etapa",
+        Text(_previewStageEnglishText, _previewStageSpanishText));
+
+    public string PreviewCpuUsageText => _previewCpuUsageText;
+
+    public string PreviewRamUsageText => _previewRamUsageText;
+
+    public string PreviewGpuUsageText => _previewGpuUsageText;
+
+    public string PreviewVramUsageText => _previewVramUsageText;
+
+    public string PreviewGpuMetricsStatusText => _previewGpuMetricsStatusText;
+
+    public string PreviewStatusText => ConversionPlanLabelValue(
+        "Preview status",
+        "Estado de vista previa",
+        PreviewStatusValueText);
+
+    public string PreviewGateStatusText
+    {
+        get
+        {
+            var gate = PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration());
+            return ConversionPlanLabelValue(
+                "Preview status",
+                "Estado de vista previa",
+                Text(gate.EnglishStatus, gate.SpanishStatus));
+        }
+    }
+
+    public string PreviewGateDetailText
+    {
+        get
+        {
+            var gate = PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration());
+            return Text(gate.EnglishDetail, gate.SpanishDetail);
+        }
+    }
+
+    public string PreviewDurationText => ConversionPlanLabelValue(
+        "Preview duration",
+        "Duracion de vista previa",
+        CurrentPreviewDuration.ToString(@"hh\:mm\:ss"));
+
+    public string PreviewStartTimeText => ConversionPlanLabelValue(
+        "Preview start time",
+        "Tiempo de inicio de vista previa",
+        CurrentPreviewStartTime.ToString(@"hh\:mm\:ss"));
+
+    public string PreviewFromLabel => Text("From", "Desde");
+
+    public string PreviewToLabel => Text("To", "Hasta");
+
+    public string PreviewFromText
+    {
+        get => _previewFromText;
+        set
+        {
+            if (SetProperty(ref _previewFromText, value))
+            {
+                PreviewTimeRangeChanged();
+            }
+        }
+    }
+
+    public string PreviewToText
+    {
+        get => _previewToText;
+        set
+        {
+            if (SetProperty(ref _previewToText, value))
+            {
+                PreviewTimeRangeChanged();
+            }
+        }
+    }
+
+    public string PreviewTimeRangeText => ConversionPlanLabelValue(
+        "Preview duration",
+        "Duracion de vista previa",
+        CurrentPreviewTimeRangeValidation.Range is { } range
+            ? range.Duration.ToString(@"hh\:mm\:ss")
+            : "-");
+
+    public string PreviewMaximumDurationText => Text(
+        "Maximum preview duration is 1 minute 30 seconds",
+        "La duracion maxima de la vista previa es de 1 minuto 30 segundos");
+
+    public string PreviewTimeRangeValidationText =>
+        PreviewTimeRangeValidationMessage(CurrentPreviewTimeRangeValidation.Issue);
+
+    public Visibility PreviewTimeRangeValidationVisibility =>
+        CurrentPreviewTimeRangeValidation.IsValid ? Visibility.Collapsed : Visibility.Visible;
+
+    public bool CanEditPreviewTimeRange =>
+        HasCompletedAnalysis &&
+        _analysis?.File.Duration is not null &&
+        !IsConversionRunning &&
+        !IsPreviewGenerating &&
+        !IsPreviewRangeEditingBlockedByModal;
+
+    public string PreviewOutdatedText => Text(
+        "Preview outdated",
+        "La vista previa esta desactualizada");
+
+    public Visibility PreviewOutdatedVisibility =>
+        _previewState.Status == PreviewGenerationStatus.Outdated
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string PreviewOutputPathText => string.IsNullOrWhiteSpace(_previewState.OutputPath)
+        ? string.Empty
+        : ConversionPlanLabelValue(
+            "Preview output",
+            "Salida de vista previa",
+            _previewState.OutputPath);
+
+    public Visibility PreviewOutputPathVisibility =>
+        string.IsNullOrWhiteSpace(_previewState.OutputPath)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+    public bool IsPreviewGenerating => _previewState.IsGenerating;
+
+    public bool CanGeneratePreview =>
+        CanEditPreviewTimeRange &&
+        _previewCancellationTokenSource is null &&
+        CurrentPreviewTimeRangeValidation.IsValid &&
+        _conversionPlan?.SelectedLocalModel is not null &&
+        CurrentExecutionRequestCanStart();
+
+    public bool CanCancelPreview => IsPreviewGenerating;
+
+    public bool CanOpenPreview =>
+        !IsConversionRunning &&
+        _previewState.Status == PreviewGenerationStatus.Ready &&
+        IsPreviewFingerprintCurrent();
+
+    public bool CanDeletePreview =>
+        !IsConversionRunning &&
+        !IsPreviewGenerating &&
+        _previewState.Status is
+            PreviewGenerationStatus.Ready or
+            PreviewGenerationStatus.Accepted or
+            PreviewGenerationStatus.Failed or
+            PreviewGenerationStatus.Canceled or
+            PreviewGenerationStatus.Outdated;
+
+    public bool CanContinuePreview =>
+        _previewState.Status == PreviewGenerationStatus.Ready &&
+        IsPreviewFingerprintCurrent();
+
+    public string PreviewModalDetailText => Text(
+        _previewState.EnglishDetail,
+        _previewState.SpanishDetail);
+
+    public string PreviewGenerationLogText => _previewGenerationLogTextBuilder.ToString();
+
+    private bool IsCurrentPreviewAccepted =>
+        PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration()).CanStart &&
+        PreviewOutputFileExists();
+
+    private PreviewTimeRangeValidationResult CurrentPreviewTimeRangeValidation =>
+        PreviewTimeRangeService.Validate(
+            PreviewFromText,
+            PreviewToText,
+            _analysis?.File.Duration);
+
+    private TimeSpan CurrentPreviewDuration =>
+        CurrentPreviewTimeRangeValidation.Range?.Duration ??
+        PreviewTimeRangeService.DefaultDuration;
+
+    private TimeSpan CurrentPreviewStartTime =>
+        CurrentPreviewTimeRangeValidation.Range?.From ?? TimeSpan.Zero;
+
+    private bool IsPreviewRangeEditingBlockedByModal =>
+        IsTechnicalDetailsModalOpen ||
+        IsProfileDetailsModalOpen ||
+        IsReplaceVideoConfirmationModalOpen ||
+        IsActivityLogModalOpen ||
+        IsPreviewGeneratingModalOpen ||
+        IsPreviewReadyModalOpen;
+
+    private string PreviewStatusValueText => _previewState.Status switch
+    {
+        PreviewGenerationStatus.NotGenerated => Text("Preview required", "Vista previa requerida"),
+        PreviewGenerationStatus.Generating => Text("Preview generation is running.", "La generacion de vista previa esta en ejecucion."),
+        PreviewGenerationStatus.Ready => Text("Preview ready. Review it before continuing.", "Vista previa lista. Revisala antes de continuar."),
+        PreviewGenerationStatus.Accepted => Text("Preview accepted", "Vista previa aceptada"),
+        PreviewGenerationStatus.Failed => Text("Preview failed.", "Vista previa fallida."),
+        PreviewGenerationStatus.Canceled => Text("Preview canceled.", "Vista previa cancelada."),
+        PreviewGenerationStatus.Outdated => Text("Preview outdated", "Vista previa desactualizada"),
+        _ => _previewState.Status.ToString(),
+    };
 
     public string ConversionProgressTitle => Text(
         "Conversion progress",
@@ -958,16 +1349,71 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ProfileDetailsButtonText => "?";
 
-    public string ActiveModalTitleText => IsReplaceVideoConfirmationModalOpen
-        ? ReplaceSelectedVideoTitleText
-        : IsProfileDetailsModalOpen
-            ? ProfileDetailsTitleText
-            : SystemStatusTechnicalDetailsTitle;
+    public string ViewLogText => Text("View log", "Ver log");
+
+    public string CopyFullLogText => Text("Copy full log", "Copiar todo el log");
+
+    public string CopyPreviewLogText => Text(
+        "Copy preview log",
+        "Copiar log de vista previa");
+
+    public string LogCopiedText => Text("Log copied", "Log copiado");
+
+    public string CouldNotCopyLogText => Text(
+        "Could not copy log",
+        "No se pudo copiar el log");
+
+    public string LogCopyNotificationText =>
+        Text(_logCopyNotificationEnglishText, _logCopyNotificationSpanishText);
+
+    public Visibility LogCopyNotificationVisibility =>
+        _isLogCopyNotificationVisible ? Visibility.Visible : Visibility.Collapsed;
+
+    public string ActivityLogPanelText => CreateFullActivityLogText();
+
+    public string ActivityLogModalText
+    {
+        get => _activityLogModalText;
+        private set => SetProperty(ref _activityLogModalText, value);
+    }
+
+    public string ActiveModalTitleText
+    {
+        get
+        {
+            if (IsPreviewGeneratingModalOpen)
+            {
+                return PreviewGeneratingTitleText;
+            }
+
+            if (IsPreviewReadyModalOpen)
+            {
+                return PreviewReadyTitleText;
+            }
+
+            if (IsActivityLogModalOpen)
+            {
+                return ActivityLogTitle;
+            }
+
+            if (IsReplaceVideoConfirmationModalOpen)
+            {
+                return ReplaceSelectedVideoTitleText;
+            }
+
+            return IsProfileDetailsModalOpen
+                ? ProfileDetailsTitleText
+                : SystemStatusTechnicalDetailsTitle;
+        }
+    }
 
     public bool IsAnyModalOpen =>
         IsTechnicalDetailsModalOpen ||
         IsProfileDetailsModalOpen ||
-        IsReplaceVideoConfirmationModalOpen;
+        IsReplaceVideoConfirmationModalOpen ||
+        IsActivityLogModalOpen ||
+        IsPreviewGeneratingModalOpen ||
+        IsPreviewReadyModalOpen;
 
     public Visibility ModalOverlayVisibility =>
         IsAnyModalOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -1008,6 +1454,42 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    public bool IsActivityLogModalOpen
+    {
+        get => _isActivityLogModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isActivityLogModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsPreviewGeneratingModalOpen
+    {
+        get => _isPreviewGeneratingModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isPreviewGeneratingModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsPreviewReadyModalOpen
+    {
+        get => _isPreviewReadyModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isPreviewReadyModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
     public Visibility TechnicalDetailsModalContentVisibility =>
         IsTechnicalDetailsModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
@@ -1016,6 +1498,15 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public Visibility ReplaceVideoConfirmationModalContentVisibility =>
         IsReplaceVideoConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ActivityLogModalContentVisibility =>
+        IsActivityLogModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility PreviewGeneratingModalContentVisibility =>
+        IsPreviewGeneratingModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility PreviewReadyModalContentVisibility =>
+        IsPreviewReadyModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
     public string TechnicalDetailsBodyText
     {
@@ -1118,10 +1609,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool CanStartConversion =>
         _conversionExecutionState.Status is not ConversionExecutionStatus.Running and
             not ConversionExecutionStatus.Canceling &&
-        _conversionExecutionFeatureGate.EvaluateStart(
-            HasCompletedAnalysis,
-            _conversionPlan is not null,
-            _conversionReadiness).CanStart &&
+        !IsPreviewGenerating &&
+        EvaluateConversionStartGate().CanStart &&
         CurrentExecutionRequestCanStart();
 
     public bool CanStartOrCancelConversion =>
@@ -1136,7 +1625,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _ => Text("Convert", "Convertir"),
     };
 
-    public bool CanUseSystemStatusActions => !IsConversionRunning;
+    public bool CanUseSystemStatusActions => !IsConversionRunning && !IsPreviewGenerating;
 
     public string ToolStatusTitle => Text(
         "Internal tool status",
@@ -1207,13 +1696,15 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public ObservableCollection<LogEntryViewModel> ConversionLogs { get; } = [];
 
+    public ObservableCollection<string> PreviewGenerationLogs { get; } = [];
+
     public ObservableCollection<LocalModelSelectionCandidate> LocalModelCandidates { get; } = [];
 
     public RelayCommand SelectVideoCommand { get; }
 
     public AsyncRelayCommand AnalyzeCommand { get; }
 
-    public RelayCommand RefreshEngineStatusCommand { get; }
+    public AsyncRelayCommand RefreshEngineStatusCommand { get; }
 
     public RelayCommand OpenEngineFolderCommand { get; }
 
@@ -1226,6 +1717,24 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand StartConversionCommand { get; }
 
     public RelayCommand CancelConversionCommand { get; }
+
+    public AsyncRelayCommand GeneratePreviewCommand { get; }
+
+    public RelayCommand CancelPreviewCommand { get; }
+
+    public RelayCommand OpenPreviewCommand { get; }
+
+    public RelayCommand DeletePreviewCommand { get; }
+
+    public RelayCommand ContinuePreviewCommand { get; }
+
+    public RelayCommand ViewActivityLogCommand { get; }
+
+    public RelayCommand CopyFullLogCommand { get; }
+
+    public RelayCommand CopyPreviewLogCommand { get; }
+
+    public RelayCommand CloseActivityLogCommand { get; }
 
     public RelayCommand ShowTechnicalDetailsCommand { get; }
 
@@ -1241,7 +1750,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public async void SelectDroppedVideo(string path)
     {
-        if (IsConversionRunning)
+        if (IsConversionRunning || IsPreviewGenerating)
         {
             return;
         }
@@ -1262,7 +1771,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async void SelectVideo()
     {
-        if (IsConversionRunning)
+        if (IsConversionRunning || IsPreviewGenerating)
         {
             return;
         }
@@ -1285,7 +1794,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async Task AnalyzeAsync()
     {
-        if (IsConversionRunning)
+        if (IsConversionRunning || IsPreviewGenerating)
         {
             return;
         }
@@ -1301,6 +1810,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         ResetAnalysisState(clearOutputPath: false);
+        await Task.Yield();
         await AnalyzeSelectedVideoAsync();
     }
 
@@ -1313,6 +1823,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 "Starting automatic analysis.",
                 "Iniciando análisis automático.");
             ResetAnalysisState(clearOutputPath: false);
+            await Task.Yield();
             await AnalyzeSelectedVideoAsync();
             return;
         }
@@ -1330,6 +1841,7 @@ public sealed class MainWindowViewModel : ObservableObject
         AddLog(
             "Starting automatic analysis.",
             "Iniciando análisis automático.");
+        await Task.Yield();
         await AnalyzeSelectedVideoAsync();
     }
 
@@ -1337,6 +1849,8 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         IsTechnicalDetailsModalOpen = false;
         IsProfileDetailsModalOpen = false;
+        IsActivityLogModalOpen = false;
+        IsPreviewReadyModalOpen = false;
         _replaceVideoConfirmationCompletion =
             new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         IsReplaceVideoConfirmationModalOpen = true;
@@ -1351,8 +1865,9 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        RefreshEngineStatus();
         IsAnalyzing = true;
+        await Task.Yield();
+        await RefreshEngineStatusAsync(logRefresh: true);
 
         try
         {
@@ -1363,11 +1878,13 @@ public sealed class MainWindowViewModel : ObservableObject
             if (result.IsSuccess && result.Analysis is not null)
             {
                 _analysis = result.Analysis;
+                SetDefaultPreviewTimeRangeFromAnalysis();
                 _conversionRecommendation = _recommendationService.Recommend(
                     _analysis,
                     SelectedOutputPreset);
                 ApplyRecommendationDefaultsIfNeeded(_conversionRecommendation);
                 RegenerateConversionPlan();
+                MarkPreviewOutdatedIfNeeded();
                 RaiseAnalysisPropertiesChanged();
                 RaiseRecommendationPropertiesChanged();
                 RaiseConversionPlanPropertiesChanged();
@@ -1398,21 +1915,32 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    private void RefreshEngineStatus()
+    private async Task RefreshEngineStatusAsync(bool logRefresh)
     {
-        if (IsConversionRunning)
+        if (IsConversionRunning || IsPreviewGenerating)
         {
             return;
         }
 
-        _dependencyHealth = _healthChecker.CheckDetailed(_toolPaths);
+        var dependencyHealth = await Task
+            .Run(() => _healthChecker.CheckDetailed(_toolPaths))
+            .ConfigureAwait(true);
+        if (IsConversionRunning || IsPreviewGenerating)
+        {
+            return;
+        }
+
+        _dependencyHealth = dependencyHealth;
         _toolHealth = _dependencyHealth.Summary;
         UpdateLocalModelSelectionCandidates();
         UpdateToolStatuses();
         UpdateConversionReadiness();
-        AddLog(
-            "Internal tool status refreshed.",
-            "Estado de herramientas internas actualizado.");
+        if (logRefresh)
+        {
+            AddLog(
+                "Internal tool status refreshed.",
+                "Estado de herramientas internas actualizado.");
+        }
     }
 
     private void OpenEngineFolder()
@@ -1444,8 +1972,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ShowTechnicalDetails()
     {
         if (IsConversionRunning ||
+            IsPreviewGenerating ||
             IsProfileDetailsModalOpen ||
-            IsReplaceVideoConfirmationModalOpen)
+            IsReplaceVideoConfirmationModalOpen ||
+            IsActivityLogModalOpen ||
+            IsPreviewReadyModalOpen)
         {
             return;
         }
@@ -1462,8 +1993,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ShowProfileDetails()
     {
         if (IsConversionRunning ||
+            IsPreviewGenerating ||
             IsTechnicalDetailsModalOpen ||
-            IsReplaceVideoConfirmationModalOpen)
+            IsReplaceVideoConfirmationModalOpen ||
+            IsActivityLogModalOpen ||
+            IsPreviewReadyModalOpen)
         {
             return;
         }
@@ -1474,6 +2008,72 @@ public sealed class MainWindowViewModel : ObservableObject
     private void CloseProfileDetails()
     {
         IsProfileDetailsModalOpen = false;
+    }
+
+    private void ViewActivityLog()
+    {
+        ActivityLogModalText = CreateFullActivityLogText();
+        IsActivityLogModalOpen = true;
+    }
+
+    private void CopyFullLog()
+    {
+        var logText = CreateFullActivityLogText();
+        ActivityLogModalText = logText;
+        CopyLogToClipboard(
+            logText,
+            englishLogName: "activity log",
+            spanishLogName: "registro de actividad",
+            appendFailureToPreviewLog: false);
+    }
+
+    private void CopyPreviewLog()
+    {
+        CopyLogToClipboard(
+            PreviewGenerationLogText,
+            englishLogName: "preview log",
+            spanishLogName: "log de vista previa",
+            appendFailureToPreviewLog: true);
+    }
+
+    private void CopyLogToClipboard(
+        string logText,
+        string englishLogName,
+        string spanishLogName,
+        bool appendFailureToPreviewLog)
+    {
+        try
+        {
+            System.Windows.Clipboard.SetText(logText);
+            ShowLogCopySuccessNotification();
+        }
+        catch (Exception exception)
+        {
+            ShowLogCopyFailureNotification();
+            var englishMessage = $"Could not copy {englishLogName} to clipboard: {exception.Message}";
+            var spanishMessage = $"No se pudo copiar el {spanishLogName} al portapapeles: {exception.Message}";
+            if (appendFailureToPreviewLog)
+            {
+                AppendPreviewLogLine(Text(englishMessage, spanishMessage));
+            }
+
+            AddLog(englishMessage, spanishMessage);
+        }
+    }
+
+    private void CloseActivityLog()
+    {
+        IsActivityLogModalOpen = false;
+    }
+
+    private void ClearLogs()
+    {
+        Logs.Clear();
+        OnPropertyChanged(nameof(ActivityLogPanelText));
+        if (IsActivityLogModalOpen)
+        {
+            ActivityLogModalText = CreateFullActivityLogText();
+        }
     }
 
     private void ConfirmReplaceVideo()
@@ -1511,10 +2111,12 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionReadinessPropertiesChanged();
     }
 
-    private void UpdateLocalModelSelectionCandidates()
+    private void UpdateLocalModelSelectionCandidates(bool regenerateCurrentPlan = true)
     {
         var previouslySelectedPath = SelectedLocalModelCandidate?.RelativePath;
-        var candidates = _dependencyHealth?.ModelInventory.SelectionCandidates ?? [];
+        var candidates = Iw3DepthModelMapper.CreateSelectableCandidates(
+            _dependencyHealth?.ModelInventory.SelectionCandidates ?? [],
+            IsSpanish);
 
         LocalModelCandidates.Clear();
         foreach (var candidate in candidates)
@@ -1531,9 +2133,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
         SetSelectedLocalModelCandidate(
             selectedCandidate ?? LocalModelCandidates.FirstOrDefault(),
-            regeneratePlan: _analysis is not null && _conversionRecommendation is not null);
+            regeneratePlan:
+                regenerateCurrentPlan &&
+                _analysis is not null &&
+                _conversionRecommendation is not null);
 
         OnPropertyChanged(nameof(HasLocalModelSelectionCandidates));
+        OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
+        OnPropertyChanged(nameof(LocalModelSelectionStatusText));
     }
 
     private void SetSelectedLocalModelCandidate(
@@ -1550,6 +2157,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _selectedLocalModelCandidate = candidate;
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+        OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
         UpdateConversionReadiness();
 
         if (!regeneratePlan)
@@ -1558,21 +2166,55 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         ResetConversionExecutionState();
-        if (!RegenerateConversionPlan())
+        if (RegenerateConversionPlan())
+        {
+            MarkPreviewOutdatedIfNeeded();
+        }
+        else
         {
             OnPropertyChanged(nameof(ConversionPlanLocalModelText));
         }
     }
 
-    private ConversionExecutionStartGateResult EvaluateConversionStartGate() =>
-        _conversionExecutionFeatureGate.EvaluateStart(
+    private ConversionExecutionStartGateResult EvaluateConversionStartGate()
+    {
+        var startGate = _conversionExecutionFeatureGate.EvaluateStart(
             HasCompletedAnalysis,
             _conversionPlan is not null,
             _conversionReadiness);
+        if (!startGate.CanStart)
+        {
+            return startGate;
+        }
+
+        var previewGate = PreviewConversionGate.Evaluate(
+            _previewState,
+            CreateCurrentPreviewConfiguration());
+        if (previewGate.CanStart && PreviewOutputFileExists())
+        {
+            return startGate;
+        }
+
+        return ConversionExecutionStartGateResult.Blocked(
+            ConversionExecutionBlocker.PreviewRequired,
+            previewGate.CanStart ? "Preview required" : previewGate.EnglishStatus,
+            previewGate.CanStart ? "Vista previa requerida" : previewGate.SpanishStatus,
+            previewGate.CanStart
+                ? "The accepted preview file was not found. Generate and accept a new preview."
+                : previewGate.EnglishDetail,
+            previewGate.CanStart
+                ? "No se encontro el archivo de vista previa aceptado. Genera y acepta una nueva vista previa."
+                : previewGate.SpanishDetail);
+    }
 
     private bool CurrentExecutionRequestCanStart()
     {
         if (_conversionPlan is null)
+        {
+            return false;
+        }
+
+        if (_conversionReadiness?.CanConvert != true)
         {
             return false;
         }
@@ -1620,6 +2262,11 @@ public sealed class MainWindowViewModel : ObservableObject
             "modelos 3D",
             _dependencyHealth.ModelsDirectory,
             ToolStatusComponent.Models));
+        ToolStatuses.Add(CreateToolStatus(
+            "iw3 runtime dependency",
+            "dependencia runtime iw3",
+            _dependencyHealth.Iw3RuntimeDependencies,
+            ToolStatusComponent.Iw3RuntimeDependency));
     }
 
     private ToolStatusItemViewModel CreateToolStatus(
@@ -1686,6 +2333,12 @@ public sealed class MainWindowViewModel : ObservableObject
             ToolHealthDetailKind.ModelFilesMissing => Text(
                 "No compatible model files found",
                 "No se encontraron modelos compatibles"),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesFound => Text(
+                "Required iw3 runtime dependency found",
+                "Dependencia de runtime iw3 requerida encontrada"),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing => Text(
+                "Missing iw3 runtime dependency",
+                "Dependencia de runtime iw3 faltante"),
             _ => Text("Local dependency checked", "Dependencia local revisada"),
         };
 
@@ -1732,6 +2385,12 @@ public sealed class MainWindowViewModel : ObservableObject
             ToolHealthDetailKind.ModelFilesMissing => Text(
                 $"No supported model files found in: {dependencyHealth.ExpectedPath}",
                 $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesFound => Text(
+                $"Bundled iw3 runtime dependency found: {dependencyHealth.ExpectedPath}",
+                $"Dependencia de runtime iw3 incluida encontrada: {dependencyHealth.ExpectedPath}"),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing => Text(
+                $"Missing iw3 runtime dependency: {dependencyHealth.ExpectedPath}. The bundle is not fully offline-ready and iw3 may try to download this file at runtime.",
+                $"Dependencia de runtime iw3 faltante: {dependencyHealth.ExpectedPath}. El bundle aun no esta listo para uso offline e iw3 podria intentar descargar este archivo en tiempo de ejecucion."),
             _ => dependencyHealth.ExpectedPath,
         };
 
@@ -1747,6 +2406,8 @@ public sealed class MainWindowViewModel : ObservableObject
             Text(Iw3EngineBundleContract.Iw3PackageMainRelativePath, Iw3EngineBundleContract.Iw3PackageMainRelativePath),
             Text(Iw3EngineBundleContract.ModelsDirectoryRelativePath + "/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions),
                 Iw3EngineBundleContract.ModelsDirectoryRelativePath + "/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions)),
+            Text(Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyRelativePath,
+                Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyRelativePath),
             Text($"{Iw3EngineBundleContract.CliCapabilitiesRelativePath} (optional)",
                 $"{Iw3EngineBundleContract.CliCapabilitiesRelativePath} (opcional)"),
             string.Empty,
@@ -1825,7 +2486,20 @@ public sealed class MainWindowViewModel : ObservableObject
             Text(
                 $"Unmanaged compatible model files: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}",
                 $"Modelos compatibles no listados en el catalogo: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}"),
+            Text(
+                "Known iw3 depth model mappings:",
+                "Mapeos conocidos de modelos de profundidad iw3:"),
         };
+
+        foreach (var entry in Iw3DepthModelMapper.RegistryEntries)
+        {
+            var expectedFiles = entry.ExpectedRelativePaths.Count == 0
+                ? "-"
+                : string.Join(", ", entry.ExpectedRelativePaths);
+            lines.Add(Text(
+                $"- {entry.EnglishName}: --depth-model {entry.DepthModelName}; expected local file: {expectedFiles}; status: {(entry.IsReadySelectable ? "selectable when local file is present" : "not selectable yet")}",
+                $"- {entry.SpanishName}: --depth-model {entry.DepthModelName}; archivo local esperado: {expectedFiles}; estado: {(entry.IsReadySelectable ? "seleccionable cuando el archivo local existe" : "aun no seleccionable")}"));
+        }
 
         AddModelCatalogStatusDetailLines(lines, inventory.Catalog);
 
@@ -1851,6 +2525,39 @@ public sealed class MainWindowViewModel : ObservableObject
         foreach (var modelFile in inventory.CompatibleModelFiles)
         {
             lines.Add($"- {modelFile.RelativePath}");
+        }
+
+        var mappedCandidates = Iw3DepthModelMapper.CreateSelectableCandidates(
+            inventory.SelectionCandidates,
+            IsSpanish);
+        lines.Add(Text(
+            "Mapped selectable local models:",
+            "Modelos locales mapeados seleccionables:"));
+        if (mappedCandidates.Count == 0)
+        {
+            lines.Add(Text(
+                "- None. A verified iw3 depth-model mapping is required before conversion.",
+                "- Ninguno. Se requiere un mapeo verificado de depth-model iw3 antes de convertir."));
+        }
+        else
+        {
+            foreach (var candidate in mappedCandidates)
+            {
+                lines.Add(
+                    $"- {candidate.DisplayName} -> --depth-model {candidate.Iw3DepthModelName}; source: {candidate.RelativePath}");
+            }
+        }
+
+        var unmappedCandidates = Iw3DepthModelMapper.GetUnmappedCandidates(inventory.SelectionCandidates);
+        if (unmappedCandidates.Count > 0)
+        {
+            lines.Add(Text(
+                "Unmapped model files were found. Add a model catalog entry or mapping before using them.",
+                "Se encontraron modelos no mapeados. Agrega una entrada de catalogo o mapeo antes de usarlos."));
+            foreach (var candidate in unmappedCandidates)
+            {
+                lines.Add($"- {candidate.DisplayName} -> {candidate.RelativePath}");
+            }
         }
 
         return lines;
@@ -1965,6 +2672,11 @@ public sealed class MainWindowViewModel : ObservableObject
         AddMissingComponent(missingComponents, _dependencyHealth.Python, "Python", "Python");
         AddMissingComponent(missingComponents, _dependencyHealth.Iw3EngineDirectory, "iw3 engine", "motor iw3");
         AddMissingComponent(missingComponents, _dependencyHealth.ModelsDirectory, "3D models", "modelos 3D");
+        AddMissingComponent(
+            missingComponents,
+            _dependencyHealth.Iw3RuntimeDependencies,
+            "iw3 runtime dependency",
+            "dependencia runtime iw3");
 
         return missingComponents.Count == 0
             ? Text("No missing components.", "No faltan componentes.")
@@ -1986,6 +2698,13 @@ public sealed class MainWindowViewModel : ObservableObject
     private void SetSelectedVideo(string path, bool replacingVideo)
     {
         SelectedWorkflowTabIndex = 0;
+        var cleanupPaths = CreateCurrentPreviewCleanupPaths();
+        _ = DeletePreviewFilesAsync(cleanupPaths, logDeletion: false);
+        SetPreviewTimeRangeText(PreviewTimeRangeService.CreateDefaultRange(null));
+        _previewState = _previewState.Deleted(TimeSpan.Zero, PreviewTimeRangeService.DefaultDuration);
+        _lastPreviewCachePaths = null;
+        _hasUserEditedPreviewRange = false;
+        RaisePreviewPropertiesChanged();
         SelectedVideoPath = path;
         ResetAnalysisState(clearOutputPath: true);
         AddLog(
@@ -2014,6 +2733,643 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionReadinessPropertiesChanged();
     }
 
+    private async Task CleanStalePreviewFilesAsync()
+    {
+        try
+        {
+            await Task.Run(() =>
+                {
+                    var cacheDirectory = _previewCachePathProvider.GetPreviewCacheDirectory();
+                    _previewCacheCleaner.DeleteStaleFiles(
+                        cacheDirectory,
+                        TimeSpan.FromHours(24),
+                        DateTimeOffset.UtcNow);
+                    _previewCacheCleaner.DeletePartialFiles(cacheDirectory);
+                })
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            AddLog(
+                $"Preview cache cleanup skipped: {exception.Message}",
+                $"Limpieza de cache de vista previa omitida: {exception.Message}");
+        }
+    }
+
+    private async Task GeneratePreviewAsync()
+    {
+        using var previewOperation = AppErrorLogService.BeginOperation("Generate preview");
+        try
+        {
+            await GeneratePreviewCoreAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            RecordPreviewCanceled();
+        }
+        catch (Exception exception)
+        {
+            RecordUnexpectedPreviewFailure(exception);
+        }
+        finally
+        {
+            if (_previewCancellationTokenSource is not null ||
+                IsPreviewGeneratingModalOpen ||
+                IsPreviewGenerating)
+            {
+                if (_isPreviewCancellationRequested ||
+                    _previewState.Status == PreviewGenerationStatus.Canceled)
+                {
+                    await DeleteCanceledPreviewAttemptFilesAsync(logDeletion: true);
+                }
+
+                _previewCancellationTokenSource?.Dispose();
+                _previewCancellationTokenSource = null;
+                _isPreviewCancellationRequested = false;
+                IsPreviewGeneratingModalOpen = false;
+                RaisePreviewPropertiesChanged();
+                RaiseConversionExecutionPropertiesChanged();
+                RaiseConversionRunningModePropertiesChanged();
+                RaiseConversionReadinessPropertiesChanged();
+            }
+        }
+    }
+
+    private async Task GeneratePreviewCoreAsync()
+    {
+        if (IsConversionRunning)
+        {
+            AddLog(
+                "Preview generation is disabled while final conversion is running.",
+                "La generacion de vista previa esta deshabilitada mientras la conversion final esta en ejecucion.");
+            return;
+        }
+
+        if (IsPreviewGenerating)
+        {
+            AddLog(
+                "A preview is already being generated.",
+                "Ya se esta generando una vista previa.");
+            return;
+        }
+
+        var rangeValidation = CurrentPreviewTimeRangeValidation;
+        if (!rangeValidation.IsValid)
+        {
+            AddLog(
+                $"Preview cannot start. {PreviewTimeRangeValidationMessage(rangeValidation.Issue, useSpanish: false)}",
+                $"La vista previa no puede iniciar. {PreviewTimeRangeValidationMessage(rangeValidation.Issue, useSpanish: true)}");
+            RaisePreviewPropertiesChanged();
+            return;
+        }
+
+        var configuration = CreateCurrentPreviewConfiguration();
+        if (configuration is null ||
+            _conversionPlan?.SelectedLocalModel is null)
+        {
+            AddLog(
+                "Preview cannot start until a source video, conversion plan, and mapped local model are selected.",
+                "La vista previa no puede iniciar hasta seleccionar un video, un plan de conversion y un modelo local mapeado.");
+            return;
+        }
+
+        if (!CurrentExecutionRequestCanStart())
+        {
+            AddLog(
+                "Preview cannot start because the selected configuration is not ready for local iw3 execution.",
+                "La vista previa no puede iniciar porque la configuracion seleccionada no esta lista para ejecucion local iw3.");
+            return;
+        }
+
+        var cleanupPaths = CreateCurrentPreviewCleanupPaths();
+
+        var startedAt = DateTimeOffset.UtcNow;
+        var cachePaths = _previewCachePathService.CreatePaths(configuration, startedAt);
+        _lastPreviewCachePaths = cachePaths;
+        _previewCancellationTokenSource?.Dispose();
+        _previewCancellationTokenSource = new CancellationTokenSource();
+        _isPreviewCancellationRequested = false;
+        _hasLoggedPreviewCancellationSummary = false;
+        _previewState = _previewState.Generating(configuration, startedAt);
+        _hasLoggedPreviewOfflineDependencyWarning = false;
+        ResetPreviewMetricText();
+        ResetPreviewGenerationLog();
+        AppendPreviewLogLine(Text("Preparing preview...", "Preparando vista previa..."));
+        IsPreviewReadyModalOpen = false;
+        IsPreviewGeneratingModalOpen = true;
+        AppendPreviewLogLine(Text(
+            "Preview timing: modal opened.",
+            "Tiempo de vista previa: modal abierto."));
+        RaisePreviewPropertiesChanged();
+        RaiseConversionExecutionPropertiesChanged();
+        RaiseConversionRunningModePropertiesChanged();
+        AddLog(
+            "Starting selected-configuration preview.",
+            "Iniciando vista previa de la configuracion seleccionada.");
+        await Task.Yield();
+        await DeletePreviewFilesAsync(cleanupPaths, logDeletion: false);
+
+        try
+        {
+            var request = new Iw3PreviewGenerationRequest(
+                Configuration: configuration,
+                CachePaths: cachePaths,
+                ExpectedToolPaths: _toolPaths,
+                SelectedLocalModel: _conversionPlan.SelectedLocalModel,
+                Iw3CliCapabilities: _dependencyHealth?.Iw3CliCapabilities,
+                CancellationToken: _previewCancellationTokenSource.Token);
+            var result = await _previewExecutor.ExecuteAsync(
+                request,
+                new Progress<ConversionExecutionProgressUpdate>(ApplyPreviewProgressUpdate),
+                _previewCancellationTokenSource.Token);
+
+            foreach (var log in result.Logs)
+            {
+                AppendPreviewResultLog(log);
+            }
+
+            if (_isPreviewCancellationRequested ||
+                result.WasCanceled ||
+                _previewCancellationTokenSource?.IsCancellationRequested == true)
+            {
+                RecordPreviewCanceled();
+                return;
+            }
+
+            _previewState = _previewState.Complete(result, configuration);
+            MarkPreviewOutdatedIfNeeded(logChange: false);
+            AddLog(result.EnglishSummary, result.SpanishSummary);
+            if (_previewState.Status == PreviewGenerationStatus.Ready &&
+                IsPreviewFingerprintCurrent())
+            {
+                IsPreviewReadyModalOpen = true;
+                AppendPreviewLogLine(Text(
+                    "Preview timing: preview ready modal opened.",
+                    "Tiempo de vista previa: modal de vista previa lista abierto."));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            RecordPreviewCanceled();
+        }
+        catch (Exception exception)
+        {
+            RecordUnexpectedPreviewFailure(exception);
+        }
+        finally
+        {
+            if (_isPreviewCancellationRequested ||
+                _previewState.Status == PreviewGenerationStatus.Canceled)
+            {
+                await DeleteCanceledPreviewAttemptFilesAsync(logDeletion: true);
+            }
+
+            _previewCancellationTokenSource?.Dispose();
+            _previewCancellationTokenSource = null;
+            _isPreviewCancellationRequested = false;
+            IsPreviewGeneratingModalOpen = false;
+            RaisePreviewPropertiesChanged();
+            RaiseConversionExecutionPropertiesChanged();
+            RaiseConversionRunningModePropertiesChanged();
+            RaiseConversionReadinessPropertiesChanged();
+        }
+    }
+
+    private void RecordPreviewCanceled()
+    {
+        _previewState = _previewState with
+        {
+            Status = PreviewGenerationStatus.Canceled,
+            OutputPath = null,
+            FinishedAt = DateTimeOffset.UtcNow,
+            EnglishDetail = "Preview generation was canceled.",
+            SpanishDetail = "La generacion de vista previa fue cancelada.",
+        };
+        if (!_hasLoggedPreviewCancellationSummary)
+        {
+            AddLog(
+                "Preview generation was canceled.",
+                "La generacion de vista previa fue cancelada.");
+            _hasLoggedPreviewCancellationSummary = true;
+        }
+
+        RaisePreviewPropertiesChanged();
+        RaiseConversionExecutionPropertiesChanged();
+        RaiseConversionRunningModePropertiesChanged();
+        RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void RecordUnexpectedPreviewFailure(Exception exception)
+    {
+        var errorLogPath = AppErrorLogService.LogRecoverableException(
+            "Generate preview",
+            exception);
+        _previewState = _previewState with
+        {
+            Status = PreviewGenerationStatus.Failed,
+            FinishedAt = DateTimeOffset.UtcNow,
+            EnglishDetail = $"Preview generation failed unexpectedly: {exception.Message}",
+            SpanishDetail = $"La generacion de vista previa fallo inesperadamente: {exception.Message}",
+        };
+        AppendPreviewLogLine($"Preview generation failed unexpectedly: {exception}");
+        AddLog(
+            $"Preview generation failed. Details were written to {errorLogPath}. {exception.Message}",
+            $"La generacion de vista previa fallo. Los detalles se escribieron en {errorLogPath}. {exception.Message}");
+        RaisePreviewPropertiesChanged();
+        RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void CancelPreview()
+    {
+        if (!CanCancelPreview &&
+            _previewCancellationTokenSource is null)
+        {
+            AddLog(
+                "There is no active preview to cancel.",
+                "No hay una vista previa activa para cancelar.");
+            return;
+        }
+
+        if (_isPreviewCancellationRequested)
+        {
+            return;
+        }
+
+        _isPreviewCancellationRequested = true;
+        _previewCancellationTokenSource?.Cancel();
+        IsPreviewGeneratingModalOpen = false;
+        RecordPreviewCanceled();
+    }
+
+    private void OpenPreview()
+    {
+        var openResult = _previewOutputOpenService.OpenCurrentPreview(_previewState);
+        if (openResult.EnglishWarning is not null &&
+            openResult.SpanishWarning is not null)
+        {
+            AddLog(openResult.EnglishWarning, openResult.SpanishWarning);
+            return;
+        }
+
+        AddLog(
+            "Preview opened with the default video player.",
+            "Vista previa abierta con el reproductor de video predeterminado.");
+    }
+
+    private void ContinuePreview()
+    {
+        if (!CanContinuePreview)
+        {
+            AddLog(
+                "Preview cannot be accepted because it does not match the current settings.",
+                "La vista previa no puede aceptarse porque no coincide con la configuracion actual.");
+            return;
+        }
+
+        var configuration = CreateCurrentPreviewConfiguration();
+        if (configuration is null)
+        {
+            AddLog(
+                "Preview cannot be accepted until the current configuration is valid.",
+                "La vista previa no puede aceptarse hasta que la configuracion actual sea valida.");
+            return;
+        }
+
+        _previewState = _previewState.Accept(configuration);
+        IsPreviewReadyModalOpen = false;
+        AddLog(
+            "Preview accepted. Final conversion is now available.",
+            "Vista previa aceptada. La conversion final ahora esta disponible.");
+        RaisePreviewPropertiesChanged();
+        RaiseConversionExecutionPropertiesChanged();
+        RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void DeletePreview()
+    {
+        DeleteCurrentPreviewFiles(logDeletion: true);
+        _previewState = _previewState.Deleted(CurrentPreviewStartTime, CurrentPreviewDuration);
+        IsPreviewReadyModalOpen = false;
+        _lastPreviewCachePaths = null;
+        RaisePreviewPropertiesChanged();
+    }
+
+    private void DeleteCurrentPreviewFiles(bool logDeletion)
+    {
+        var paths = CreateCurrentPreviewCleanupPaths();
+        try
+        {
+            _previewCacheCleaner.DeletePreviewFiles(
+                _previewCachePathProvider.GetPreviewCacheDirectory(),
+                paths);
+        }
+        catch (Exception exception)
+        {
+            AddLog(
+                $"Preview cleanup warning: {exception.Message}",
+                $"Advertencia de limpieza de vista previa: {exception.Message}");
+        }
+
+        if (logDeletion)
+        {
+            AddLog(
+                "Preview files were deleted.",
+                "Los archivos de vista previa fueron eliminados.");
+        }
+    }
+
+    private IReadOnlyList<string?> CreateCurrentPreviewCleanupPaths()
+    {
+        var paths = new List<string?>();
+        if (_lastPreviewCachePaths is not null)
+        {
+            paths.AddRange(_lastPreviewCachePaths.AllPaths);
+        }
+
+        paths.Add(_previewState.OutputPath);
+        return paths;
+    }
+
+    private async Task<int> DeletePreviewFilesAsync(
+        IReadOnlyList<string?> paths,
+        bool logDeletion)
+    {
+        var deleted = 0;
+        try
+        {
+            deleted = await Task.Run(() => _previewCacheCleaner.DeletePreviewFiles(
+                    _previewCachePathProvider.GetPreviewCacheDirectory(),
+                    paths))
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            AddLog(
+                $"Preview cleanup warning: {exception.Message}",
+                $"Advertencia de limpieza de vista previa: {exception.Message}");
+        }
+
+        if (logDeletion)
+        {
+            AddLog(
+                "Preview files were deleted.",
+                "Los archivos de vista previa fueron eliminados.");
+        }
+
+        return deleted;
+    }
+
+    private async Task DeleteCanceledPreviewAttemptFilesAsync(bool logDeletion)
+    {
+        var deleted = 0;
+        var paths = _lastPreviewCachePaths?.AllPaths ?? [];
+        if (paths.Count > 0)
+        {
+            deleted += await DeletePreviewFilesAsync(paths, logDeletion: false);
+        }
+
+        try
+        {
+            deleted += await Task.Run(() => _previewCacheCleaner.DeletePartialFiles(
+                    _previewCachePathProvider.GetPreviewCacheDirectory()))
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            AddLog(
+                $"Preview partial cleanup warning: {exception.Message}",
+                $"Advertencia de limpieza de parciales de vista previa: {exception.Message}");
+        }
+
+        if (logDeletion && deleted > 0)
+        {
+            AddLog(
+                "Preview partial files were cleaned.",
+                "Los archivos parciales de vista previa fueron limpiados.");
+        }
+    }
+
+    private PreviewConfigurationSnapshot? CreateCurrentPreviewConfiguration()
+    {
+        if (_conversionPlan is null)
+        {
+            return null;
+        }
+
+        var timeRangeValidation = CurrentPreviewTimeRangeValidation;
+        if (!timeRangeValidation.IsValid ||
+            timeRangeValidation.Range is null)
+        {
+            return null;
+        }
+
+        return PreviewConfigurationSnapshot.Create(
+            _conversionPlan,
+            SelectedOutputPreset,
+            timeRangeValidation.Range);
+    }
+
+    private void MarkPreviewOutdatedIfNeeded(bool logChange = true)
+    {
+        var configuration = CreateCurrentPreviewConfiguration();
+        if (configuration is null)
+        {
+            return;
+        }
+
+        var updatedState = _previewState.UpdateForCurrentConfiguration(
+            configuration,
+            PreviewOutputFileExists());
+        if (updatedState == _previewState)
+        {
+            return;
+        }
+
+        var restoredAccepted = updatedState.Status == PreviewGenerationStatus.Accepted &&
+            _previewState.Status == PreviewGenerationStatus.Outdated;
+        _previewState = updatedState;
+        if (logChange)
+        {
+            if (restoredAccepted)
+            {
+                AddLog(
+                    "Accepted preview matches the current settings again.",
+                    "La vista previa aceptada vuelve a coincidir con la configuracion actual.");
+            }
+            else
+            {
+                AddLog(
+                    "Preview is outdated. Regenerate it for the current settings.",
+                    "La vista previa esta desactualizada. Regenerala para la configuracion actual.");
+            }
+        }
+
+        RaisePreviewPropertiesChanged();
+    }
+
+    private void MarkPreviewOutdatedForCurrentSettings(bool logChange = true)
+    {
+        var updatedState = _previewState.MarkOutdated(
+            "Preview is outdated. Regenerate it for the current settings.",
+            "La vista previa esta desactualizada. Regenerala para la configuracion actual.");
+        if (updatedState == _previewState)
+        {
+            return;
+        }
+
+        _previewState = updatedState;
+        if (logChange)
+        {
+            AddLog(
+                "Preview is outdated. Regenerate it for the current settings.",
+                "La vista previa esta desactualizada. Regenerala para la configuracion actual.");
+        }
+
+        RaisePreviewPropertiesChanged();
+    }
+
+    private bool IsPreviewFingerprintCurrent()
+    {
+        var configuration = CreateCurrentPreviewConfiguration();
+        return configuration is not null &&
+            string.Equals(
+                _previewState.ConfigurationFingerprint,
+                configuration.Fingerprint,
+                StringComparison.Ordinal);
+    }
+
+    private bool PreviewOutputFileExists() =>
+        !string.IsNullOrWhiteSpace(_previewState.OutputPath) &&
+        _previewCacheFileService.Exists(_previewState.OutputPath);
+
+    private void PreviewTimeRangeChanged()
+    {
+        _hasUserEditedPreviewRange = true;
+        if (CreateCurrentPreviewConfiguration() is null)
+        {
+            MarkPreviewOutdatedForCurrentSettings();
+        }
+        else
+        {
+            MarkPreviewOutdatedIfNeeded();
+        }
+
+        RaisePreviewPropertiesChanged();
+        RaiseConversionExecutionPropertiesChanged();
+        RaiseConversionReadinessPropertiesChanged();
+    }
+
+    private void SetDefaultPreviewTimeRangeFromAnalysis()
+    {
+        var range = PreviewTimeRangeService.CreateDefaultRange(_analysis?.File.Duration);
+        var currentValidation = PreviewTimeRangeService.Validate(
+            _previewFromText,
+            _previewToText,
+            _analysis?.File.Duration);
+        if (!_hasUserEditedPreviewRange || !currentValidation.IsValid)
+        {
+            SetPreviewTimeRangeText(range);
+            _hasUserEditedPreviewRange = false;
+        }
+
+        _previewState = _previewState.Deleted(CurrentPreviewStartTime, CurrentPreviewDuration);
+        RaisePreviewPropertiesChanged();
+    }
+
+    private void SetPreviewTimeRangeText(PreviewTimeRange range)
+    {
+        SetProperty(
+            ref _previewFromText,
+            PreviewTimeRangeService.Format(range.From),
+            nameof(PreviewFromText));
+        SetProperty(
+            ref _previewToText,
+            PreviewTimeRangeService.Format(range.To),
+            nameof(PreviewToText));
+    }
+
+    private string PreviewTimeRangeValidationMessage(
+        PreviewTimeRangeValidationIssue issue) =>
+        PreviewTimeRangeValidationMessage(issue, IsSpanish);
+
+    private static string PreviewTimeRangeValidationMessage(
+        PreviewTimeRangeValidationIssue issue,
+        bool useSpanish) => issue switch
+        {
+            PreviewTimeRangeValidationIssue.None => string.Empty,
+            PreviewTimeRangeValidationIssue.MissingSourceDuration => useSpanish
+                ? "Analiza la duracion del video antes de generar una vista previa."
+                : "Analyze the video duration before generating a preview.",
+            PreviewTimeRangeValidationIssue.MissingValue => useSpanish
+                ? "Ingresa Desde y Hasta en formato HH:MM:SS."
+                : "Enter From and To in HH:MM:SS format.",
+            PreviewTimeRangeValidationIssue.InvalidFormat => useSpanish
+                ? "Usa el formato HH:MM:SS para Desde y Hasta."
+                : "Use HH:MM:SS format for From and To.",
+            PreviewTimeRangeValidationIssue.FromMustBeBeforeTo => useSpanish
+                ? "Desde debe ser anterior a Hasta."
+                : "From must be before To.",
+            PreviewTimeRangeValidationIssue.ExceedsMaximumDuration => useSpanish
+                ? "La duracion maxima de la vista previa es de 1 minuto 30 segundos."
+                : "Maximum preview duration is 1 minute 30 seconds.",
+            PreviewTimeRangeValidationIssue.ToBeyondSourceDuration => useSpanish
+                ? "Hasta no puede superar la duracion analizada del video."
+                : "To cannot exceed the analyzed video duration.",
+            _ => useSpanish
+                ? "El rango de vista previa no es valido."
+                : "The preview time range is not valid.",
+        };
+
+    private void ApplyPreviewProgressUpdate(
+        ConversionExecutionProgressUpdate progressUpdate)
+    {
+        if (DispatchToUiThreadIfNeeded(() => ApplyPreviewProgressUpdate(progressUpdate)))
+        {
+            return;
+        }
+
+        try
+        {
+            ApplyPreviewProgressUpdateOnUiThread(progressUpdate);
+        }
+        catch (Exception exception)
+        {
+            RecordRecoverablePreviewWarning("Preview progress update", exception);
+        }
+    }
+
+    private void ApplyPreviewProgressUpdateOnUiThread(
+        ConversionExecutionProgressUpdate progressUpdate)
+    {
+        if (_isPreviewCancellationRequested ||
+            _previewState.Status == PreviewGenerationStatus.Canceled)
+        {
+            return;
+        }
+
+        var normalizedUpdate = progressUpdate.NormalizeProgress();
+        _previewState = _previewState with
+        {
+            EnglishDetail = normalizedUpdate.DetailEnglish,
+            SpanishDetail = normalizedUpdate.DetailSpanish,
+        };
+        UpdatePreviewStage(normalizedUpdate.CurrentStep);
+        if (normalizedUpdate.OutputLine is not null)
+        {
+            var message = FormatOutputLine(normalizedUpdate.OutputLine);
+            AppendPreviewLogLine(message);
+        }
+
+        AppendPreviewOfflineDependencyWarningIfNeeded(normalizedUpdate);
+
+        if (normalizedUpdate.Metrics is not null)
+        {
+            UpdatePreviewMetricText(normalizedUpdate.Metrics);
+        }
+
+        RaisePreviewPropertiesChanged();
+    }
+
     private void StartOrCancelConversion()
     {
         if (IsConversionRunning)
@@ -2022,12 +3378,20 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (IsPreviewGenerating)
+        {
+            AddLog(
+                "Cancel the active preview before starting final conversion.",
+                "Cancela la vista previa activa antes de iniciar la conversion final.");
+            return;
+        }
+
         _ = StartConversionAsync();
     }
 
     private async Task StartConversionAsync()
     {
-        if (IsConversionRunning)
+        if (IsConversionRunning || IsPreviewGenerating)
         {
             return;
         }
@@ -2049,6 +3413,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ConversionLogs.Clear();
         _lastConversionOutputLine = string.Empty;
         _hasLiveConversionOutput = false;
+        _hasLoggedConversionOfflineDependencyWarning = false;
         ResetMetricText();
         var startedAt = DateTimeOffset.UtcNow;
         _conversionExecutionState = new(
@@ -2144,6 +3509,8 @@ public sealed class MainWindowViewModel : ObservableObject
             AddConversionOutputLine(normalizedUpdate.OutputLine);
         }
 
+        AddConversionOfflineDependencyWarningIfNeeded(normalizedUpdate);
+
         if (normalizedUpdate.Metrics is not null)
         {
             UpdateMetricText(normalizedUpdate.Metrics);
@@ -2170,6 +3537,21 @@ public sealed class MainWindowViewModel : ObservableObject
         _lastConversionOutputLine = message;
         _hasLiveConversionOutput = true;
         AddConversionLog(message, message, outputLine.CapturedAt.LocalDateTime);
+    }
+
+    private void AddConversionOfflineDependencyWarningIfNeeded(
+        ConversionExecutionProgressUpdate progressUpdate)
+    {
+        if (_hasLoggedConversionOfflineDependencyWarning ||
+            !IsRuntimeDownloadWarning(progressUpdate))
+        {
+            return;
+        }
+
+        _hasLoggedConversionOfflineDependencyWarning = true;
+        AddConversionLog(
+            Iw3RuntimeDownloadDetector.EnglishWarning,
+            Iw3RuntimeDownloadDetector.SpanishWarning);
     }
 
     private static string FormatOutputLine(ProcessOutputLine outputLine)
@@ -2297,10 +3679,166 @@ public sealed class MainWindowViewModel : ObservableObject
         if (_lastProcessMetricSample is null)
         {
             ResetMetricText();
-            return;
+        }
+        else
+        {
+            UpdateMetricText(_lastProcessMetricSample);
         }
 
-        UpdateMetricText(_lastProcessMetricSample);
+        if (_lastPreviewMetricSample is null)
+        {
+            ResetPreviewMetricText();
+        }
+        else
+        {
+            UpdatePreviewMetricText(_lastPreviewMetricSample);
+        }
+    }
+
+    private void UpdatePreviewStage(ConversionExecutionStep step)
+    {
+        if (step.EnglishText.Contains("source clip", StringComparison.OrdinalIgnoreCase))
+        {
+            _previewStageEnglishText = "FFmpeg source clip";
+            _previewStageSpanishText = "clip fuente FFmpeg";
+        }
+        else if (step.EnglishText.Contains("iw3", StringComparison.OrdinalIgnoreCase))
+        {
+            _previewStageEnglishText = "Bundled Python/iw3";
+            _previewStageSpanishText = "Python/iw3 incluido";
+        }
+        else if (step.EnglishText.Contains("completed", StringComparison.OrdinalIgnoreCase))
+        {
+            _previewStageEnglishText = "Preview completed";
+            _previewStageSpanishText = "Vista previa completada";
+        }
+        else
+        {
+            _previewStageEnglishText = "Preparing preview";
+            _previewStageSpanishText = "Preparando vista previa";
+        }
+
+        OnPropertyChanged(nameof(PreviewStageText));
+    }
+
+    private void UpdatePreviewMetricText(ProcessMetricSample metrics)
+    {
+        _lastPreviewMetricSample = metrics;
+        _previewCpuUsageText = metrics.CpuUsagePercent is null
+            ? Text("CPU: Detecting...", "CPU: Detectando...")
+            : $"CPU: {metrics.CpuUsagePercent.Value:0.0}%";
+        _previewRamUsageText = FormatPreviewMemory(metrics.PrivateMemoryBytes ?? metrics.WorkingSetBytes);
+        _previewGpuUsageText = FormatPreviewGpu(metrics);
+        _previewVramUsageText = FormatPreviewVram(metrics);
+        _previewGpuMetricsStatusText = FormatPreviewGpuMetricsStatus(metrics);
+        RaisePreviewMetricPropertiesChanged();
+    }
+
+    private void ResetPreviewMetricText()
+    {
+        _lastPreviewMetricSample = null;
+        _previewCpuUsageText = Text("CPU: Detecting...", "CPU: Detectando...");
+        _previewRamUsageText = Text("RAM: Detecting...", "RAM: Detectando...");
+        _previewGpuUsageText = Text("GPU: Detecting...", "GPU: Detectando...");
+        _previewVramUsageText = Text("VRAM: Detecting...", "VRAM: Detectando...");
+        _previewGpuMetricsStatusText = Text("GPU metrics: Detecting...", "Metricas GPU: Detectando...");
+        _previewStageEnglishText = "Preparing preview";
+        _previewStageSpanishText = "Preparando vista previa";
+        RaisePreviewMetricPropertiesChanged();
+        OnPropertyChanged(nameof(PreviewStageText));
+    }
+
+    private void RaisePreviewMetricPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(PreviewCpuUsageText));
+        OnPropertyChanged(nameof(PreviewRamUsageText));
+        OnPropertyChanged(nameof(PreviewGpuUsageText));
+        OnPropertyChanged(nameof(PreviewVramUsageText));
+        OnPropertyChanged(nameof(PreviewGpuMetricsStatusText));
+    }
+
+    private string FormatPreviewMemory(long? bytes) =>
+        bytes is null
+            ? Text("RAM: Detecting...", "RAM: Detectando...")
+            : $"RAM: {FormatMetricBytes(bytes.Value)}";
+
+    private string FormatPreviewGpu(ProcessMetricSample metrics)
+    {
+        if (metrics.GpuUsagePercent is { } gpuUsagePercent)
+        {
+            var label = metrics.GpuScope == ProcessGpuMetricScope.Adapter
+                ? "GPU global"
+                : "GPU";
+            return $"{label}: {gpuUsagePercent:0.0}%";
+        }
+
+        return string.IsNullOrWhiteSpace(metrics.GpuStatus)
+            ? Text("GPU: Detecting...", "GPU: Detectando...")
+            : Text(
+                $"GPU: Unavailable ({metrics.GpuStatus})",
+                $"GPU: No disponible ({LocalizePreviewGpuStatus(metrics.GpuStatus)})");
+    }
+
+    private string FormatPreviewVram(ProcessMetricSample metrics)
+    {
+        if (metrics.GpuDedicatedMemoryBytes is not { } bytes)
+        {
+            return Text("VRAM: Detecting...", "VRAM: Detectando...");
+        }
+
+        var label = metrics.GpuScope == ProcessGpuMetricScope.Adapter
+            ? "VRAM global"
+            : "VRAM";
+        return $"{label}: {FormatMetricBytes(bytes)}";
+    }
+
+    private string FormatPreviewGpuMetricsStatus(ProcessMetricSample metrics)
+    {
+        if (metrics.GpuUsagePercent is not null)
+        {
+            return metrics.GpuScope == ProcessGpuMetricScope.Adapter
+                ? Text(
+                    "GPU metrics: Windows adapter/global counters",
+                    "Metricas GPU: contadores globales del adaptador Windows")
+                : Text(
+                    "GPU metrics: process counters",
+                    "Metricas GPU: contadores del proceso");
+        }
+
+        return string.IsNullOrWhiteSpace(metrics.GpuStatus)
+            ? Text("GPU metrics: Detecting...", "Metricas GPU: Detectando...")
+            : Text(
+                $"GPU metrics: Unavailable ({metrics.GpuStatus})",
+                $"Metricas GPU: No disponible ({LocalizePreviewGpuStatus(metrics.GpuStatus)})");
+    }
+
+    private string LocalizePreviewGpuStatus(string status) => status switch
+    {
+        ProcessGpuMetricReading.DetectingStatus => "Detectando...",
+        ProcessGpuMetricReading.NoProcessGpuEngineCounterStatus =>
+            "No se encontro contador GPU Engine para este proceso",
+        ProcessGpuMetricReading.PermissionUnavailableStatus => "Permiso no disponible",
+        ProcessGpuMetricReading.WindowsMetricsUnavailableStatus =>
+            "Metricas no disponibles en esta version/controlador de Windows",
+        ProcessGpuMetricReading.NvidiaMetricsUnavailableStatus =>
+            "Metricas NVIDIA no disponibles",
+        ProcessGpuMetricReading.AdapterGpuUsageStatus =>
+            "Uso global del adaptador GPU",
+        ProcessGpuMetricReading.ProcessGpuEngineCounterStatus =>
+            "Uso GPU del proceso",
+        ProcessGpuMetricReading.NvidiaAdapterMetricsStatus =>
+            "Metricas globales del adaptador NVIDIA",
+        _ => status,
+    };
+
+    private static string FormatMetricBytes(long bytes)
+    {
+        const double gibibyte = 1024 * 1024 * 1024;
+        const double mebibyte = 1024 * 1024;
+
+        return bytes >= gibibyte
+            ? $"{bytes / gibibyte:0.00} GB"
+            : $"{bytes / mebibyte:0.0} MB";
     }
 
     private void HandleOpenOutputWhenFinished(
@@ -2414,6 +3952,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (RegenerateConversionPlan())
         {
+            MarkPreviewOutdatedIfNeeded();
             AddLog(englishMessage, spanishMessage);
         }
     }
@@ -2447,7 +3986,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void BrowseOutputFolder()
     {
-        if (IsConversionRunning)
+        if (IsConversionRunning || IsPreviewGenerating)
         {
             return;
         }
@@ -2480,7 +4019,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ResetOutputPath()
     {
-        if (IsConversionRunning)
+        if (IsConversionRunning || IsPreviewGenerating)
         {
             return;
         }
@@ -2592,6 +4131,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _conversionRecommendation = _recommendationService.Recommend(_analysis, SelectedOutputPreset);
         RegenerateConversionPlan();
+        MarkPreviewOutdatedIfNeeded();
         RaiseRecommendationPropertiesChanged();
     }
 
@@ -2648,17 +4188,209 @@ public sealed class MainWindowViewModel : ObservableObject
         _ => value.ToString(),
     };
 
+    private static string GetSpanishModelDisplayName(LocalModelPlanSelection selectedModel) =>
+        string.IsNullOrWhiteSpace(selectedModel.SpanishDisplayName)
+            ? selectedModel.DisplayName
+            : selectedModel.SpanishDisplayName;
+
     private string Text(string english, string spanish) => IsSpanish ? spanish : english;
 
     private string LabelValue(string englishLabel, string spanishLabel, string? value) =>
         $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
 
-    private void AddLog(string englishMessage, string spanishMessage) =>
+    private void AddLog(string englishMessage, string spanishMessage)
+    {
         Logs.Add(new LogEntryViewModel(
             timestamp: DateTime.Now,
             englishMessage,
             spanishMessage,
             isSpanish: IsSpanish));
+        OnPropertyChanged(nameof(ActivityLogPanelText));
+        if (IsActivityLogModalOpen)
+        {
+            ActivityLogModalText = CreateFullActivityLogText();
+        }
+    }
+
+    private void ResetPreviewGenerationLog()
+    {
+        if (DispatchToUiThreadIfNeeded(ResetPreviewGenerationLog))
+        {
+            return;
+        }
+
+        PreviewGenerationLogs.Clear();
+        _previewGenerationLogTextBuilder.Clear();
+        OnPropertyChanged(nameof(PreviewGenerationLogText));
+    }
+
+    private void AppendPreviewLogLine(string message)
+    {
+        if (DispatchToUiThreadIfNeeded(() => AppendPreviewLogLine(message)))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        PreviewGenerationLogs.Add(message);
+        if (_previewGenerationLogTextBuilder.Length > 0)
+        {
+            _previewGenerationLogTextBuilder.AppendLine();
+        }
+
+        _previewGenerationLogTextBuilder.Append(message);
+    }
+
+    private void ShowLogCopySuccessNotification()
+    {
+        ShowLogCopyNotification("Log copied", "Log copiado");
+    }
+
+    private void ShowLogCopyFailureNotification()
+    {
+        ShowLogCopyNotification("Could not copy log", "No se pudo copiar el log");
+    }
+
+    private void ShowLogCopyNotification(string englishText, string spanishText)
+    {
+        if (DispatchToUiThreadIfNeeded(() => ShowLogCopyNotification(englishText, spanishText)))
+        {
+            return;
+        }
+
+        _logCopyNotificationEnglishText = englishText;
+        _logCopyNotificationSpanishText = spanishText;
+        _isLogCopyNotificationVisible = true;
+        OnPropertyChanged(nameof(LogCopyNotificationText));
+        OnPropertyChanged(nameof(LogCopyNotificationVisibility));
+
+        _logCopyNotificationCancellationTokenSource?.Cancel();
+        _logCopyNotificationCancellationTokenSource?.Dispose();
+        var cancellationTokenSource = new CancellationTokenSource();
+        _logCopyNotificationCancellationTokenSource = cancellationTokenSource;
+        _ = HideLogCopyNotificationAfterDelayAsync(cancellationTokenSource);
+    }
+
+    private async Task HideLogCopyNotificationAfterDelayAsync(
+        CancellationTokenSource cancellationTokenSource)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationTokenSource.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (DispatchToUiThreadIfNeeded(() => HideLogCopyNotification(cancellationTokenSource)))
+        {
+            return;
+        }
+
+        HideLogCopyNotification(cancellationTokenSource);
+    }
+
+    private void HideLogCopyNotification(CancellationTokenSource cancellationTokenSource)
+    {
+        if (!ReferenceEquals(_logCopyNotificationCancellationTokenSource, cancellationTokenSource))
+        {
+            return;
+        }
+
+        _isLogCopyNotificationVisible = false;
+        _logCopyNotificationCancellationTokenSource = null;
+        cancellationTokenSource.Dispose();
+        OnPropertyChanged(nameof(LogCopyNotificationVisibility));
+    }
+
+    private void AppendPreviewResultLog(ConversionExecutionLogEntry log)
+    {
+        if (string.Equals(
+                log.EnglishMessage,
+                Iw3RuntimeDownloadDetector.EnglishWarning,
+                StringComparison.Ordinal) &&
+            _hasLoggedPreviewOfflineDependencyWarning)
+        {
+            return;
+        }
+
+        AppendPreviewLogLine(Text(log.EnglishMessage, log.SpanishMessage));
+        if (string.Equals(
+                log.EnglishMessage,
+                Iw3RuntimeDownloadDetector.EnglishWarning,
+                StringComparison.Ordinal))
+        {
+            _hasLoggedPreviewOfflineDependencyWarning = true;
+        }
+    }
+
+    private void AppendPreviewOfflineDependencyWarningIfNeeded(
+        ConversionExecutionProgressUpdate progressUpdate)
+    {
+        if (_hasLoggedPreviewOfflineDependencyWarning ||
+            !IsRuntimeDownloadWarning(progressUpdate))
+        {
+            return;
+        }
+
+        _hasLoggedPreviewOfflineDependencyWarning = true;
+        AppendPreviewLogLine(Text(
+            Iw3RuntimeDownloadDetector.EnglishWarning,
+            Iw3RuntimeDownloadDetector.SpanishWarning));
+    }
+
+    private static bool IsRuntimeDownloadWarning(
+        ConversionExecutionProgressUpdate progressUpdate) =>
+        string.Equals(
+            progressUpdate.DetailEnglish,
+            Iw3RuntimeDownloadDetector.EnglishWarning,
+            StringComparison.Ordinal);
+
+    private bool DispatchToUiThreadIfNeeded(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            return false;
+        }
+
+        try
+        {
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception exception)
+                {
+                    AppErrorLogService.LogRecoverableException("Preview UI dispatch", exception);
+                }
+            }));
+        }
+        catch (Exception exception)
+        {
+            AppErrorLogService.LogRecoverableException("Preview UI dispatch", exception);
+        }
+
+        return true;
+    }
+
+    private void RecordRecoverablePreviewWarning(string operation, Exception exception)
+    {
+        var errorLogPath = AppErrorLogService.LogRecoverableException(operation, exception);
+        AddLog(
+            $"{operation} warning. Details were written to {errorLogPath}. {exception.Message}",
+            $"Advertencia de {operation}. Los detalles se escribieron en {errorLogPath}. {exception.Message}");
+    }
+
+    private string CreateFullActivityLogText() =>
+        string.Join(Environment.NewLine, Logs.Select(log => log.DisplayText));
 
     private void UpdateLogLanguages()
     {
@@ -2670,6 +4402,12 @@ public sealed class MainWindowViewModel : ObservableObject
         foreach (var log in ConversionLogs)
         {
             log.SetLanguage(IsSpanish);
+        }
+
+        OnPropertyChanged(nameof(ActivityLogPanelText));
+        if (IsActivityLogModalOpen)
+        {
+            ActivityLogModalText = CreateFullActivityLogText();
         }
     }
 
@@ -2717,12 +4455,19 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseRecommendationPropertiesChanged();
         RaiseConversionPlanPropertiesChanged();
         RaiseConversionExecutionPropertiesChanged();
+        RaisePreviewPropertiesChanged();
         RaiseConversionReadinessPropertiesChanged();
         RaiseSystemStatusPropertiesChanged();
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(OpenEngineFolderText));
         OnPropertyChanged(nameof(ActivityLogTitle));
+        OnPropertyChanged(nameof(ViewLogText));
+        OnPropertyChanged(nameof(CopyFullLogText));
+        OnPropertyChanged(nameof(CopyPreviewLogText));
+        OnPropertyChanged(nameof(LogCopiedText));
+        OnPropertyChanged(nameof(CouldNotCopyLogText));
+        OnPropertyChanged(nameof(LogCopyNotificationText));
         OnPropertyChanged(nameof(ClearText));
         RaisePresetPropertiesChanged();
     }
@@ -2834,6 +4579,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ThreeDOutputFormatOptionLabel));
         OnPropertyChanged(nameof(LocalModelSelectionLabel));
         OnPropertyChanged(nameof(HasLocalModelSelectionCandidates));
+        OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
         OnPropertyChanged(nameof(OutputLocationTitle));
@@ -2858,6 +4604,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionPlanStepsText));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewTitle));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewText));
+        RaisePreviewPropertiesChanged();
         OnPropertyChanged(nameof(ProfileDetailsBodyText));
         OnPropertyChanged(nameof(ConversionSummaryPresetText));
         OnPropertyChanged(nameof(ConversionSummaryLgCompatibilityCopyText));
@@ -2882,6 +4629,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionExecutionDetailText));
         OnPropertyChanged(nameof(CanCancelConversion));
         OnPropertyChanged(nameof(CancelConversionText));
+        OnPropertyChanged(nameof(ConvertPrimaryActionVisibility));
+        OnPropertyChanged(nameof(CancelConversionPrimaryActionVisibility));
         OnPropertyChanged(nameof(CanStartConversion));
         OnPropertyChanged(nameof(CanStartOrCancelConversion));
         OnPropertyChanged(nameof(StartConversionText));
@@ -2891,6 +4640,92 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
         StartConversionCommand.RaiseCanExecuteChanged();
         ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaisePreviewPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(PreviewTitleText));
+        OnPropertyChanged(nameof(PreviewRequiredTitleText));
+        OnPropertyChanged(nameof(PreviewAcceptedTitleText));
+        OnPropertyChanged(nameof(PreviewStepTitleText));
+        OnPropertyChanged(nameof(GeneratePreviewText));
+        OnPropertyChanged(nameof(PreviewRequiredInstructionText));
+        OnPropertyChanged(nameof(PreviewRequirementVisibility));
+        OnPropertyChanged(nameof(GeneratePreviewPrimaryActionVisibility));
+        OnPropertyChanged(nameof(ConvertPrimaryActionVisibility));
+        OnPropertyChanged(nameof(CancelConversionPrimaryActionVisibility));
+        OnPropertyChanged(nameof(CancelPreviewText));
+        OnPropertyChanged(nameof(OpenPreviewText));
+        OnPropertyChanged(nameof(OpenPreviewExternallyText));
+        OnPropertyChanged(nameof(DeletePreviewText));
+        OnPropertyChanged(nameof(ContinuePreviewText));
+        OnPropertyChanged(nameof(PreviewGeneratingTitleText));
+        OnPropertyChanged(nameof(PreviewGeneratingMessageText));
+        OnPropertyChanged(nameof(PreviewReadyTitleText));
+        OnPropertyChanged(nameof(PreviewReadyMessageText));
+        OnPropertyChanged(nameof(PreviewPlaybackFallbackText));
+        OnPropertyChanged(nameof(PreviewPlayText));
+        OnPropertyChanged(nameof(PreviewPauseText));
+        OnPropertyChanged(nameof(PreviewReplayText));
+        OnPropertyChanged(nameof(PreviewVolumeText));
+        OnPropertyChanged(nameof(PreviewMutedText));
+        OnPropertyChanged(nameof(PreviewMuteText));
+        OnPropertyChanged(nameof(PreviewUnmuteText));
+        OnPropertyChanged(nameof(PreviewEndedText));
+        OnPropertyChanged(nameof(EmbeddedPlaybackUnavailableText));
+        OnPropertyChanged(nameof(PreviewMediaSource));
+        OnPropertyChanged(nameof(EmbeddedPreviewVisibility));
+        OnPropertyChanged(nameof(PreviewMetricsHeaderVisibility));
+        OnPropertyChanged(nameof(PreviewEngineText));
+        OnPropertyChanged(nameof(PreviewRunningWithText));
+        OnPropertyChanged(nameof(PreviewGpuMetricsNoteText));
+        OnPropertyChanged(nameof(PreviewStageText));
+        OnPropertyChanged(nameof(PreviewCpuUsageText));
+        OnPropertyChanged(nameof(PreviewRamUsageText));
+        OnPropertyChanged(nameof(PreviewGpuUsageText));
+        OnPropertyChanged(nameof(PreviewVramUsageText));
+        OnPropertyChanged(nameof(PreviewGpuMetricsStatusText));
+        OnPropertyChanged(nameof(PreviewStatusText));
+        OnPropertyChanged(nameof(PreviewGateStatusText));
+        OnPropertyChanged(nameof(PreviewGateDetailText));
+        OnPropertyChanged(nameof(PreviewDurationText));
+        OnPropertyChanged(nameof(PreviewStartTimeText));
+        OnPropertyChanged(nameof(PreviewFromLabel));
+        OnPropertyChanged(nameof(PreviewToLabel));
+        OnPropertyChanged(nameof(PreviewTimeRangeText));
+        OnPropertyChanged(nameof(PreviewMaximumDurationText));
+        OnPropertyChanged(nameof(PreviewTimeRangeValidationText));
+        OnPropertyChanged(nameof(PreviewTimeRangeValidationVisibility));
+        OnPropertyChanged(nameof(CanEditPreviewTimeRange));
+        OnPropertyChanged(nameof(PreviewOutdatedText));
+        OnPropertyChanged(nameof(PreviewOutdatedVisibility));
+        OnPropertyChanged(nameof(PreviewOutputPathText));
+        OnPropertyChanged(nameof(PreviewOutputPathVisibility));
+        OnPropertyChanged(nameof(IsPreviewGenerating));
+        OnPropertyChanged(nameof(CanGeneratePreview));
+        OnPropertyChanged(nameof(CanCancelPreview));
+        OnPropertyChanged(nameof(CanOpenPreview));
+        OnPropertyChanged(nameof(CanDeletePreview));
+        OnPropertyChanged(nameof(CanContinuePreview));
+        OnPropertyChanged(nameof(PreviewModalDetailText));
+        OnPropertyChanged(nameof(PreviewGenerationLogText));
+        OnPropertyChanged(nameof(CopyPreviewLogText));
+        OnPropertyChanged(nameof(CanStartConversion));
+        OnPropertyChanged(nameof(CanStartOrCancelConversion));
+        GeneratePreviewCommand.RaiseCanExecuteChanged();
+        CancelPreviewCommand.RaiseCanExecuteChanged();
+        OpenPreviewCommand.RaiseCanExecuteChanged();
+        DeletePreviewCommand.RaiseCanExecuteChanged();
+        ContinuePreviewCommand.RaiseCanExecuteChanged();
+        CopyPreviewLogCommand.RaiseCanExecuteChanged();
+        StartConversionCommand.RaiseCanExecuteChanged();
+        SelectVideoCommand.RaiseCanExecuteChanged();
+        AnalyzeCommand.RaiseCanExecuteChanged();
+        BrowseOutputFolderCommand.RaiseCanExecuteChanged();
+        ResetOutputPathCommand.RaiseCanExecuteChanged();
+        RefreshEngineStatusCommand.RaiseCanExecuteChanged();
+        ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+        ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseConversionRunningModePropertiesChanged()
@@ -2924,6 +4759,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanOpenSystemStatusToolsTab));
         OnPropertyChanged(nameof(CanStartOrCancelConversion));
         OnPropertyChanged(nameof(StartConversionText));
+        OnPropertyChanged(nameof(CancelConversionPrimaryActionVisibility));
+        RaisePreviewPropertiesChanged();
         SelectVideoCommand.RaiseCanExecuteChanged();
         AnalyzeCommand.RaiseCanExecuteChanged();
         BrowseOutputFolderCommand.RaiseCanExecuteChanged();
@@ -2966,6 +4803,12 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
         OnPropertyChanged(nameof(ConversionReadinessEmptyText));
         OnPropertyChanged(nameof(VramUsageText));
+        OnPropertyChanged(nameof(ViewLogText));
+        OnPropertyChanged(nameof(CopyFullLogText));
+        OnPropertyChanged(nameof(CopyPreviewLogText));
+        OnPropertyChanged(nameof(LogCopiedText));
+        OnPropertyChanged(nameof(CouldNotCopyLogText));
+        OnPropertyChanged(nameof(LogCopyNotificationText));
     }
 
     private void RaiseModalStatePropertiesChanged()
@@ -2976,6 +4819,12 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(TechnicalDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ProfileDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ReplaceVideoConfirmationModalContentVisibility));
+        OnPropertyChanged(nameof(ActivityLogModalContentVisibility));
+        OnPropertyChanged(nameof(PreviewGeneratingModalContentVisibility));
+        OnPropertyChanged(nameof(PreviewReadyModalContentVisibility));
+        OnPropertyChanged(nameof(CanEditPreviewTimeRange));
+        OnPropertyChanged(nameof(CanGeneratePreview));
+        GeneratePreviewCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseConversionReadinessPropertiesChanged()
