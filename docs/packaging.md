@@ -79,10 +79,81 @@ embedded runtime, FFmpeg tools, models, configuration, and license files need a
 clear inspectable directory layout. Keeping these components separate also
 simplifies diagnostics and future updates.
 
-## Installer
+## Release installer options
 
-The initial installer target is Inno Setup. Run packaging preflight without
-compiling the installer with:
+The release should offer three options, all based on the same split portable
+payload:
+
+1. Recommended web installer:
+   `artifacts\installer\v3dfy-v0.1.0-preview.1-web-setup.exe`
+
+   Users download one small setup EXE. Internet is required during installation
+   because the setup helper downloads the shared
+   `.part01`, `.part02`, and `.part03` payload files from the configured
+   GitHub Release. The installer verifies SHA256 for each part, rebuilds the
+   portable ZIP, verifies the final ZIP SHA256, installs into Program Files,
+   creates a Start Menu shortcut, optionally creates a Desktop shortcut, and
+   deletes temporary downloaded and rebuilt files after a successful install.
+   During payload setup, a classic installer-style v3dfy setup progress window
+   shows the current status, MB/GB and percent progress where available, and a
+   large timestamped scrolling setup log for downloads, SHA256 verification,
+   ZIP rebuild, extraction, install, and cleanup.
+   The installed app works offline afterward.
+
+2. Offline installer:
+   `artifacts\installer\v3dfy-v0.1.0-preview.1-offline-setup.exe`
+
+   Users keep the offline setup EXE and all payload `.part` files in the same folder,
+   then double-click the setup EXE. No internet and no PowerShell are required during
+   installation. The installer finds the same split payload
+   parts beside the setup EXE, verifies SHA256 for each part, rebuilds the ZIP,
+   verifies the final ZIP SHA256, installs into Program Files, creates a Start
+   Menu shortcut, optionally creates a Desktop shortcut, and deletes the
+   temporary rebuilt ZIP after a successful install.
+   During payload setup, a classic installer-style v3dfy setup progress window
+   shows local part discovery, SHA256 verification, ZIP rebuild, extraction,
+   install, cleanup, and a large timestamped scrolling setup log.
+
+3. Portable split ZIP:
+   `v3dfy-v0.1.0-preview.1-win-x64-portable.zip.part01` through `.part03`
+
+   This is a technical fallback for users who need a portable layout or manual
+   extraction. Prefer the web installer for normal users and the offline
+   installer for air-gapped or preloaded installs.
+
+Build both release installers from the shared split payload with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release-installers.ps1 -Version 0.1.0-preview.1 -ReleaseBaseUrl "https://github.com/Henrriegel/v3dfy/releases/download/v0.1.0-preview.1" -PayloadPartsDir ".\artifacts\release\split"
+```
+
+The packaging script defaults to:
+
+- Release base URL:
+  `https://github.com/Henrriegel/v3dfy/releases/download/v0.1.0-preview.1`
+- Payload parts directory: `artifacts\release\split`
+- Installer output directory: `artifacts\installer`
+
+Generated assets:
+
+- `artifacts\installer\v3dfy-v0.1.0-preview.1-web-setup.exe`
+- `artifacts\installer\v3dfy-v0.1.0-preview.1-offline-setup.exe`
+- `artifacts\installer\README_WEB_INSTALLER.txt`
+- `artifacts\installer\README_OFFLINE_INSTALLER.txt`
+- `artifacts\installer\SHA256SUMS.installers.txt`
+
+The web and offline installers are Inno Setup bootstrap installers. They bundle
+only a small self-contained Windows x64 setup helper plus a payload manifest.
+They do not duplicate the 5.4 GB payload into Inno `.bin` files. The helper
+does not require the .NET SDK, Python, Git, FFmpeg, iw3, or external tools on
+the user's machine.
+
+## Legacy embedded installer
+
+The older installer target is Inno Setup and embeds the published app folder.
+It is useful only for small local test packages because a full release payload
+exceeds GitHub Release single-asset limits. Run packaging preflight without
+compiling the legacy embedded installer with:
 
 ```powershell
 .\scripts\package-inno.ps1 -PreflightOnly

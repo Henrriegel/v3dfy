@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\V3dfy.Core\V3dfy.Core.csproj" />
     <ProjectReference Include="..\..\src\V3dfy.Engine.Iw3\V3dfy.Engine.Iw3.csproj" />
     <ProjectReference Include="..\..\src\V3dfy.Infrastructure\V3dfy.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\V3dfy.SetupHelper\V3dfy.SetupHelper.csproj" />
   </ItemGroup>
 
   <ItemGroup>
