@@ -21,9 +21,10 @@ public sealed class BundledLocalProcessRunnerTests
     public async Task RunAsync_RejectsExecutableOutsideAllowedRoot()
     {
         var runner = new BundledLocalProcessRunner(new StubProcessRunner());
+        var allowedRootDirectory = TestPaths.RuntimeRoot("tools");
         var request = CreateRequest(
-            executablePath: @"C:\outside\ffmpeg.exe",
-            allowedRootDirectory: @"C:\dev\v3dfy\tools");
+            executablePath: TestPaths.OtherRoot("ffmpeg.exe"),
+            allowedRootDirectory: allowedRootDirectory);
 
         var exception = await Assert.ThrowsAsync<ArgumentException>(
             () => runner.RunAsync(request));
@@ -35,15 +36,20 @@ public sealed class BundledLocalProcessRunnerTests
     public async Task RunAsync_AppliesConstructorAllowedRootWhenRequestDoesNotSetOne()
     {
         var innerRunner = new StubProcessRunner();
+        var allowedRootDirectory = TestPaths.RuntimeRoot("tools");
         var runner = new BundledLocalProcessRunner(
             innerRunner,
-            allowedRootDirectory: @"C:\dev\v3dfy\tools");
-        var request = CreateRequest(@"C:\dev\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe");
+            allowedRootDirectory: allowedRootDirectory);
+        var request = CreateRequest(Path.Combine(
+            allowedRootDirectory,
+            "ffmpeg",
+            "win-x64",
+            "ffmpeg.exe"));
 
         await runner.RunAsync(request);
 
         Assert.NotNull(innerRunner.Request);
-        Assert.Equal(@"C:\dev\v3dfy\tools", innerRunner.Request.AllowedRootDirectory);
+        Assert.Equal(allowedRootDirectory, innerRunner.Request.AllowedRootDirectory);
     }
 
     [Fact]
@@ -52,11 +58,16 @@ public sealed class BundledLocalProcessRunnerTests
         var innerRunner = new StubProcessRunner();
         var outputProgress = new CapturingProgress<ProcessOutputLine>();
         var metricsProgress = new CapturingProgress<ProcessMetricSample>();
+        var allowedRootDirectory = TestPaths.RuntimeRoot("tools");
         var runner = new BundledLocalProcessRunner(
             innerRunner,
-            allowedRootDirectory: @"C:\dev\v3dfy\tools");
+            allowedRootDirectory: allowedRootDirectory);
         var request = CreateRequest(
-            executablePath: @"C:\dev\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
+            executablePath: Path.Combine(
+                allowedRootDirectory,
+                "ffmpeg",
+                "win-x64",
+                "ffmpeg.exe"),
             outputProgress: outputProgress,
             metricsProgress: metricsProgress);
 
@@ -72,9 +83,14 @@ public sealed class BundledLocalProcessRunnerTests
     {
         var innerRunner = new StubProcessRunner();
         var runner = new BundledLocalProcessRunner(innerRunner);
+        var allowedRootDirectory = TestPaths.RuntimeRoot("tools");
         var request = CreateRequest(
-            executablePath: @"C:\dev\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-            allowedRootDirectory: @"C:\dev\v3dfy\tools");
+            executablePath: Path.Combine(
+                allowedRootDirectory,
+                "ffmpeg",
+                "win-x64",
+                "ffmpeg.exe"),
+            allowedRootDirectory: allowedRootDirectory);
 
         var result = await runner.RunAsync(request);
 
@@ -87,7 +103,11 @@ public sealed class BundledLocalProcessRunnerTests
     public void ValidateBundledToolRequest_RejectsNonPositiveTimeout()
     {
         var request = CreateRequest(
-            executablePath: @"C:\dev\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
+            executablePath: Path.Combine(
+                TestPaths.RuntimeRoot("tools"),
+                "ffmpeg",
+                "win-x64",
+                "ffmpeg.exe"),
             timeout: TimeSpan.Zero);
 
         Assert.Throws<ArgumentOutOfRangeException>(
@@ -98,7 +118,11 @@ public sealed class BundledLocalProcessRunnerTests
     public void ValidateBundledToolRequest_RejectsNonPositiveMetricsInterval()
     {
         var request = CreateRequest(
-            executablePath: @"C:\dev\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
+            executablePath: Path.Combine(
+                TestPaths.RuntimeRoot("tools"),
+                "ffmpeg",
+                "win-x64",
+                "ffmpeg.exe"),
             metricsInterval: TimeSpan.Zero);
 
         Assert.Throws<ArgumentOutOfRangeException>(

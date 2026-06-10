@@ -18,8 +18,8 @@ public sealed class PreviewWorkflowStateTests
                 Success: true,
                 WasCanceled: false,
                 Status: PreviewGenerationStatus.Ready,
-                PreviewOutputPath: @"C:\cache\preview.mp4",
-                CachePaths: new(@"C:\cache", @"C:\cache\source.mp4", @"C:\cache\source.part.mp4", @"C:\cache\preview.mp4", @"C:\cache\preview.part.mp4"),
+                PreviewOutputPath: PreviewPaths().PreviewOutputPath,
+                CachePaths: PreviewPaths(),
                 StartedAt: DateTimeOffset.UtcNow,
                 FinishedAt: DateTimeOffset.UtcNow,
                 EnglishSummary: "Preview generated successfully.",
@@ -28,7 +28,7 @@ public sealed class PreviewWorkflowStateTests
                 original);
 
         Assert.Equal(PreviewGenerationStatus.Outdated, state.MarkOutdatedIfConfigurationChanged(
-            original with { SourcePath = @"D:\Videos\Other.mp4" }).Status);
+            original with { SourcePath = TestPaths.SourceRoot("Other.mp4") }).Status);
         Assert.Equal(PreviewGenerationStatus.Outdated, state.MarkOutdatedIfConfigurationChanged(
             original with { ModelRelativePath = "other.pt" }).Status);
         Assert.Equal(PreviewGenerationStatus.Outdated, state.MarkOutdatedIfConfigurationChanged(
@@ -52,8 +52,8 @@ public sealed class PreviewWorkflowStateTests
                 Success: true,
                 WasCanceled: false,
                 Status: PreviewGenerationStatus.Ready,
-                PreviewOutputPath: @"C:\cache\preview.mp4",
-                CachePaths: new(@"C:\cache", @"C:\cache\source.mp4", @"C:\cache\source.part.mp4", @"C:\cache\preview.mp4", @"C:\cache\preview.part.mp4"),
+                PreviewOutputPath: PreviewPaths().PreviewOutputPath,
+                CachePaths: PreviewPaths(),
                 StartedAt: DateTimeOffset.UtcNow,
                 FinishedAt: DateTimeOffset.UtcNow,
                 EnglishSummary: "Preview generated successfully.",
@@ -142,11 +142,11 @@ public sealed class PreviewWorkflowStateTests
             TimeSpan.FromMinutes(10),
             TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(15));
         var automaticOutput = PreviewConfigurationSnapshot.Create(
-            CreatePlan(@"D:\Videos\Movie.v3dfy.3d.htab.mp4"),
+            CreatePlan(TestPaths.SourceRoot("Movie.v3dfy.3d.htab.mp4")),
             TargetDevicePresets.Lg3dFullHd2012,
             range);
         var customOutput = PreviewConfigurationSnapshot.Create(
-            CreatePlan(@"E:\Converted\ManualName.mp4"),
+            CreatePlan(TestPaths.OutputRoot("ManualName.mp4")),
             TargetDevicePresets.Lg3dFullHd2012,
             range);
 
@@ -173,7 +173,7 @@ public sealed class PreviewWorkflowStateTests
     }
 
     private static PreviewConfigurationSnapshot CreateConfiguration() => new(
-        SourcePath: @"D:\Videos\Movie.mp4",
+        SourcePath: TestPaths.SourceRoot("Movie.mp4"),
         OutputProfileName: "LG 3D Full HD 2012",
         OutputContainer: OutputContainer.MP4,
         QualityPreset: AiQualityPreset.Balanced,
@@ -194,8 +194,8 @@ public sealed class PreviewWorkflowStateTests
             Success: true,
             WasCanceled: false,
             Status: PreviewGenerationStatus.Ready,
-            PreviewOutputPath: @"C:\cache\preview.mp4",
-            CachePaths: new(@"C:\cache", @"C:\cache\source.mp4", @"C:\cache\source.part.mp4", @"C:\cache\preview.mp4", @"C:\cache\preview.part.mp4"),
+            PreviewOutputPath: PreviewPaths().PreviewOutputPath,
+            CachePaths: PreviewPaths(),
             StartedAt: DateTimeOffset.UtcNow,
             FinishedAt: DateTimeOffset.UtcNow,
             EnglishSummary: "Preview generated successfully.",
@@ -204,7 +204,7 @@ public sealed class PreviewWorkflowStateTests
             configuration);
 
     private static VideoConversionPlan CreatePlan(string suggestedOutputPath) => new(
-        SourcePath: @"D:\Videos\Movie.mp4",
+        SourcePath: TestPaths.SourceRoot("Movie.mp4"),
         SuggestedOutputPath: suggestedOutputPath,
         OutputContainer: OutputContainer.MP4,
         VideoCodec: "H.264",
@@ -226,4 +226,11 @@ public sealed class PreviewWorkflowStateTests
             Iw3DepthModelName: "ZoeD_Any_N",
             MappingKey: "depth-anything-metric-indoor"),
     };
+
+    private static PreviewCachePaths PreviewPaths() => new(
+        CacheDirectory: TestPaths.PreviewCacheRoot(),
+        ShortSourcePath: TestPaths.PreviewCacheRoot("source.mp4"),
+        PartialShortSourcePath: TestPaths.PreviewCacheRoot("source.part.mp4"),
+        PreviewOutputPath: TestPaths.PreviewCacheRoot("preview.mp4"),
+        PartialPreviewOutputPath: TestPaths.PreviewCacheRoot("preview.part.mp4"));
 }

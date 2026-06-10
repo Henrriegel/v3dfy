@@ -90,8 +90,8 @@ public sealed class PreviewTimeRangeServiceTests
     }
 
     private static VideoConversionPlan CreatePlan() => new(
-        SourcePath: @"D:\Videos\Movie.mp4",
-        SuggestedOutputPath: @"D:\Videos\Movie.3d.mp4",
+        SourcePath: TestPaths.SourceRoot("Movie.mp4"),
+        SuggestedOutputPath: TestPaths.OutputRoot("Movie.3d.mp4"),
         OutputContainer: OutputContainer.MP4,
         VideoCodec: "H.264",
         AudioCodec: "AAC",

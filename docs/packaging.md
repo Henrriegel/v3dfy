@@ -120,3 +120,31 @@ Before release, verify that the published app works on a clean Windows x64
 machine without global .NET, Python, FFmpeg, models, or development tools.
 Run installer packaging only after the publish output contains the expected
 `engine\iw3` layout for the bundle you intend to ship.
+
+## Runtime and user data paths
+
+Installed app runtime dependencies are resolved relative to the app base
+directory, not a developer checkout or a fixed drive. Bundled FFmpeg tools are
+expected at `tools\ffmpeg\win-x64\ffmpeg.exe` and
+`tools\ffmpeg\win-x64\ffprobe.exe` under that runtime root. The bundled iw3
+engine is expected under `engine\iw3`, including
+`engine\iw3\python\python.exe`, `engine\iw3\nunif\iw3\__main__.py`,
+`engine\iw3\nunif\iw3\pretrained_models`, and the row-flow runtime dependency
+at
+`engine\iw3\nunif\iw3\pretrained_models\hub\checkpoints\iw3_row_flow_v3_20250627.pth`.
+
+End users should not install .NET, Python, FFmpeg, iw3, models, or development
+tools separately. The installer must provide the app, self-contained .NET
+runtime, FFmpeg/FFprobe, local engine runtime, models, configuration, and
+licenses needed for offline use.
+
+Writable app data lives under the user's local app data folder. Preview source
+clips, preview partials, temporary preview files, accepted preview outputs, and
+preview cleanup are contained under `%LOCALAPPDATA%\v3dfy\previews`. Logs live
+under `%LOCALAPPDATA%\v3dfy\logs`.
+
+Final conversion partial files are derived from the selected final output path
+and tracked per active conversion attempt. On cancel or failure, v3dfy deletes
+only that tracked partial file after the conversion process has stopped. It does
+not scan the source or output folder for wildcard cleanup and does not delete
+the source video, completed final output, or unrelated files.

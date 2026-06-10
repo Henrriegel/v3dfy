@@ -120,8 +120,9 @@ unless they are intentionally handled through an approved artifact strategy.
 12. If requested, v3dfy opens the successful final output with the OS default
     player.
 
-Canceled or failed conversions clean up partial outputs and do not overwrite a
-previous valid final output with a failed result.
+Canceled or failed conversions clean up the tracked current-attempt partial
+output when safe and do not overwrite a previous valid final output with a
+failed result.
 
 ## LG 3D TV 2012 compatibility notes
 
@@ -174,8 +175,9 @@ While converting, v3dfy writes to an internal partial output path instead of the
 final output path. The partial file is promoted to the final path only after a
 successful process exit and finalization check.
 
-Canceled or failed conversions delete partial outputs when safe. Source videos
-are not deleted.
+Canceled or failed conversions delete only the tracked current-attempt partial
+output when safe. Source videos, completed final outputs, and unrelated files
+in the output folder are not deleted.
 
 ### Preview outputs
 
@@ -201,9 +203,10 @@ Preview files are stored under:
 ```
 
 Preview output names include the source base name, mapped model key, 3D layout
-suffix, intensity, and timestamp. Preview partial files are promoted only after
-the process succeeds. Canceled or failed previews clean up partial/temp preview
-files. Source videos and final conversion outputs are never deleted by preview
+suffix, intensity, and timestamp. Preview source clips, partials, temporary
+files, and accepted outputs stay under the local app data preview cache.
+Current-attempt preview partial/temp files are cleaned after success, cancel, or
+failure. Source videos and final conversion outputs are never deleted by preview
 cleanup.
 
 A ready preview must be accepted with Continue before final conversion unlocks.

@@ -157,14 +157,15 @@ public sealed class ConversionPlanOptionStateTests
         var state = new ConversionPlanOptionState();
         state.SetOutputContainer(OutputContainer.MKV);
         state.SetIntensity(ThreeDIntensity.High);
+        var customOutputPath = TestPaths.OutputRoot("Manual", "Movie custom.output");
 
-        var options = state.CreatePlanOptions("D:\\Manual\\Movie custom.output");
+        var options = state.CreatePlanOptions(customOutputPath);
 
         Assert.Equal(OutputContainer.MKV, options.OutputContainer);
         Assert.Equal(AiQualityPreset.Balanced, options.QualityPreset);
         Assert.Equal(ThreeDIntensity.High, options.Intensity);
         Assert.Equal(ThreeDOutputFormat.HalfTopBottom, options.ThreeDOutputFormat);
-        Assert.Equal("D:\\Manual\\Movie custom.output", options.CustomOutputPath);
+        Assert.Equal(customOutputPath, options.CustomOutputPath);
         Assert.False(options.CreateLgCompatibilityCopy);
         Assert.False(options.PreferLgCompatibilityCopyWhenOpening);
     }

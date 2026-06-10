@@ -88,6 +88,40 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
+    public void Resolver_ChangingRuntimeRootChangesEveryBundledToolAndEnginePath()
+    {
+        var firstRoot = TestPaths.RuntimeRoot("first-install");
+        var secondRoot = TestPaths.AlternateRuntimeRoot("second-install");
+
+        var first = new InternalToolPathResolver(firstRoot).Resolve();
+        var second = new InternalToolPathResolver(secondRoot).Resolve();
+
+        Assert.All(
+            new[]
+            {
+                second.FfmpegExecutable,
+                second.FfprobeExecutable,
+                second.PythonExecutable,
+                second.Iw3EngineDirectory,
+                second.NunifRootDirectory,
+                second.Iw3PackageDirectory,
+                second.ModelsDirectory,
+                second.ModelCatalogFile,
+                second.Iw3CliCapabilitiesFile,
+                second.Iw3DefaultStereoRuntimeDependencyFile,
+            },
+            path => Assert.StartsWith(secondRoot, path, StringComparison.OrdinalIgnoreCase));
+        Assert.NotEqual(first.FfmpegExecutable, second.FfmpegExecutable);
+        Assert.NotEqual(first.FfprobeExecutable, second.FfprobeExecutable);
+        Assert.NotEqual(first.PythonExecutable, second.PythonExecutable);
+        Assert.NotEqual(first.Iw3EngineDirectory, second.Iw3EngineDirectory);
+        Assert.NotEqual(first.ModelsDirectory, second.ModelsDirectory);
+        Assert.NotEqual(
+            first.Iw3DefaultStereoRuntimeDependencyFile,
+            second.Iw3DefaultStereoRuntimeDependencyFile);
+    }
+
+    [Fact]
     public void Resolver_DoesNotUseCurrentDirectoryAsRuntimeRoot_WhenRootIsProvided()
     {
         var currentDirectory = Path.GetFullPath(Environment.CurrentDirectory);

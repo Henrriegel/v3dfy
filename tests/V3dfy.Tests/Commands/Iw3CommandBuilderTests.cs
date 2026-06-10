@@ -6,12 +6,7 @@ namespace V3dfy.Tests.Commands;
 
 public sealed class Iw3CommandBuilderTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
     private static readonly LocalModelPlanSelection RecognizedDepthModel = new(
         "depth_anything_metric_depth_indoor.pt",
         Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
@@ -27,9 +22,9 @@ public sealed class Iw3CommandBuilderTests
                 Iw3CliContract.PythonModuleSwitch,
                 Iw3CliContract.ModuleName,
                 Iw3CliContract.InputSwitch,
-                @"C:\videos\input video.mp4",
+                InputPath(),
                 Iw3CliContract.OutputSwitch,
-                @"C:\videos\output video.mp4",
+                OutputPath(),
                 Iw3CliContract.HalfTopBottomSwitch,
             ],
             command.Arguments);
@@ -45,9 +40,9 @@ public sealed class Iw3CommandBuilderTests
                 Iw3CliContract.PythonModuleSwitch,
                 Iw3CliContract.ModuleName,
                 Iw3CliContract.InputSwitch,
-                @"C:\videos\input video.mp4",
+                InputPath(),
                 Iw3CliContract.OutputSwitch,
-                @"C:\videos\output video.mp4",
+                OutputPath(),
                 Iw3CliContract.HalfTopBottomSwitch,
                 Iw3CliContract.DepthModelSwitch,
                 Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
@@ -98,8 +93,8 @@ public sealed class Iw3CommandBuilderTests
 
         Assert.Contains("python.exe", command.FullCommandPreview);
         Assert.Contains("-m iw3", command.FullCommandPreview);
-        Assert.Contains("\"C:\\videos\\input video.mp4\"", command.FullCommandPreview);
-        Assert.Contains("\"C:\\videos\\output video.mp4\"", command.FullCommandPreview);
+        Assert.Contains(Quote(InputPath()), command.FullCommandPreview);
+        Assert.Contains(Quote(OutputPath()), command.FullCommandPreview);
         Assert.Contains("--half-tb", command.FullCommandPreview);
         Assert.DoesNotContain("--preset", command.FullCommandPreview);
         Assert.DoesNotContain("--video-codec", command.FullCommandPreview);
@@ -181,8 +176,8 @@ public sealed class Iw3CommandBuilderTests
         LocalModelPlanSelection? selectedLocalModel = null)
     {
         var request = new ConversionRequest(
-            InputPath: @"C:\videos\input video.mp4",
-            OutputPath: @"C:\videos\output video.mp4",
+            InputPath: InputPath(),
+            OutputPath: OutputPath(),
             OutputContainer: OutputContainer.MP4,
             ThreeDOutputFormat: outputFormat,
             AiQualityPreset: qualityPreset,
@@ -195,6 +190,12 @@ public sealed class Iw3CommandBuilderTests
             healthStatus ?? CompleteHealth(),
             selectedLocalModel);
     }
+
+    private static string InputPath() => TestPaths.SourceRoot("input video.mp4");
+
+    private static string OutputPath() => TestPaths.OutputRoot("output video.mp4");
+
+    private static string Quote(string path) => $"\"{path}\"";
 
     private static EngineHealthStatus CompleteHealth() => new(
         Ffmpeg: ToolHealthStatus.Found,

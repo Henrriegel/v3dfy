@@ -51,7 +51,7 @@ public sealed class VideoConversionRecommendationServiceTests
     public void Recommend_MkvSource_AddsMp4CompatibilityNote()
     {
         var recommendation = Recommend(CreateAnalysis(
-            inputPath: @"C:\videos\input.mkv",
+            inputPath: TestPaths.SourceRoot("input.mkv"),
             formatName: "matroska,webm"));
 
         Assert.Contains(
@@ -95,14 +95,14 @@ public sealed class VideoConversionRecommendationServiceTests
         _service.Recommend(analysis, TargetDevicePresets.Lg3dFullHd2012);
 
     private static VideoAnalysisResult CreateAnalysis(
-        string inputPath = @"C:\videos\input.mp4",
+        string? inputPath = null,
         string formatName = "mov,mp4,m4a,3gp,3g2,mj2",
         int width = 1920,
         int height = 1080,
         bool isHdr = false,
         int audioCount = 1,
         int subtitleCount = 0) => new(
-        InputPath: inputPath,
+        InputPath: inputPath ?? TestPaths.SourceRoot("input.mp4"),
         File: new VideoFileMetadata(
             Duration: TimeSpan.FromMinutes(10),
             FormatName: formatName,

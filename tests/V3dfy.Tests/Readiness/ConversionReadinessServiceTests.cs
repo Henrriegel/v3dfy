@@ -5,6 +5,8 @@ namespace V3dfy.Tests.Readiness;
 
 public sealed class ConversionReadinessServiceTests
 {
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
+
     private readonly ConversionReadinessService _service = new();
 
     [Fact]
@@ -94,28 +96,28 @@ public sealed class ConversionReadinessServiceTests
     public void Evaluate_DetailedHealth_IncludesExpectedLocalPaths()
     {
         var readiness = _service.Evaluate(new EngineDependencyHealth(
-            Ffmpeg: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe"),
-            Ffprobe: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe"),
+            Ffmpeg: FoundDependency(Paths.FfmpegExecutable),
+            Ffprobe: FoundDependency(Paths.FfprobeExecutable),
             Python: MissingDependency(
                 ToolHealthDetailKind.BundledFileMissing,
-                @"C:\v3dfy\engine\iw3\python\python.exe"),
+                Paths.PythonExecutable),
             Iw3EngineDirectory: MissingDependency(
                 ToolHealthDetailKind.EnginePlaceholderOnly,
-                @"C:\v3dfy\engine\iw3"),
+                Paths.Iw3EngineDirectory),
             ModelsDirectory: MissingDependency(
                 ToolHealthDetailKind.ModelFilesMissing,
-                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models"))
+                Paths.ModelsDirectory))
         {
             Iw3RuntimeDependencies = MissingDependency(
                 ToolHealthDetailKind.Iw3RuntimeDependenciesMissing,
-                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models\hub\checkpoints\iw3_row_flow_v3_20250627.pth"),
+                Paths.Iw3DefaultStereoRuntimeDependencyFile),
         });
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
-                @"C:\v3dfy\engine\iw3\python\python.exe",
+                Paths.PythonExecutable,
                 StringComparison.Ordinal));
         Assert.Contains(
             readiness.Issues,
@@ -125,7 +127,7 @@ public sealed class ConversionReadinessServiceTests
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
-                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models",
+                Paths.ModelsDirectory,
                 StringComparison.Ordinal));
         Assert.Contains(
             readiness.Issues,
@@ -141,19 +143,19 @@ public sealed class ConversionReadinessServiceTests
     public void Evaluate_DetailedHealth_ExplainsIncompleteEngineContract()
     {
         var readiness = _service.Evaluate(new EngineDependencyHealth(
-            Ffmpeg: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe"),
-            Ffprobe: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe"),
-            Python: FoundDependency(@"C:\v3dfy\engine\iw3\python\python.exe"),
+            Ffmpeg: FoundDependency(Paths.FfmpegExecutable),
+            Ffprobe: FoundDependency(Paths.FfprobeExecutable),
+            Python: FoundDependency(Paths.PythonExecutable),
             Iw3EngineDirectory: MissingDependency(
                 ToolHealthDetailKind.EngineEntryFilesMissing,
-                @"C:\v3dfy\engine\iw3"),
-            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models")));
+                Paths.Iw3EngineDirectory),
+            ModelsDirectory: FoundDependency(Paths.ModelsDirectory)));
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
-                @"C:\v3dfy\engine\iw3\nunif\iw3\__main__.py",
+                Path.Combine(Paths.Iw3PackageDirectory, "__main__.py"),
                 StringComparison.Ordinal));
     }
 
@@ -161,19 +163,19 @@ public sealed class ConversionReadinessServiceTests
     public void Evaluate_DetailedHealth_ExplainsMissingEngineManifest()
     {
         var readiness = _service.Evaluate(new EngineDependencyHealth(
-            Ffmpeg: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe"),
-            Ffprobe: FoundDependency(@"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe"),
-            Python: FoundDependency(@"C:\v3dfy\engine\iw3\python\python.exe"),
+            Ffmpeg: FoundDependency(Paths.FfmpegExecutable),
+            Ffprobe: FoundDependency(Paths.FfprobeExecutable),
+            Python: FoundDependency(Paths.PythonExecutable),
             Iw3EngineDirectory: MissingDependency(
                 ToolHealthDetailKind.EngineManifestMissing,
-                @"C:\v3dfy\engine\iw3"),
-            ModelsDirectory: FoundDependency(@"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models")));
+                Paths.Iw3EngineDirectory),
+            ModelsDirectory: FoundDependency(Paths.ModelsDirectory)));
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(
             readiness.Issues,
             issue => issue.EnglishMessage.Contains(
-                @"C:\v3dfy\engine\iw3\ENGINE_MANIFEST.json",
+                Path.Combine(Paths.Iw3EngineDirectory, "ENGINE_MANIFEST.json"),
                 StringComparison.Ordinal));
     }
 

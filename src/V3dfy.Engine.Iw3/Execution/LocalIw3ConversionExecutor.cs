@@ -28,7 +28,7 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
     private const string CanceledEnglishSummary =
         "Local iw3 conversion was canceled.";
     private const string CanceledSpanishSummary =
-        "La conversion local iw3 fue cancelada.";
+        "La conversi\u00f3n local iw3 fue cancelada.";
     private const string CompletedEnglishSummary =
         "Local iw3 conversion completed.";
     private const string CompletedSpanishSummary =
@@ -155,8 +155,10 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
                 request.CancellationToken);
-        var processResult = await _processRunner.RunAsync(
+        var processAttemptStartedAt = DateTimeOffset.UtcNow;
+        var processResult = await RunProcessOrCreateCanceledResultAsync(
             processRequest,
+            processAttemptStartedAt,
             linkedCancellationTokenSource.Token);
         runtimeDownloadDetected |= Iw3RuntimeDownloadDetector.ContainsRuntimeDownload(processResult);
 
@@ -348,8 +350,10 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             OutputProgress = CreateOutputProgress(progress),
             MetricsProgress = CreateMetricsProgress(progress),
         };
-        var compatibilityProcessResult = await _processRunner.RunAsync(
+        var compatibilityProcessStartedAt = DateTimeOffset.UtcNow;
+        var compatibilityProcessResult = await RunProcessOrCreateCanceledResultAsync(
             compatibilityProcessRequest,
+            compatibilityProcessStartedAt,
             cancellationToken);
         var compatibilityFinalization = _outputFinalizer.FinalizeAfterProcess(
             compatibilityProcessResult,
@@ -363,7 +367,11 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
         var logs = new List<ConversionExecutionLogEntry>();
         logs.AddRange(compatibilityPreparation.Logs);
         logs.AddRange(copyRequest.Logs);
-        logs.AddRange(CreateOutputLogs(compatibilityProcessResult));
+        if (compatibilityProcessResult.Status != ProcessExecutionStatus.Canceled)
+        {
+            logs.AddRange(CreateOutputLogs(compatibilityProcessResult));
+        }
+
         logs.AddRange(compatibilityFinalization.Logs);
         logs.Add(copySucceeded
             ? CreateLog(
@@ -474,6 +482,40 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
                 DetailSpanish: "Metricas del proceso actualizadas.",
                 Metrics: metrics)));
 
+    private async Task<ProcessExecutionResult> RunProcessOrCreateCanceledResultAsync(
+        ProcessExecutionRequest processRequest,
+        DateTimeOffset startedAt,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _processRunner.RunAsync(processRequest, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return CreateCanceledProcessResult(startedAt);
+        }
+    }
+
+    private static ProcessExecutionResult CreateCanceledProcessResult(
+        DateTimeOffset startedAt)
+    {
+        var endedAt = DateTimeOffset.UtcNow;
+        if (endedAt < startedAt)
+        {
+            endedAt = startedAt;
+        }
+
+        return new(
+            ExitCode: -1,
+            StandardOutput: string.Empty,
+            StandardError: string.Empty,
+            OutputLines: [],
+            Status: ProcessExecutionStatus.Canceled,
+            StartedAt: startedAt,
+            EndedAt: endedAt);
+    }
+
     private static ConversionExecutionResult CreateProcessResult(
         ConversionExecutionRequest request,
         DateTimeOffset startedAt,
@@ -511,7 +553,11 @@ public sealed class LocalIw3ConversionExecutor : IConversionExecutor
             "Convert iw3",
             "Conversion iw3",
             processResult));
-        logs.AddRange(CreateOutputLogs(processResult));
+        if (processResult.Status != ProcessExecutionStatus.Canceled)
+        {
+            logs.AddRange(CreateOutputLogs(processResult));
+        }
+
         if (runtimeDownloadDetected)
         {
             logs.Add(Iw3RuntimeDownloadDetector.CreateWarningLog(processResult.EndedAt));

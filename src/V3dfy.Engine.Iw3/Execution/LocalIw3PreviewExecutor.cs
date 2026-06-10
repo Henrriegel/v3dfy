@@ -113,7 +113,7 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
                     firstIw3OutputAt,
                     firstIw3FrameProgressAt,
                     runtimeDownloadDetected);
-                CleanupPartialAndTempFiles(request.CachePaths, logs);
+                CleanupPartialAndTempFiles(request.CachePaths, logs, startedAt);
                 return CreateCanceledResult(request, startedAt, logs);
             }
 
@@ -129,7 +129,7 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
                     firstIw3OutputAt,
                     firstIw3FrameProgressAt,
                     runtimeDownloadDetected);
-                CleanupPartialAndTempFiles(request.CachePaths, logs);
+                CleanupPartialAndTempFiles(request.CachePaths, logs, startedAt);
                 return CreateFailedResult(
                     request,
                     startedAt,
@@ -200,14 +200,14 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
                 runtimeDownloadDetected);
             if (iw3Result.WasCanceled || linkedToken.IsCancellationRequested)
             {
-                CleanupPartialAndTempFiles(request.CachePaths, logs);
+                CleanupPartialAndTempFiles(request.CachePaths, logs, startedAt);
                 return CreateCanceledResult(request, startedAt, logs);
             }
 
             if (!ProcessSucceeded(iw3Result) ||
                 !_fileService.Exists(request.CachePaths.PartialPreviewOutputPath))
             {
-                CleanupPartialAndTempFiles(request.CachePaths, logs);
+                CleanupPartialAndTempFiles(request.CachePaths, logs, startedAt);
                 return CreateFailedResult(
                     request,
                     startedAt,
@@ -220,7 +220,7 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
                 request.CachePaths.PartialPreviewOutputPath,
                 request.CachePaths.PreviewOutputPath,
                 overwrite: true);
-            _fileService.DeleteIfExists(request.CachePaths.ShortSourcePath);
+            CleanupPartialAndTempFiles(request.CachePaths, logs, startedAt);
             progress?.Report(CreateProgress(
                 100,
                 "Preview completed.",
@@ -259,12 +259,12 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
         }
         catch (OperationCanceledException)
         {
-            CleanupPartialAndTempFiles(request.CachePaths, logs);
+            CleanupPartialAndTempFiles(request.CachePaths, logs, startedAt);
             return CreateCanceledResult(request, startedAt, logs);
         }
         catch (Exception exception)
         {
-            CleanupPartialAndTempFiles(request.CachePaths, logs);
+            CleanupPartialAndTempFiles(request.CachePaths, logs, startedAt);
             return CreateFailedResult(
                 request,
                 startedAt,
@@ -788,8 +788,10 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
 
     private void CleanupPartialAndTempFiles(
         PreviewCachePaths paths,
-        ICollection<ConversionExecutionLogEntry> logs)
+        ICollection<ConversionExecutionLogEntry> logs,
+        DateTimeOffset attemptStartedAtUtc)
     {
+        var cleanedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in new[]
         {
             paths.PartialShortSourcePath,
@@ -797,39 +799,20 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
             paths.PartialPreviewOutputPath,
         })
         {
-            try
-            {
-                _fileService.DeleteIfExists(path);
-            }
-            catch (Exception exception)
-            {
-                logs.Add(CreateLog(
-                    $"Preview cleanup warning for {path}: {exception.Message}",
-                    $"Advertencia de limpieza de vista previa para {path}: {exception.Message}"));
-            }
+            TryDeletePreviewCachePath(paths.CacheDirectory, path, logs, cleanedPaths);
         }
 
         try
         {
             foreach (var file in _fileService.EnumerateFiles(paths.CacheDirectory))
             {
-                if (!PreviewCacheCleaner.IsPreviewPartialFilePath(
-                        paths.CacheDirectory,
-                        file.Path))
+                if (cleanedPaths.Contains(file.Path) ||
+                    !IsCurrentAttemptPartialFile(paths, file, attemptStartedAtUtc))
                 {
                     continue;
                 }
 
-                try
-                {
-                    _fileService.DeleteIfExists(file.Path);
-                }
-                catch (Exception exception)
-                {
-                    logs.Add(CreateLog(
-                        $"Preview cleanup warning for {file.Path}: {exception.Message}",
-                        $"Advertencia de limpieza de vista previa para {file.Path}: {exception.Message}"));
-                }
+                TryDeletePreviewCachePath(paths.CacheDirectory, file.Path, logs, cleanedPaths);
             }
         }
         catch (Exception exception)
@@ -839,6 +822,60 @@ public sealed class LocalIw3PreviewExecutor : IIw3PreviewExecutor
                 $"Advertencia de limpieza de parciales de vista previa: {exception.Message}"));
         }
     }
+
+    private void TryDeletePreviewCachePath(
+        string cacheDirectory,
+        string path,
+        ICollection<ConversionExecutionLogEntry> logs,
+        ISet<string> cleanedPaths)
+    {
+        if (!PreviewCachePathSafety.IsPathInsideRoot(cacheDirectory, path))
+        {
+            logs.Add(CreateLog(
+                $"Preview cleanup skipped path outside cache: {path}",
+                $"Limpieza de vista previa omitio ruta fuera del cache: {path}"));
+            return;
+        }
+
+        try
+        {
+            _fileService.DeleteIfExists(path);
+            cleanedPaths.Add(path);
+        }
+        catch (Exception exception)
+        {
+            logs.Add(CreateLog(
+                $"Preview cleanup warning for {path}: {exception.Message}",
+                $"Advertencia de limpieza de vista previa para {path}: {exception.Message}"));
+        }
+    }
+
+    private static bool IsCurrentAttemptPartialFile(
+        PreviewCachePaths paths,
+        PreviewCacheFile file,
+        DateTimeOffset attemptStartedAtUtc)
+    {
+        if (!PreviewCacheCleaner.IsPreviewPartialFilePath(
+                paths.CacheDirectory,
+                file.Path) ||
+            file.LastWriteTimeUtc < attemptStartedAtUtc.AddSeconds(-2))
+        {
+            return false;
+        }
+
+        var fileName = Path.GetFileName(file.Path);
+        var shortSourcePartialName = Path.GetFileName(paths.PartialShortSourcePath);
+        var previewPartialName = Path.GetFileName(paths.PartialPreviewOutputPath);
+
+        return string.Equals(fileName, shortSourcePartialName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(fileName, previewPartialName, StringComparison.OrdinalIgnoreCase) ||
+            IsCurrentAttemptTempPartialName(fileName);
+    }
+
+    private static bool IsCurrentAttemptTempPartialName(string fileName) =>
+        fileName.StartsWith("_tmp_", StringComparison.OrdinalIgnoreCase) &&
+        (fileName.Contains(".preview.v3dfy-partial.", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains(".source.v3dfy-partial.", StringComparison.OrdinalIgnoreCase));
 
     private static PreviewGenerationResult CreateCanceledResult(
         Iw3PreviewGenerationRequest request,

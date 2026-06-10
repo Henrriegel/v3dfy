@@ -7,4 +7,6 @@ public interface IConversionOutputFileService
     void DeleteIfExists(string path);
 
     void Move(string sourcePath, string destinationPath, bool overwrite);
+
+    IReadOnlyList<string> EnumerateFiles(string directory);
 }

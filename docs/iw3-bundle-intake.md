@@ -16,7 +16,8 @@ Development preparation:
   update scripts, and `python -m iw3 -h`.
 - Must happen in an external or disposable preparation location, for example
   `C:\v3dfy-iw3-intake\nunif-prepared`, a disposable VM, or another temporary
-  developer-only folder.
+  developer-only folder. That path is a development example only; scripts accept
+  explicit bundle paths and the installed app must not depend on it.
 - Must not write directly into the final `engine/iw3` bundle until the prepared
   layout has been inspected and mapped.
 

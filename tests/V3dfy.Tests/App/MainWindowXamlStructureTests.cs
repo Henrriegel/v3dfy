@@ -261,6 +261,26 @@ public sealed class MainWindowXamlStructureTests
     }
 
     [Fact]
+    public void CancelPreviewButton_MatchesGeneratePreviewCtaHeight()
+    {
+        var xaml = ReadMainWindowXaml();
+        var appResources = ReadAppXaml();
+        var primaryCtaStyle = ExtractSourceRange(
+            appResources,
+            "x:Key=\"PrimaryCtaButtonStyle\"",
+            "x:Key=\"IconButtonStyle\"");
+        var cancelPreviewBlock = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"CancelPreviewButton\"",
+            "AutomationProperties.AutomationId=\"OpenPreviewExternallyButton\"");
+
+        Assert.Contains("<Setter Property=\"MinHeight\" Value=\"44\" />", primaryCtaStyle);
+        Assert.Contains("MinHeight=\"44\"", cancelPreviewBlock);
+        Assert.Contains("Padding=\"16,11\"", cancelPreviewBlock);
+        Assert.Contains("Style=\"{StaticResource DestructiveButtonStyle}\"", cancelPreviewBlock);
+    }
+
+    [Fact]
     public void ConversionPrimaryAction_UsesDestructiveStyleForLiveCancelOnly()
     {
         var xaml = ReadMainWindowXaml();
@@ -277,10 +297,15 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("Style=\"{StaticResource PrimaryCtaButtonStyle}\"", startConversionBlock);
         Assert.DoesNotContain("Style=\"{StaticResource DestructiveButtonStyle}\"", startConversionBlock);
         Assert.Contains("Style=\"{StaticResource DestructiveButtonStyle}\"", cancelConversionBlock);
+        Assert.Contains("MinHeight=\"44\"", cancelConversionBlock);
+        Assert.Contains("Padding=\"16,11\"", cancelConversionBlock);
         Assert.Contains("CancelConversionCommand", cancelConversionBlock);
         Assert.Contains("x:Key=\"DestructiveButtonStyle\"", appResources);
         Assert.Contains("DestructiveHoverBrush", appResources);
         Assert.Contains("DestructivePressedBrush", appResources);
+        Assert.Contains("x:Key=\"PrimaryCtaButtonStyle\"", appResources);
+        Assert.Contains("<Setter Property=\"MinHeight\" Value=\"44\" />", appResources);
+        Assert.Contains("<Setter Property=\"Padding\" Value=\"16,11\" />", appResources);
         var destructiveStyle = ExtractSourceRange(
             appResources,
             "x:Key=\"DestructiveButtonStyle\"",

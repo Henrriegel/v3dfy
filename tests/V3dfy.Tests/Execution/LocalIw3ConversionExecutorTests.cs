@@ -11,12 +11,7 @@ namespace V3dfy.Tests.Execution;
 
 public sealed class LocalIw3ConversionExecutorTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
     private static readonly LocalModelPlanSelection RecognizedDepthModel = new(
         "depth_anything_metric_depth_indoor.pt",
         Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
@@ -135,12 +130,17 @@ public sealed class LocalIw3ConversionExecutorTests
     public async Task ExecuteAsync_ProcessExitsZero_PromotesPartialOutputToFinalOutput()
     {
         var files = new FakeConversionOutputFileService();
-        var finalOutputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4";
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
         var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(
             finalOutputPath);
+        var internalTempPartialPath = CreateInternalTempPartialOutputPath(partialOutputPath);
         var runner = new FakeProcessRunner(
             CompletedProcess(),
-            onRun: request => files.Add(GetProcessOutputPath(request)));
+            onRun: request =>
+            {
+                files.Add(GetProcessOutputPath(request));
+                files.Add(internalTempPartialPath);
+            });
         var executor = new LocalIw3ConversionExecutor(
             processRunner: runner,
             outputFileService: files);
@@ -150,8 +150,10 @@ public sealed class LocalIw3ConversionExecutorTests
 
         Assert.True(result.Success);
         Assert.False(files.Exists(partialOutputPath));
+        Assert.False(files.Exists(internalTempPartialPath));
         Assert.True(files.Exists(finalOutputPath));
         Assert.Contains((partialOutputPath, finalOutputPath, true), files.Moves);
+        Assert.Contains(internalTempPartialPath, files.DeletedPaths);
         Assert.Contains(
             result.Logs,
             log => log.EnglishMessage.Contains("Final output saved", StringComparison.Ordinal));
@@ -159,10 +161,55 @@ public sealed class LocalIw3ConversionExecutorTests
     }
 
     [Fact]
+    public void CreatePartialOutputPath_UsesTrackedTmpPartialBesideSelectedFinalOutput()
+    {
+        var finalOutputPath = TestPaths.OutputRoot(
+            "converted",
+            "Movie.v3dfy.3d.htab.mp4");
+
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(
+            finalOutputPath);
+
+        Assert.Equal(
+            TestPaths.OutputRoot(
+                "converted",
+                "_tmp_Movie.v3dfy.3d.htab.v3dfy-partial.mp4"),
+            partialOutputPath);
+    }
+
+    [Fact]
+    public void GetCurrentAttemptPartialCleanupCandidates_IncludesTrackedDoubleTempAndLegacyOnly()
+    {
+        var finalOutputPath = TestPaths.OutputRoot(
+            "converted",
+            "Movie.v3dfy.3d.htab.mp4");
+        var trackedPartialPath = ConversionOutputFinalizer.CreatePartialOutputPath(
+            finalOutputPath);
+
+        var candidates = ConversionOutputFinalizer.GetCurrentAttemptPartialCleanupCandidates(
+            finalOutputPath,
+            trackedPartialPath);
+
+        Assert.Contains(trackedPartialPath, candidates);
+        Assert.Contains(CreateInternalTempPartialOutputPath(trackedPartialPath), candidates);
+        Assert.Contains(
+            TestPaths.OutputRoot(
+                "converted",
+                "Movie.v3dfy.3d.htab.v3dfy-partial.mp4"),
+            candidates);
+        Assert.DoesNotContain(finalOutputPath, candidates);
+        Assert.DoesNotContain(
+            TestPaths.OutputRoot(
+                "other",
+                "_tmp__tmp_Movie.v3dfy.3d.htab.v3dfy-partial.mp4"),
+            candidates);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_FinalConversionStillUsesSelectedOutputDirectoryForPartialOutput()
     {
         var files = new FakeConversionOutputFileService();
-        var finalOutputPath = @"E:\Converted\Movie.v3dfy.3d.htab.mp4";
+        var finalOutputPath = TestPaths.OutputRoot("converted", "Movie.v3dfy.3d.htab.mp4");
         var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
         var runner = new FakeProcessRunner(
             CompletedProcess(),
@@ -176,15 +223,152 @@ public sealed class LocalIw3ConversionExecutorTests
         Assert.True(result.Success);
         Assert.Equal(finalOutputPath, result.PrimaryOutputPath);
         Assert.Equal(partialOutputPath, GetProcessOutputPath(runner.LastRequest!));
-        Assert.StartsWith(@"E:\Converted\", partialOutputPath, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(
+            TestPaths.OutputRoot("converted") + Path.DirectorySeparatorChar,
+            partialOutputPath,
+            StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(@"\AppData\Local\v3dfy\previews\", partialOutputPath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CleansStaleConversionPartialsMatchingSelectedOutputBeforeProcessStarts()
+    {
+        var files = new FakeConversionOutputFileService();
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
+        var finalOutputPath = TestPaths.OutputRoot("converted", "Movie.v3dfy.3d.htab.mp4");
+        var staleCurrentPatternPartialPath =
+            ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var staleLegacyPartialPath = TestPaths.OutputRoot(
+            "converted",
+            "Movie.v3dfy.3d.htab.v3dfy-partial.mp4");
+        var staleTempPartialPath = TestPaths.OutputRoot(
+            "converted",
+            "_tmp_old_Movie.v3dfy.3d.htab.v3dfy-partial.mp4");
+        var staleDoubleTempPartialPath =
+            CreateInternalTempPartialOutputPath(staleCurrentPatternPartialPath);
+        files.Add(sourcePath);
+        files.Add(staleCurrentPatternPartialPath);
+        files.Add(staleLegacyPartialPath);
+        files.Add(staleTempPartialPath);
+        files.Add(staleDoubleTempPartialPath);
+        var staleFilesDeletedBeforeRun = false;
+        var runner = new FakeProcessRunner(
+            CompletedProcess(),
+            onRun: request =>
+            {
+                staleFilesDeletedBeforeRun =
+                    !files.Exists(staleCurrentPatternPartialPath) &&
+                    !files.Exists(staleLegacyPartialPath) &&
+                    !files.Exists(staleTempPartialPath) &&
+                    !files.Exists(staleDoubleTempPartialPath);
+                files.Add(GetProcessOutputPath(request));
+            });
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(
+            sourcePath: sourcePath,
+            outputPath: finalOutputPath));
+
+        Assert.True(result.Success);
+        Assert.True(staleFilesDeletedBeforeRun);
+        Assert.Contains(staleCurrentPatternPartialPath, files.DeletedPaths);
+        Assert.Contains(staleLegacyPartialPath, files.DeletedPaths);
+        Assert.Contains(staleTempPartialPath, files.DeletedPaths);
+        Assert.Contains(staleDoubleTempPartialPath, files.DeletedPaths);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage == "Stale conversion partial file was cleaned.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_StaleConversionCleanupDoesNotDeleteSourceFinalOrUnrelatedFiles()
+    {
+        var files = new FakeConversionOutputFileService();
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
+        var finalOutputPath = TestPaths.OutputRoot("converted", "Movie.v3dfy.3d.htab.mp4");
+        var unrelatedSameFolder = TestPaths.OutputRoot("converted", "Unrelated.v3dfy-partial.mp4");
+        var unrelatedDifferentOutputBase = TestPaths.OutputRoot(
+            "converted",
+            "_tmp_OtherMovie.v3dfy.3d.htab.v3dfy-partial.mp4");
+        var nestedStalePartial = TestPaths.OutputRoot(
+            "converted",
+            "nested",
+            "Movie.v3dfy.3d.htab.v3dfy-partial.mp4");
+        files.Add(sourcePath);
+        files.Add(finalOutputPath);
+        files.Add(unrelatedSameFolder);
+        files.Add(unrelatedDifferentOutputBase);
+        files.Add(nestedStalePartial);
+        var runner = new FakeProcessRunner(
+            CompletedProcess(),
+            onRun: request => files.Add(GetProcessOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(
+            sourcePath: sourcePath,
+            outputPath: finalOutputPath));
+
+        Assert.True(result.Success);
+        Assert.True(files.Exists(sourcePath));
+        Assert.True(files.Exists(unrelatedSameFolder));
+        Assert.True(files.Exists(unrelatedDifferentOutputBase));
+        Assert.True(files.Exists(nestedStalePartial));
+        Assert.DoesNotContain(sourcePath, files.DeletedPaths);
+        Assert.DoesNotContain(finalOutputPath, files.DeletedPaths);
+        Assert.DoesNotContain(unrelatedSameFolder, files.DeletedPaths);
+        Assert.DoesNotContain(unrelatedDifferentOutputBase, files.DeletedPaths);
+        Assert.DoesNotContain(nestedStalePartial, files.DeletedPaths);
+    }
+
+    [Fact]
+    public void CleanStalePartialOutputs_SkipsActiveCurrentAttemptPartial()
+    {
+        var files = new FakeConversionOutputFileService();
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var activePartialPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var activeInternalTempPartialPath = CreateInternalTempPartialOutputPath(activePartialPath);
+        files.Add(activePartialPath);
+        files.Add(activeInternalTempPartialPath);
+        var finalizer = new ConversionOutputFinalizer(files);
+
+        var logs = finalizer.CleanStalePartialOutputs(finalOutputPath, activePartialPath);
+
+        Assert.True(files.Exists(activePartialPath));
+        Assert.True(files.Exists(activeInternalTempPartialPath));
+        Assert.DoesNotContain(activePartialPath, files.DeletedPaths);
+        Assert.DoesNotContain(activeInternalTempPartialPath, files.DeletedPaths);
+        Assert.Empty(logs);
+    }
+
+    [Fact]
+    public void CleanStalePartialOutputs_LockedStalePartialLogsWarningAndDoesNotThrow()
+    {
+        var files = new FakeConversionOutputFileService();
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var stalePartialPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        files.Add(stalePartialPath);
+        files.FailDeletes(stalePartialPath, new IOException("locked"));
+        var finalizer = new ConversionOutputFinalizer(files);
+
+        var logs = finalizer.CleanStalePartialOutputs(finalOutputPath);
+
+        Assert.True(files.Exists(stalePartialPath));
+        Assert.Contains(
+            logs,
+            log => log.EnglishMessage.StartsWith(
+                "Could not delete stale partial file.",
+                StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task ExecuteAsync_WhenLgCompatibilityCopyEnabled_RunsFfmpegAfterPrimaryPromotion()
     {
         var files = new FakeConversionOutputFileService();
-        var finalOutputPath = @"C:\Videos\Movie.v3dfy.3d.hsbs.mp4";
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.mp4");
         var compatibilityOutputPath =
             LgCompatibilityCopyRequestBuilder.CreateCompatibilityOutputPath(
                 finalOutputPath,
@@ -228,7 +412,7 @@ public sealed class LocalIw3ConversionExecutorTests
     public async Task ExecuteAsync_WhenLgCompatibilityCopyFails_KeepsPrimaryOutputSuccessful()
     {
         var files = new FakeConversionOutputFileService();
-        var finalOutputPath = @"C:\Videos\Movie.v3dfy.3d.hsbs.mp4";
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.mp4");
         var compatibilityOutputPath =
             LgCompatibilityCopyRequestBuilder.CreateCompatibilityOutputPath(
                 finalOutputPath,
@@ -256,6 +440,50 @@ public sealed class LocalIw3ConversionExecutorTests
             log => log.EnglishMessage.Contains(
                 "LG-compatible MP4 copy failed",
                 StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenLgCompatibilityCopyCancellationThrows_CleansCompatibilityPartial()
+    {
+        var files = new FakeConversionOutputFileService();
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.mp4");
+        var compatibilityOutputPath =
+            LgCompatibilityCopyRequestBuilder.CreateCompatibilityOutputPath(
+                finalOutputPath,
+                ThreeDOutputFormat.HalfSideBySide);
+        var compatibilityPartialPath =
+            ConversionOutputFinalizer.CreatePartialOutputPath(compatibilityOutputPath);
+        var untrackedOutput = TestPaths.OutputRoot("untracked-lg-copy.v3dfy-partial.mp4");
+        files.Add(untrackedOutput);
+        var runner = new ScriptedProcessRunner(
+            [
+                CompletedProcess(),
+                new OperationCanceledException("LG copy was canceled."),
+            ],
+            request => files.Add(GetRequestedOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(
+            outputPath: finalOutputPath,
+            outputFormat: ThreeDOutputFormat.HalfSideBySide,
+            createLgCompatibilityCopy: true));
+
+        Assert.False(result.Success);
+        Assert.True(result.WasCanceled);
+        Assert.Equal(2, runner.RunCallCount);
+        Assert.True(files.Exists(finalOutputPath));
+        Assert.False(files.Exists(compatibilityOutputPath));
+        Assert.False(files.Exists(compatibilityPartialPath));
+        Assert.True(files.Exists(untrackedOutput));
+        Assert.Contains(compatibilityPartialPath, files.DeletedPaths);
+        Assert.DoesNotContain(finalOutputPath, files.DeletedPaths);
+        Assert.DoesNotContain(compatibilityOutputPath, files.DeletedPaths);
+        Assert.DoesNotContain(untrackedOutput, files.DeletedPaths);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage == "Conversion partial file was cleaned.");
     }
 
     [Fact]
@@ -459,7 +687,7 @@ public sealed class LocalIw3ConversionExecutorTests
     public async Task ExecuteAsync_ProcessExitsNonZero_ReportsFailureAndStderrLogs()
     {
         var files = new FakeConversionOutputFileService();
-        var finalOutputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4";
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
         files.Add(finalOutputPath);
         var runner = new FakeProcessRunner(CompletedProcess(
             exitCode: 7,
@@ -484,14 +712,14 @@ public sealed class LocalIw3ConversionExecutorTests
             log => log.EnglishMessage == "stderr: iw3 failed");
         Assert.Contains(
             result.Logs,
-            log => log.EnglishMessage == "Conversion failed. Partial output was deleted.");
+            log => log.EnglishMessage == "Conversion partial file was cleaned.");
     }
 
     [Fact]
     public async Task ExecuteAsync_FakeRunnerReturnsCanceled_ReportsCancellation()
     {
         var files = new FakeConversionOutputFileService();
-        var finalOutputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4";
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
         var runner = new FakeProcessRunner(
             CanceledProcess(),
             onRun: request => files.Add(GetProcessOutputPath(request)));
@@ -509,8 +737,289 @@ public sealed class LocalIw3ConversionExecutorTests
         Assert.False(files.Exists(ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath)));
         Assert.Contains(
             result.Logs,
-            log => log.EnglishMessage == "Conversion canceled. Partial output was deleted.");
+            log => log.EnglishMessage == "Conversion partial file was cleaned.");
         Assert.Equal(1, runner.RunCallCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProcessRunnerThrowsCancellation_CleansTrackedPartialAndReturnsCanceled()
+    {
+        var files = new FakeConversionOutputFileService();
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var untrackedOutput = TestPaths.OutputRoot("other.v3dfy-partial.mp4");
+        files.Add(sourcePath);
+        files.Add(finalOutputPath);
+        files.Add(untrackedOutput);
+        var runner = new ScriptedProcessRunner(
+            [new OperationCanceledException("Process runner surfaced cancellation.")],
+            request => files.Add(GetProcessOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(
+            sourcePath: sourcePath,
+            outputPath: finalOutputPath));
+
+        Assert.False(result.Success);
+        Assert.True(result.WasCanceled);
+        Assert.Equal("Local iw3 conversion was canceled.", result.EnglishSummary);
+        Assert.Equal(1, runner.RunCallCount);
+        Assert.Equal(partialOutputPath, GetProcessOutputPath(runner.Requests.Single()));
+        Assert.False(files.Exists(partialOutputPath));
+        Assert.True(files.Exists(sourcePath));
+        Assert.True(files.Exists(finalOutputPath));
+        Assert.True(files.Exists(untrackedOutput));
+        Assert.Contains(partialOutputPath, files.DeletedPaths);
+        Assert.DoesNotContain(sourcePath, files.DeletedPaths);
+        Assert.DoesNotContain(finalOutputPath, files.DeletedPaths);
+        Assert.DoesNotContain(untrackedOutput, files.DeletedPaths);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage == "Conversion partial file was cleaned.");
+        Assert.DoesNotContain(
+            result.Logs,
+            log => log.EnglishMessage.StartsWith("stderr:", StringComparison.OrdinalIgnoreCase) ||
+                log.EnglishMessage.StartsWith("stdout:", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CanceledConversionDeletesTrackedAndInternalDoubleTempCurrentAttemptPartials()
+    {
+        var files = new FakeConversionOutputFileService();
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var internalTempPartialPath = CreateInternalTempPartialOutputPath(partialOutputPath);
+        var untrackedOutput = TestPaths.OutputRoot("untracked.v3dfy-partial.mp4");
+        var unrelatedOtherMovie = TestPaths.OutputRoot(
+            "_tmp__tmp_OtherMovie.v3dfy.3d.htab.v3dfy-partial.mp4");
+        var unrelatedPartialName = TestPaths.OutputRoot("Movie.partial.tmp");
+        var nestedPartial = TestPaths.OutputRoot(
+            "nested",
+            Path.GetFileName(internalTempPartialPath));
+        var otherDirectoryPartial = TestPaths.OutputRoot(
+            "other",
+            Path.GetFileName(internalTempPartialPath));
+        files.Add(sourcePath);
+        files.Add(finalOutputPath);
+        files.Add(untrackedOutput);
+        files.Add(unrelatedOtherMovie);
+        files.Add(unrelatedPartialName);
+        files.Add(nestedPartial);
+        files.Add(otherDirectoryPartial);
+        var runner = new FakeProcessRunner(
+            CanceledProcess(),
+            onRun: request =>
+            {
+                files.Add(GetProcessOutputPath(request));
+                files.Add(internalTempPartialPath);
+            });
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(
+            sourcePath: sourcePath,
+            outputPath: finalOutputPath));
+
+        Assert.False(result.Success);
+        Assert.True(result.WasCanceled);
+        Assert.False(files.Exists(partialOutputPath));
+        Assert.False(files.Exists(internalTempPartialPath));
+        Assert.True(files.Exists(sourcePath));
+        Assert.True(files.Exists(finalOutputPath));
+        Assert.True(files.Exists(untrackedOutput));
+        Assert.True(files.Exists(unrelatedOtherMovie));
+        Assert.True(files.Exists(unrelatedPartialName));
+        Assert.True(files.Exists(nestedPartial));
+        Assert.True(files.Exists(otherDirectoryPartial));
+        Assert.Equal(partialOutputPath, GetProcessOutputPath(runner.LastRequest!));
+        Assert.Contains(partialOutputPath, files.DeletedPaths);
+        Assert.Contains(internalTempPartialPath, files.DeletedPaths);
+        Assert.DoesNotContain(sourcePath, files.DeletedPaths);
+        Assert.DoesNotContain(finalOutputPath, files.DeletedPaths);
+        Assert.DoesNotContain(untrackedOutput, files.DeletedPaths);
+        Assert.DoesNotContain(unrelatedOtherMovie, files.DeletedPaths);
+        Assert.DoesNotContain(unrelatedPartialName, files.DeletedPaths);
+        Assert.DoesNotContain(nestedPartial, files.DeletedPaths);
+        Assert.DoesNotContain(otherDirectoryPartial, files.DeletedPaths);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage == "Conversion partial file was cleaned.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_FailedConversionDeletesTrackedAndInternalDoubleTempCurrentAttemptPartials()
+    {
+        var files = new FakeConversionOutputFileService();
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var internalTempPartialPath = CreateInternalTempPartialOutputPath(partialOutputPath);
+        var untrackedOutput = TestPaths.OutputRoot("untracked.v3dfy-partial.mp4");
+        files.Add(sourcePath);
+        files.Add(finalOutputPath);
+        files.Add(untrackedOutput);
+        var runner = new FakeProcessRunner(
+            CompletedProcess(exitCode: 2, standardError: "iw3 failed"),
+            onRun: request =>
+            {
+                files.Add(GetProcessOutputPath(request));
+                files.Add(internalTempPartialPath);
+            });
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(
+            sourcePath: sourcePath,
+            outputPath: finalOutputPath));
+
+        Assert.False(result.Success);
+        Assert.False(result.WasCanceled);
+        Assert.False(files.Exists(partialOutputPath));
+        Assert.False(files.Exists(internalTempPartialPath));
+        Assert.True(files.Exists(sourcePath));
+        Assert.True(files.Exists(finalOutputPath));
+        Assert.True(files.Exists(untrackedOutput));
+        Assert.Contains(partialOutputPath, files.DeletedPaths);
+        Assert.Contains(internalTempPartialPath, files.DeletedPaths);
+        Assert.DoesNotContain(sourcePath, files.DeletedPaths);
+        Assert.DoesNotContain(finalOutputPath, files.DeletedPaths);
+        Assert.DoesNotContain(untrackedOutput, files.DeletedPaths);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CancellationCleanupWaitsForProcessResultBeforeDeletingPartial()
+    {
+        var files = new FakeConversionOutputFileService();
+        using var cancellationTokenSource = new CancellationTokenSource();
+        var runner = new CancelAwareProcessRunner(
+            request => files.Add(GetProcessOutputPath(request)));
+        var deleteObservedAfterProcessReturned = false;
+        files.OnDelete = path =>
+        {
+            if (path == ConversionOutputFinalizer.CreatePartialOutputPath(
+                    TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4")))
+            {
+                deleteObservedAfterProcessReturned = runner.HasReturned;
+            }
+        };
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var resultTask = executor.ExecuteAsync(
+            CreateReadyRequest(),
+            cancellationToken: cancellationTokenSource.Token);
+        await runner.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellationTokenSource.Cancel();
+        var result = await resultTask;
+
+        Assert.True(result.WasCanceled);
+        Assert.True(deleteObservedAfterProcessReturned);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CleanupRetriesTemporarilyLockedPartialFile()
+    {
+        var files = new FakeConversionOutputFileService();
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var runner = new FakeProcessRunner(
+            CanceledProcess(),
+            onRun: request =>
+            {
+                files.Add(GetProcessOutputPath(request));
+                files.FailNextDelete(
+                    GetProcessOutputPath(request),
+                    new IOException("file is temporarily locked"));
+            });
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(outputPath: finalOutputPath));
+
+        Assert.True(result.WasCanceled);
+        Assert.False(files.Exists(partialOutputPath));
+        Assert.True(files.DeleteAttemptCounts[partialOutputPath] >= 2);
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage == "Conversion partial file was cleaned.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CleanupFailureLogsWarningAndKeepsAppUsableResult()
+    {
+        var files = new FakeConversionOutputFileService();
+        var finalOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(finalOutputPath);
+        var internalTempPartialPath = CreateInternalTempPartialOutputPath(partialOutputPath);
+        var runner = new FakeProcessRunner(
+            CanceledProcess(),
+            onRun: request =>
+            {
+                files.Add(GetProcessOutputPath(request));
+                files.Add(internalTempPartialPath);
+                files.FailDeletes(
+                    internalTempPartialPath,
+                    new IOException("file remained locked"));
+            });
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest(outputPath: finalOutputPath));
+
+        Assert.False(result.Success);
+        Assert.True(result.WasCanceled);
+        Assert.False(files.Exists(partialOutputPath));
+        Assert.True(files.Exists(internalTempPartialPath));
+        Assert.Contains(
+            result.Logs,
+            log => log.EnglishMessage.Contains(
+                "Could not delete conversion partial file.",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            result.Logs,
+            log => log.EnglishMessage == "Conversion partial file was cleaned.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CanceledResultDoesNotReplayBufferedProcessOutput()
+    {
+        var files = new FakeConversionOutputFileService();
+        var runner = new FakeProcessRunner(
+            new ProcessExecutionResult(
+                ExitCode: -1,
+                StandardOutput: "buffered stdout",
+                StandardError: "buffered stderr",
+                OutputLines:
+                [
+                    new(
+                        ProcessOutputStream.StandardError,
+                        "buffered line",
+                        DateTimeOffset.UtcNow),
+                ],
+                Status: ProcessExecutionStatus.Canceled,
+                StartedAt: DateTimeOffset.UtcNow,
+                EndedAt: DateTimeOffset.UtcNow),
+            onRun: request => files.Add(GetProcessOutputPath(request)));
+        var executor = new LocalIw3ConversionExecutor(
+            processRunner: runner,
+            outputFileService: files);
+
+        var result = await executor.ExecuteAsync(CreateReadyRequest());
+
+        Assert.True(result.WasCanceled);
+        Assert.DoesNotContain(
+            result.Logs,
+            log => log.EnglishMessage.StartsWith("stderr:", StringComparison.OrdinalIgnoreCase) ||
+                log.EnglishMessage.StartsWith("stdout:", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -575,15 +1084,15 @@ public sealed class LocalIw3ConversionExecutorTests
             isDryRun: true);
 
     private static ConversionExecutionRequest CreateReadyRequest(
-        string sourcePath = @"C:\Videos\Movie.mp4",
-        string outputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+        string? sourcePath = null,
+        string? outputPath = null,
         LocalModelPlanSelection? selectedModel = null,
         ThreeDOutputFormat outputFormat = ThreeDOutputFormat.HalfTopBottom,
         bool createLgCompatibilityCopy = false,
         bool preferLgCompatibilityCopyWhenOpening = false) =>
         CreateRequest(
-            sourcePath,
-            outputPath,
+            sourcePath ?? TestPaths.SourceRoot("Movie.mp4"),
+            outputPath ?? TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4"),
             selectedModel,
             VideoConversionPlanStatus.Ready,
             ConversionDryRunReason.None,
@@ -593,8 +1102,8 @@ public sealed class LocalIw3ConversionExecutorTests
             preferLgCompatibilityCopyWhenOpening: preferLgCompatibilityCopyWhenOpening);
 
     private static ConversionExecutionRequest CreateRequest(
-        string sourcePath = @"C:\Videos\Movie.mp4",
-        string outputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+        string? sourcePath = null,
+        string? outputPath = null,
         LocalModelPlanSelection? selectedModel = null,
         VideoConversionPlanStatus planStatus = VideoConversionPlanStatus.DryRun,
         ConversionDryRunReason dryRunReason = ConversionDryRunReason.MissingLocalAiBundle,
@@ -612,9 +1121,11 @@ public sealed class LocalIw3ConversionExecutorTests
             ThreeDOutputFormat: outputFormat,
             CreateLgCompatibilityCopy: createLgCompatibilityCopy,
             PreferLgCompatibilityCopyWhenOpening: preferLgCompatibilityCopyWhenOpening);
+        var resolvedSourcePath = sourcePath ?? TestPaths.SourceRoot("Movie.mp4");
+        var resolvedOutputPath = outputPath ?? TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
         var plan = new VideoConversionPlan(
-            SourcePath: sourcePath,
-            SuggestedOutputPath: outputPath,
+            SourcePath: resolvedSourcePath,
+            SuggestedOutputPath: resolvedOutputPath,
             OutputContainer: OutputContainer.MP4,
             VideoCodec: "H.264",
             AudioCodec: "AAC or AC3",
@@ -636,8 +1147,8 @@ public sealed class LocalIw3ConversionExecutorTests
 
         return new(
             Plan: plan,
-            SourcePath: sourcePath,
-            OutputPath: outputPath,
+            SourcePath: resolvedSourcePath,
+            OutputPath: resolvedOutputPath,
             SelectedPreset: TargetDevicePresets.General3dVideo,
             Options: options,
             ExpectedToolPaths: Paths,
@@ -693,6 +1204,11 @@ public sealed class LocalIw3ConversionExecutorTests
             .index;
         return request.Arguments[outputSwitchIndex + 1];
     }
+
+    private static string CreateInternalTempPartialOutputPath(string trackedPartialOutputPath) =>
+        Path.Combine(
+            Path.GetDirectoryName(trackedPartialOutputPath)!,
+            $"_tmp_{Path.GetFileName(trackedPartialOutputPath)}");
 
     private static string GetRequestedOutputPath(ProcessExecutionRequest request) =>
         request.Arguments.Contains(Iw3CliContract.OutputSwitch)
@@ -774,6 +1290,39 @@ public sealed class LocalIw3ConversionExecutorTests
         }
     }
 
+    private sealed class ScriptedProcessRunner(
+        IReadOnlyList<object> outcomes,
+        Action<ProcessExecutionRequest>? onRun = null) : ILocalProcessRunner
+    {
+        private readonly Queue<object> _outcomes = new(outcomes);
+
+        public int RunCallCount { get; private set; }
+
+        public List<ProcessExecutionRequest> Requests { get; } = [];
+
+        public Task<ProcessExecutionResult> RunAsync(
+            ProcessExecutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            RunCallCount++;
+            Requests.Add(request);
+            onRun?.Invoke(request);
+
+            if (_outcomes.Count == 0)
+            {
+                return Task.FromResult(CompletedProcess());
+            }
+
+            var outcome = _outcomes.Dequeue();
+            return outcome switch
+            {
+                ProcessExecutionResult result => Task.FromResult(result),
+                Exception exception => Task.FromException<ProcessExecutionResult>(exception),
+                _ => throw new InvalidOperationException("Unsupported scripted process outcome."),
+            };
+        }
+    }
+
     private sealed class CancelAwareProcessRunner(
         Action<ProcessExecutionRequest>? onRun = null) : ILocalProcessRunner
     {
@@ -783,6 +1332,8 @@ public sealed class LocalIw3ConversionExecutorTests
         public int RunCallCount { get; private set; }
 
         public bool ObservedCancellation { get; private set; }
+
+        public bool HasReturned { get; private set; }
 
         public async Task<ProcessExecutionResult> RunAsync(
             ProcessExecutionRequest request,
@@ -799,9 +1350,11 @@ public sealed class LocalIw3ConversionExecutorTests
             catch (OperationCanceledException)
             {
                 ObservedCancellation = true;
+                HasReturned = true;
                 return CanceledProcess();
             }
 
+            HasReturned = true;
             return CompletedProcess();
         }
     }
@@ -809,12 +1362,40 @@ public sealed class LocalIw3ConversionExecutorTests
     private sealed class FakeConversionOutputFileService : IConversionOutputFileService
     {
         private readonly HashSet<string> _paths = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Queue<Exception>> _deleteFailures = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Exception> _persistentDeleteFailures = new(StringComparer.OrdinalIgnoreCase);
 
         public List<(string SourcePath, string DestinationPath, bool Overwrite)> Moves { get; } = [];
 
+        public List<string> DeletedPaths { get; } = [];
+
+        public Dictionary<string, int> DeleteAttemptCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Action<string>? OnDelete { get; set; }
+
         public bool Exists(string path) => _paths.Contains(path);
 
-        public void DeleteIfExists(string path) => _paths.Remove(path);
+        public void DeleteIfExists(string path)
+        {
+            DeleteAttemptCounts[path] = DeleteAttemptCounts.TryGetValue(path, out var count)
+                ? count + 1
+                : 1;
+            OnDelete?.Invoke(path);
+
+            if (_deleteFailures.TryGetValue(path, out var failures) &&
+                failures.Count > 0)
+            {
+                throw failures.Dequeue();
+            }
+
+            if (_persistentDeleteFailures.TryGetValue(path, out var exception))
+            {
+                throw exception;
+            }
+
+            DeletedPaths.Add(path);
+            _paths.Remove(path);
+        }
 
         public void Move(string sourcePath, string destinationPath, bool overwrite)
         {
@@ -833,6 +1414,20 @@ public sealed class LocalIw3ConversionExecutorTests
             Moves.Add((sourcePath, destinationPath, overwrite));
         }
 
+        public IReadOnlyList<string> EnumerateFiles(string directory) =>
+            _paths
+                .Where(path => string.Equals(
+                    Path.GetDirectoryName(Path.GetFullPath(path)),
+                    Path.GetFullPath(directory),
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
         public void Add(string path) => _paths.Add(path);
+
+        public void FailNextDelete(string path, params Exception[] exceptions) =>
+            _deleteFailures[path] = new Queue<Exception>(exceptions);
+
+        public void FailDeletes(string path, Exception exception) =>
+            _persistentDeleteFailures[path] = exception;
     }
 }

@@ -210,6 +210,117 @@ public sealed class MainWindowViewModelLocalizationSourceTests
     }
 
     [Fact]
+    public void UiOnlyLanguageAndThemeRefreshes_SuppressWorkflowSelectionSideEffects()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var languageProperty = ExtractSourceRange(
+            source,
+            "public string SelectedLanguage",
+            "public IReadOnlyList<string> ThemeOptions");
+        var themeProperty = ExtractSourceRange(
+            source,
+            "public string SelectedTheme",
+            "public string SubtitleText");
+        var localModelProperty = ExtractSourceRange(
+            source,
+            "public LocalModelSelectionCandidate? SelectedLocalModelCandidate",
+            "public string LocalModelSelectionStatusText");
+        var resetMethod = ExtractSourceRange(
+            source,
+            "private void ResetConversionExecutionState",
+            "private static string QualityPresetText");
+
+        Assert.Contains("ApplyUiOnlyRefresh", languageProperty);
+        Assert.Contains("UpdateLocalModelSelectionCandidates(regenerateCurrentPlan: false)", languageProperty);
+        Assert.Contains("ApplyUiOnlyRefresh(() => _themeService.Apply(value))", themeProperty);
+        Assert.Contains("_isApplyingUiOnlyRefresh && value is null", localModelProperty);
+        Assert.Contains("regeneratePlan: !_isApplyingUiOnlyRefresh", localModelProperty);
+        Assert.Contains("if (IsConversionRunning)", resetMethod);
+        Assert.Contains("return;", resetMethod);
+    }
+
+    [Fact]
+    public void ActiveWorkflowState_TakesPrecedenceOverIdlePreviewGateInSystemStatus()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var previewRequirementProperty = ExtractSourceRange(
+            source,
+            "public Visibility PreviewRequirementVisibility",
+            "public string CancelPreviewText");
+        var readinessStatusProperty = ExtractSourceRange(
+            source,
+            "public string ConversionReadinessStatusText",
+            "public string ConversionReadinessIssuesText");
+        var missingComponentsProperty = ExtractSourceRange(
+            source,
+            "public string ConversionReadinessMissingComponentsSummaryText",
+            "public string ConversionReadinessRequiredComponentsText");
+        var blockedReasonProperty = ExtractSourceRange(
+            source,
+            "public string ConversionBlockedReasonText",
+            "public bool CanStartConversion");
+
+        Assert.Contains("IsConversionRunning || IsPreviewGenerating || IsCurrentPreviewAccepted", previewRequirementProperty);
+        Assert.Contains("!IsConversionRunning && !IsPreviewGenerating && !IsCurrentPreviewAccepted", previewRequirementProperty);
+        Assert.Contains("IsCurrentPreviewAccepted && !IsConversionRunning && !IsPreviewGenerating", previewRequirementProperty);
+        Assert.Contains("if (IsConversionRunning)", readinessStatusProperty);
+        Assert.Contains("Text(\"Converting\", \"Convirtiendo\")", readinessStatusProperty);
+        Assert.Contains("if (IsPreviewGenerating)", readinessStatusProperty);
+        Assert.Contains("IsConversionRunning || IsPreviewGenerating", missingComponentsProperty);
+        Assert.Contains("ConversionExecutionDetailText", blockedReasonProperty);
+        Assert.Contains("PreviewModalDetailText", blockedReasonProperty);
+    }
+
+    [Fact]
+    public void PreviewStart_CleansStalePreviewPartialsBeforeMarkingAttemptActive()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var generateCore = ExtractSourceRange(
+            source,
+            "private async Task GeneratePreviewCoreAsync",
+            "private void RecordPreviewCanceled");
+        var cleanupMethod = ExtractSourceRange(
+            source,
+            "private async Task CleanStalePreviewPartialFilesBeforeStartAsync",
+            "private async Task GeneratePreviewAsync");
+
+        var staleCleanupIndex = generateCore.IndexOf(
+            "await CleanStalePreviewPartialFilesBeforeStartAsync();",
+            StringComparison.Ordinal);
+        var generatingStateIndex = generateCore.IndexOf(
+            "_previewState = _previewState.Generating(configuration, startedAt);",
+            StringComparison.Ordinal);
+
+        Assert.True(staleCleanupIndex >= 0);
+        Assert.True(generatingStateIndex > staleCleanupIndex);
+        Assert.Contains("_previewCacheCleaner.DeletePartialFiles", cleanupMethod);
+        Assert.Contains("\"Stale preview partial file was cleaned.\"", cleanupMethod);
+        Assert.Contains("\"Se limpi", cleanupMethod);
+        Assert.Contains("\"Could not delete stale partial file.\"", cleanupMethod);
+        Assert.Contains("\"No se pudo eliminar un archivo parcial anterior.\"", cleanupMethod);
+    }
+
+    [Fact]
+    public void ConversionResultActivityLog_SurfacesConciseStalePartialCleanupMessages()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var activityMethod = ExtractSourceRange(
+            source,
+            "private void AddConversionResultActivityLogs",
+            "private IEnumerable<ConversionExecutionLogEntry> GetConversionResultLogsForLivePanel");
+
+        Assert.Contains("AddCurrentAttemptConversionPartialCleanupActivityLogs(result);", activityMethod);
+        Assert.Contains("\"Conversion partial file was cleaned.\"", activityMethod);
+        Assert.Contains("\"El archivo parcial de conversi", activityMethod);
+        Assert.Contains("\"Could not delete conversion partial file.\"", activityMethod);
+        Assert.Contains("\"No se pudo eliminar el archivo parcial de conversi", activityMethod);
+        Assert.Contains("\"Stale conversion partial file was cleaned.\"", activityMethod);
+        Assert.Contains("\"Se limpi", activityMethod);
+        Assert.Contains("\"Could not delete stale partial file.\"", activityMethod);
+        Assert.Contains("\"No se pudo eliminar un archivo parcial anterior.\"", activityMethod);
+    }
+
+    [Fact]
     public void PreviewProgress_RoutesDetailedOutputToPreviewSpecificLogOnly()
     {
         var source = ReadMainWindowViewModelSource();

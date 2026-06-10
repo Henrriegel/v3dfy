@@ -44,8 +44,8 @@ public sealed class PreviewConversionGateTests
             Success: true,
             WasCanceled: false,
             Status: PreviewGenerationStatus.Ready,
-            PreviewOutputPath: @"C:\cache\preview.mp4",
-            CachePaths: new(@"C:\cache", @"C:\cache\source.mp4", @"C:\cache\source.part.mp4", @"C:\cache\preview.mp4", @"C:\cache\preview.part.mp4"),
+            PreviewOutputPath: PreviewPaths().PreviewOutputPath,
+            CachePaths: PreviewPaths(),
             StartedAt: DateTimeOffset.UtcNow,
             FinishedAt: DateTimeOffset.UtcNow,
             EnglishSummary: "Preview generated successfully.",
@@ -54,7 +54,7 @@ public sealed class PreviewConversionGateTests
             configuration);
 
     private static PreviewConfigurationSnapshot CreateConfiguration() => new(
-        SourcePath: @"D:\Videos\Movie.mp4",
+        SourcePath: TestPaths.SourceRoot("Movie.mp4"),
         OutputProfileName: "LG 3D Full HD 2012",
         OutputContainer: OutputContainer.MP4,
         QualityPreset: AiQualityPreset.Balanced,
@@ -66,4 +66,11 @@ public sealed class PreviewConversionGateTests
         Iw3DepthModelName: "ZoeD_Any_N",
         PreviewStartTime: TimeSpan.FromMinutes(10),
         PreviewDuration: TimeSpan.FromSeconds(15));
+
+    private static PreviewCachePaths PreviewPaths() => new(
+        CacheDirectory: TestPaths.PreviewCacheRoot(),
+        ShortSourcePath: TestPaths.PreviewCacheRoot("source.mp4"),
+        PartialShortSourcePath: TestPaths.PreviewCacheRoot("source.part.mp4"),
+        PreviewOutputPath: TestPaths.PreviewCacheRoot("preview.mp4"),
+        PartialPreviewOutputPath: TestPaths.PreviewCacheRoot("preview.part.mp4"));
 }

@@ -8,19 +8,20 @@ public sealed class PreviewCachePathServiceTests
     [Fact]
     public void CreatePaths_UsesLocalAppDataStylePreviewCachePath()
     {
-        var provider = new StubPreviewCachePathProvider(@"C:\Users\tester\AppData\Local\v3dfy\previews");
+        var cacheRoot = TestPaths.PreviewCacheRoot();
+        var provider = new StubPreviewCachePathProvider(cacheRoot);
         var service = new PreviewCachePathService(provider);
 
         var paths = service.CreatePaths(CreateConfiguration(), new DateTimeOffset(2026, 6, 6, 12, 0, 0, TimeSpan.Zero));
 
-        Assert.Equal(@"C:\Users\tester\AppData\Local\v3dfy\previews", paths.CacheDirectory);
+        Assert.Equal(cacheRoot, paths.CacheDirectory);
         Assert.StartsWith(paths.CacheDirectory, paths.PreviewOutputPath, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void CreatePaths_PutsEveryPreviewPathUnderPreviewCacheRoot()
     {
-        var cacheRoot = @"C:\Users\tester\AppData\Local\v3dfy\previews";
+        var cacheRoot = TestPaths.PreviewCacheRoot();
         var service = new PreviewCachePathService(
             new StubPreviewCachePathProvider(cacheRoot));
 
@@ -37,9 +38,10 @@ public sealed class PreviewCachePathServiceTests
     [Fact]
     public void CreatePaths_DoesNotUseSourceFolderFinalOutputFolderOrCurrentDirectory()
     {
-        var cacheRoot = @"C:\Users\tester\AppData\Local\v3dfy\previews";
-        var sourceDirectory = @"D:\Videos";
-        var finalOutputDirectory = @"E:\Converted";
+        var cacheRoot = TestPaths.PreviewCacheRoot();
+        var sourceDirectory = TestPaths.SourceRoot();
+        var finalOutputDirectory = TestPaths.OutputRoot();
+        var runtimeRoot = TestPaths.RuntimeRoot();
         var currentDirectory = Directory.GetCurrentDirectory();
         var service = new PreviewCachePathService(
             new StubPreviewCachePathProvider(cacheRoot));
@@ -55,6 +57,9 @@ public sealed class PreviewCachePathServiceTests
                 PreviewCachePathSafety.IsPathInsideRoot(finalOutputDirectory, path),
                 $"Preview path must not be in the final output folder: {path}");
             Assert.False(
+                PreviewCachePathSafety.IsPathInsideRoot(runtimeRoot, path),
+                $"Preview path must not be in the runtime root: {path}");
+            Assert.False(
                 PreviewCachePathSafety.IsPathInsideRoot(currentDirectory, path),
                 $"Preview path must not be in the current working directory: {path}");
         });
@@ -63,24 +68,27 @@ public sealed class PreviewCachePathServiceTests
     [Fact]
     public void PreviewPathSafety_RejectsPathsOutsidePreviewCache()
     {
+        var cacheRoot = TestPaths.PreviewCacheRoot();
+        var sourcePartialPath = TestPaths.SourceRoot("Movie.source.v3dfy-partial.mkv");
+        var outputPartialPath = TestPaths.OutputRoot("Movie.preview.v3dfy-partial.mp4");
         var paths = new PreviewCachePaths(
-            CacheDirectory: @"C:\Users\tester\AppData\Local\v3dfy\previews",
-            ShortSourcePath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.source.mkv",
-            PartialShortSourcePath: @"D:\Videos\Movie.source.v3dfy-partial.mkv",
-            PreviewOutputPath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.preview.mp4",
-            PartialPreviewOutputPath: @"E:\Converted\Movie.preview.v3dfy-partial.mp4");
+            CacheDirectory: cacheRoot,
+            ShortSourcePath: TestPaths.PreviewCacheRoot("Movie.source.mkv"),
+            PartialShortSourcePath: sourcePartialPath,
+            PreviewOutputPath: TestPaths.PreviewCacheRoot("Movie.preview.mp4"),
+            PartialPreviewOutputPath: outputPartialPath);
 
         Assert.False(paths.AreAllPathsInsideCache);
         Assert.Equal(2, paths.PathsOutsideCache.Count);
-        Assert.Contains(@"D:\Videos\Movie.source.v3dfy-partial.mkv", paths.PathsOutsideCache);
-        Assert.Contains(@"E:\Converted\Movie.preview.v3dfy-partial.mp4", paths.PathsOutsideCache);
+        Assert.Contains(sourcePartialPath, paths.PathsOutsideCache);
+        Assert.Contains(outputPartialPath, paths.PathsOutsideCache);
     }
 
     [Fact]
     public void CreatePaths_FileNameIncludesSourceModelLayoutIntensityAndTimestamp()
     {
         var service = new PreviewCachePathService(
-            new StubPreviewCachePathProvider(@"C:\Users\tester\AppData\Local\v3dfy\previews"));
+            new StubPreviewCachePathProvider(TestPaths.PreviewCacheRoot()));
 
         var paths = service.CreatePaths(CreateConfiguration(), new DateTimeOffset(2026, 6, 6, 12, 0, 0, TimeSpan.Zero));
 
@@ -97,7 +105,7 @@ public sealed class PreviewCachePathServiceTests
     }
 
     private static PreviewConfigurationSnapshot CreateConfiguration() => new(
-        SourcePath: @"D:\Videos\Movie.mp4",
+        SourcePath: TestPaths.SourceRoot("Movie.mp4"),
         OutputProfileName: "LG 3D Full HD 2012",
         OutputContainer: OutputContainer.MP4,
         QualityPreset: AiQualityPreset.Balanced,

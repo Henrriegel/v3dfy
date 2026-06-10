@@ -8,12 +8,7 @@ namespace V3dfy.Tests.Execution;
 
 public sealed class ConversionExecutionRequestFactoryTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
 
     private readonly ConversionExecutionRequestFactory _factory = new();
 
@@ -36,8 +31,8 @@ public sealed class ConversionExecutionRequestFactoryTests
             Paths);
 
         Assert.Same(plan, request.Plan);
-        Assert.Equal(@"C:\Videos\Movie.mp4", request.SourcePath);
-        Assert.Equal(@"C:\Videos\Movie.v3dfy.3d.hsbs.mkv", request.OutputPath);
+        Assert.Equal(TestPaths.SourceRoot("Movie.mp4"), request.SourcePath);
+        Assert.Equal(TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.mkv"), request.OutputPath);
         Assert.Equal(TargetDevicePresets.General3dVideo, request.SelectedPreset);
         Assert.Equal(OutputContainer.MKV, request.OutputContainer);
         Assert.Equal(ThreeDOutputFormat.HalfSideBySide, request.ThreeDOutputFormat);
@@ -152,7 +147,7 @@ public sealed class ConversionExecutionRequestFactoryTests
         options ??= Options();
 
         return new(
-            SourcePath: @"C:\Videos\Movie.mp4",
+            SourcePath: TestPaths.SourceRoot("Movie.mp4"),
             SuggestedOutputPath: GetOutputPath(options),
             OutputContainer: options.OutputContainer,
             VideoCodec: "H.264",
@@ -188,7 +183,7 @@ public sealed class ConversionExecutionRequestFactoryTests
             _ => "htab",
         };
 
-        return $@"C:\Videos\Movie.v3dfy.3d.{layoutSuffix}.{extension}";
+        return TestPaths.OutputRoot($"Movie.v3dfy.3d.{layoutSuffix}.{extension}");
     }
 
     private static VideoConversionPlanOptions Options() => new(

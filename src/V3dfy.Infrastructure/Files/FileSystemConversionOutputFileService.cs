@@ -16,4 +16,16 @@ public sealed class FileSystemConversionOutputFileService : IConversionOutputFil
 
     public void Move(string sourcePath, string destinationPath, bool overwrite) =>
         File.Move(sourcePath, destinationPath, overwrite);
+
+    public IReadOnlyList<string> EnumerateFiles(string directory)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        return Directory
+            .EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+            .ToArray();
+    }
 }

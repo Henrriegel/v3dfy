@@ -8,12 +8,7 @@ namespace V3dfy.Tests.Execution;
 
 public sealed class LgCompatibilityCopyRequestBuilderTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
 
     [Fact]
     public void Create_HalfSideBySide_BuildsBundledFfmpegMp4PostProcessRequest()
@@ -22,17 +17,18 @@ public sealed class LgCompatibilityCopyRequestBuilderTests
             ThreeDOutputFormat.HalfSideBySide,
             createLgCompatibilityCopy: true);
         var builder = new LgCompatibilityCopyRequestBuilder();
+        var primaryOutputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.mp4");
+        var partialCopyPath = TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.lg3d.hsbs.v3dfy-partial.mp4");
+        var finalCopyPath = TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.lg3d.hsbs.mp4");
 
         var result = builder.Create(
             request,
-            @"C:\Videos\Movie.v3dfy.3d.hsbs.mp4",
-            @"C:\Videos\Movie.v3dfy.3d.hsbs.lg3d.hsbs.v3dfy-partial.mp4");
+            primaryOutputPath,
+            partialCopyPath);
 
         Assert.True(result.ShouldRun);
         Assert.False(result.Unsupported);
-        Assert.Equal(
-            @"C:\Videos\Movie.v3dfy.3d.hsbs.lg3d.hsbs.mp4",
-            result.FinalOutputPath);
+        Assert.Equal(finalCopyPath, result.FinalOutputPath);
         Assert.NotNull(result.ProcessRequest);
         Assert.Equal(Paths.FfmpegExecutable, result.ProcessRequest.ExecutablePath);
         Assert.Equal(
@@ -67,8 +63,8 @@ public sealed class LgCompatibilityCopyRequestBuilderTests
 
         var result = builder.Create(
             request,
-            @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
-            @"C:\Videos\Movie.v3dfy.3d.htab.lg3d.htab.v3dfy-partial.mp4");
+            TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4"),
+            TestPaths.OutputRoot("Movie.v3dfy.3d.htab.lg3d.htab.v3dfy-partial.mp4"));
 
         Assert.False(result.ShouldRun);
         Assert.True(result.Unsupported);
@@ -90,8 +86,8 @@ public sealed class LgCompatibilityCopyRequestBuilderTests
 
         var result = builder.Create(
             request,
-            @"C:\Videos\Movie.v3dfy.3d.hsbs.mp4",
-            @"C:\Videos\Movie.v3dfy.3d.hsbs.lg3d.hsbs.v3dfy-partial.mp4");
+            TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.mp4"),
+            TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.lg3d.hsbs.v3dfy-partial.mp4"));
 
         Assert.False(result.ShouldRun);
         Assert.False(result.Unsupported);
@@ -109,8 +105,8 @@ public sealed class LgCompatibilityCopyRequestBuilderTests
             outputFormat,
             CreateLgCompatibilityCopy: createLgCompatibilityCopy);
         var plan = new VideoConversionPlan(
-            SourcePath: @"C:\Videos\Movie.mp4",
-            SuggestedOutputPath: @"C:\Videos\Movie.v3dfy.3d.hsbs.mp4",
+            SourcePath: TestPaths.SourceRoot("Movie.mp4"),
+            SuggestedOutputPath: TestPaths.OutputRoot("Movie.v3dfy.3d.hsbs.mp4"),
             OutputContainer: OutputContainer.MP4,
             VideoCodec: "H.264",
             AudioCodec: "AAC or AC3",

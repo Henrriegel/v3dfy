@@ -8,15 +8,16 @@ public sealed class PreviewOutputOpenServiceTests
     [Fact]
     public void OpenCurrentPreview_OpensOnlyCurrentReadyPreview()
     {
+        var previewPath = PreviewPath();
         var opener = new FakeOutputFileOpenService();
         var service = new PreviewOutputOpenService(
-            new FakeOutputFileService(existingPaths: [@"C:\cache\preview.mp4"]),
+            new FakeOutputFileService(existingPaths: [previewPath]),
             opener);
 
         var result = service.OpenCurrentPreview(ReadyState());
 
         Assert.True(result.Opened);
-        Assert.Equal(@"C:\cache\preview.mp4", opener.OpenedPaths.Single());
+        Assert.Equal(previewPath, opener.OpenedPaths.Single());
     }
 
     [Theory]
@@ -29,7 +30,7 @@ public sealed class PreviewOutputOpenServiceTests
     {
         var opener = new FakeOutputFileOpenService();
         var service = new PreviewOutputOpenService(
-            new FakeOutputFileService(existingPaths: [@"C:\cache\preview.mp4"]),
+            new FakeOutputFileService(existingPaths: [PreviewPath()]),
             opener);
 
         var result = service.OpenCurrentPreview(ReadyState() with { Status = status });
@@ -42,7 +43,7 @@ public sealed class PreviewOutputOpenServiceTests
     public void OpenCurrentPreview_WhenOpeningFails_ReturnsWarning()
     {
         var service = new PreviewOutputOpenService(
-            new FakeOutputFileService(existingPaths: [@"C:\cache\preview.mp4"]),
+            new FakeOutputFileService(existingPaths: [PreviewPath()]),
             new FakeOutputFileOpenService(throwOnOpen: true));
 
         var result = service.OpenCurrentPreview(ReadyState());
@@ -53,7 +54,7 @@ public sealed class PreviewOutputOpenServiceTests
 
     private static PreviewWorkflowState ReadyState() => new(
         Status: PreviewGenerationStatus.Ready,
-        OutputPath: @"C:\cache\preview.mp4",
+        OutputPath: PreviewPath(),
         ConfigurationFingerprint: "fingerprint",
         StartedAt: DateTimeOffset.UtcNow,
         FinishedAt: DateTimeOffset.UtcNow,
@@ -61,6 +62,8 @@ public sealed class PreviewOutputOpenServiceTests
         PreviewDuration: TimeSpan.FromSeconds(15),
         EnglishDetail: "Preview ready.",
         SpanishDetail: "Vista previa lista.");
+
+    private static string PreviewPath() => TestPaths.PreviewCacheRoot("preview.mp4");
 
     private sealed class FakeOutputFileService(
         IReadOnlyList<string> existingPaths) : IConversionOutputFileService
@@ -74,6 +77,8 @@ public sealed class PreviewOutputOpenServiceTests
         public void Move(string sourcePath, string destinationPath, bool overwrite)
         {
         }
+
+        public IReadOnlyList<string> EnumerateFiles(string directory) => [];
     }
 
     private sealed class FakeOutputFileOpenService(bool throwOnOpen = false) : IOutputFileOpenService

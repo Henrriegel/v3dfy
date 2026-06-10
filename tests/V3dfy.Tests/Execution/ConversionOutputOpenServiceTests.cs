@@ -7,14 +7,15 @@ public sealed class ConversionOutputOpenServiceTests
     [Fact]
     public void OpenAfterSuccessfulConversion_WhenUnchecked_DoesNotOpen()
     {
+        var outputPath = TestPaths.OutputRoot("out.mp4");
         var opener = new FakeOutputFileOpenService();
         var service = new ConversionOutputOpenService(
-            new FakeConversionOutputFileService([@"C:\Videos\out.mp4"]),
+            new FakeConversionOutputFileService([outputPath]),
             opener);
 
         var result = service.OpenAfterSuccessfulConversion(
             CompletedResult(success: true),
-            @"C:\Videos\out.mp4",
+            outputPath,
             openOutputWhenFinished: false);
 
         Assert.False(result.Attempted);
@@ -24,40 +25,43 @@ public sealed class ConversionOutputOpenServiceTests
     [Fact]
     public void OpenAfterSuccessfulConversion_WhenSuccessfulAndChecked_OpensFinalOutput()
     {
+        var outputPath = TestPaths.OutputRoot("out.mp4");
         var opener = new FakeOutputFileOpenService();
         var service = new ConversionOutputOpenService(
-            new FakeConversionOutputFileService([@"C:\Videos\out.mp4"]),
+            new FakeConversionOutputFileService([outputPath]),
             opener);
 
         var result = service.OpenAfterSuccessfulConversion(
             CompletedResult(success: true),
-            @"C:\Videos\out.mp4",
+            outputPath,
             openOutputWhenFinished: true);
 
         Assert.True(result.Attempted);
         Assert.True(result.Opened);
-        Assert.Equal(@"C:\Videos\out.mp4", opener.OpenedPaths.Single());
+        Assert.Equal(outputPath, opener.OpenedPaths.Single());
     }
 
     [Fact]
     public void OpenAfterSuccessfulConversion_WhenPreferredOutputExists_OpensPreferredOutput()
     {
+        var outputPath = TestPaths.OutputRoot("out.mp4");
+        var preferredOutputPath = TestPaths.OutputRoot("out.lg3d.hsbs.mp4");
         var opener = new FakeOutputFileOpenService();
         var service = new ConversionOutputOpenService(
             new FakeConversionOutputFileService(
-                [@"C:\Videos\out.mp4", @"C:\Videos\out.lg3d.hsbs.mp4"]),
+                [outputPath, preferredOutputPath]),
             opener);
 
         var result = service.OpenAfterSuccessfulConversion(
             CompletedResult(
                 success: true,
-                preferredOpenOutputPath: @"C:\Videos\out.lg3d.hsbs.mp4"),
-            @"C:\Videos\out.mp4",
+                preferredOpenOutputPath: preferredOutputPath),
+            outputPath,
             openOutputWhenFinished: true);
 
         Assert.True(result.Attempted);
         Assert.True(result.Opened);
-        Assert.Equal(@"C:\Videos\out.lg3d.hsbs.mp4", opener.OpenedPaths.Single());
+        Assert.Equal(preferredOutputPath, opener.OpenedPaths.Single());
     }
 
     [Theory]
@@ -67,14 +71,15 @@ public sealed class ConversionOutputOpenServiceTests
         bool success,
         bool wasCanceled)
     {
+        var outputPath = TestPaths.OutputRoot("out.mp4");
         var opener = new FakeOutputFileOpenService();
         var service = new ConversionOutputOpenService(
-            new FakeConversionOutputFileService([@"C:\Videos\out.mp4"]),
+            new FakeConversionOutputFileService([outputPath]),
             opener);
 
         var result = service.OpenAfterSuccessfulConversion(
             CompletedResult(success, wasCanceled),
-            @"C:\Videos\out.mp4",
+            outputPath,
             openOutputWhenFinished: true);
 
         Assert.False(result.Attempted);
@@ -90,7 +95,7 @@ public sealed class ConversionOutputOpenServiceTests
 
         var result = service.OpenAfterSuccessfulConversion(
             CompletedResult(success: true),
-            @"C:\Videos\out.mp4",
+            TestPaths.OutputRoot("out.mp4"),
             openOutputWhenFinished: true);
 
         Assert.False(result.Attempted);
@@ -101,13 +106,14 @@ public sealed class ConversionOutputOpenServiceTests
     [Fact]
     public void OpenAfterSuccessfulConversion_WhenOpeningFails_ReturnsWarningButNoFailure()
     {
+        var outputPath = TestPaths.OutputRoot("out.mp4");
         var service = new ConversionOutputOpenService(
-            new FakeConversionOutputFileService([@"C:\Videos\out.mp4"]),
+            new FakeConversionOutputFileService([outputPath]),
             new FakeOutputFileOpenService(throwOnOpen: true));
 
         var result = service.OpenAfterSuccessfulConversion(
             CompletedResult(success: true),
-            @"C:\Videos\out.mp4",
+            outputPath,
             openOutputWhenFinished: true);
 
         Assert.True(result.Attempted);
@@ -147,6 +153,14 @@ public sealed class ConversionOutputOpenServiceTests
             _paths.Remove(sourcePath);
             _paths.Add(destinationPath);
         }
+
+        public IReadOnlyList<string> EnumerateFiles(string directory) =>
+            _paths
+                .Where(path => string.Equals(
+                    Path.GetDirectoryName(Path.GetFullPath(path)),
+                    Path.GetFullPath(directory),
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
     }
 
     private sealed class FakeOutputFileOpenService(bool throwOnOpen = false)

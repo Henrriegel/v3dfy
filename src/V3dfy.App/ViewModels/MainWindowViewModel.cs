@@ -129,6 +129,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _hasLoggedConversionOfflineDependencyWarning;
     private bool _isPreviewCancellationRequested;
     private bool _hasLoggedPreviewCancellationSummary;
+    private bool _isApplyingUiOnlyRefresh;
 
     public MainWindowViewModel()
     {
@@ -266,12 +267,15 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (SetProperty(ref _selectedLanguage, value))
             {
-                RaiseLocalizedPropertiesChanged();
-                UpdateToolStatuses();
-                UpdatePlanOptionLanguages();
-                UpdateLocalModelSelectionCandidates(regenerateCurrentPlan: false);
-                UpdateLogLanguages();
-                RefreshMetricLanguage();
+                ApplyUiOnlyRefresh(() =>
+                {
+                    RaiseLocalizedPropertiesChanged();
+                    UpdateToolStatuses();
+                    UpdatePlanOptionLanguages();
+                    UpdateLocalModelSelectionCandidates(regenerateCurrentPlan: false);
+                    UpdateLogLanguages();
+                    RefreshMetricLanguage();
+                });
                 AddLog("Language selected: English.", "Idioma seleccionado: Español.");
             }
         }
@@ -286,7 +290,7 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (SetProperty(ref _selectedTheme, value))
             {
-                _themeService.Apply(value);
+                ApplyUiOnlyRefresh(() => _themeService.Apply(value));
                 AddLog($"Theme selected: {value}.", $"Tema seleccionado: {value}.");
             }
         }
@@ -714,7 +718,16 @@ public sealed class MainWindowViewModel : ObservableObject
     public LocalModelSelectionCandidate? SelectedLocalModelCandidate
     {
         get => _selectedLocalModelCandidate;
-        set => SetSelectedLocalModelCandidate(value, regeneratePlan: true);
+        set
+        {
+            if (_isApplyingUiOnlyRefresh && value is null)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            SetSelectedLocalModelCandidate(value, regeneratePlan: !_isApplyingUiOnlyRefresh);
+        }
     }
 
     public string LocalModelSelectionStatusText => SelectedLocalModelCandidate is null
@@ -892,17 +905,17 @@ public sealed class MainWindowViewModel : ObservableObject
             "Genera y revisa una vista previa corta antes de la conversion final.");
 
     public Visibility PreviewRequirementVisibility =>
-        IsCurrentPreviewAccepted
+        IsConversionRunning || IsPreviewGenerating || IsCurrentPreviewAccepted
             ? Visibility.Collapsed
             : Visibility.Visible;
 
     public Visibility GeneratePreviewPrimaryActionVisibility =>
-        IsCurrentPreviewAccepted
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        !IsConversionRunning && !IsPreviewGenerating && !IsCurrentPreviewAccepted
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     public Visibility ConvertPrimaryActionVisibility =>
-        IsCurrentPreviewAccepted && !IsConversionRunning
+        IsCurrentPreviewAccepted && !IsConversionRunning && !IsPreviewGenerating
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -1561,6 +1574,18 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         get
         {
+            if (IsConversionRunning)
+            {
+                return _conversionExecutionState.Status == ConversionExecutionStatus.Running
+                    ? Text("Converting", "Convirtiendo")
+                    : ConversionExecutionStatusText;
+            }
+
+            if (IsPreviewGenerating)
+            {
+                return PreviewStatusValueText;
+            }
+
             var startGate = EvaluateConversionStartGate();
             if (!startGate.CanStart)
             {
@@ -1585,11 +1610,13 @@ public sealed class MainWindowViewModel : ObservableObject
                     $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
 
     public string ConversionReadinessMissingComponentsSummaryText =>
-        _dependencyHealth is null || !HasCompletedAnalysis
+        _dependencyHealth is null || !HasCompletedAnalysis || IsConversionRunning || IsPreviewGenerating
             ? "-"
             : CreateMissingComponentsSummary();
 
     public string ConversionReadinessRequiredComponentsText => _conversionReadiness is null
+            || IsConversionRunning
+            || IsPreviewGenerating
         ? string.Empty
         : Text(
             _conversionReadiness.EnglishRequiredComponentsSummary,
@@ -1599,6 +1626,16 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         get
         {
+            if (IsConversionRunning)
+            {
+                return ConversionExecutionDetailText;
+            }
+
+            if (IsPreviewGenerating)
+            {
+                return PreviewModalDetailText;
+            }
+
             var startGate = EvaluateConversionStartGate();
             return startGate.CanStart
                 ? string.Empty
@@ -2756,6 +2793,41 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private async Task CleanStalePreviewPartialFilesBeforeStartAsync()
+    {
+        var warningCount = 0;
+        var deleted = 0;
+        try
+        {
+            deleted = await Task.Run(() =>
+                {
+                    var cacheDirectory = _previewCachePathProvider.GetPreviewCacheDirectory();
+                    return _previewCacheCleaner.DeletePartialFiles(
+                        cacheDirectory,
+                        (_, _) => warningCount++);
+                })
+                .ConfigureAwait(true);
+        }
+        catch
+        {
+            warningCount++;
+        }
+
+        if (deleted > 0)
+        {
+            AddLog(
+                "Stale preview partial file was cleaned.",
+                "Se limpi\u00f3 un archivo parcial anterior de vista previa.");
+        }
+
+        if (warningCount > 0)
+        {
+            AddLog(
+                "Could not delete stale partial file.",
+                "No se pudo eliminar un archivo parcial anterior.");
+        }
+    }
+
     private async Task GeneratePreviewAsync()
     {
         using var previewOperation = AppErrorLogService.BeginOperation("Generate preview");
@@ -2841,6 +2913,7 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        await CleanStalePreviewPartialFilesBeforeStartAsync();
         var cleanupPaths = CreateCurrentPreviewCleanupPaths();
 
         var startedAt = DateTimeOffset.UtcNow;
@@ -3464,10 +3537,10 @@ public sealed class MainWindowViewModel : ObservableObject
                 DateTimeOffset.UtcNow);
             AddLog(
                 "Local iw3 conversion was canceled.",
-                "La conversion local iw3 fue cancelada.");
+                "La conversi\u00f3n local iw3 fue cancelada.");
             AddConversionLog(
                 "Local iw3 conversion was canceled.",
-                "La conversion local iw3 fue cancelada.");
+                "La conversi\u00f3n local iw3 fue cancelada.");
         }
         catch (Exception exception)
         {
@@ -3582,6 +3655,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void AddConversionResultActivityLogs(ConversionExecutionResult result)
     {
+        AddStaleConversionPartialCleanupActivityLogs(result);
+        AddCurrentAttemptConversionPartialCleanupActivityLogs(result);
         AddLog(result.EnglishSummary, result.SpanishSummary);
         if (result.Success)
         {
@@ -3628,6 +3703,50 @@ public sealed class MainWindowViewModel : ObservableObject
         foreach (var detailLine in detailLines)
         {
             AddLog(detailLine, detailLine);
+        }
+    }
+
+    private void AddCurrentAttemptConversionPartialCleanupActivityLogs(ConversionExecutionResult result)
+    {
+        if (result.Logs.Any(log => string.Equals(
+                log.EnglishMessage,
+                "Conversion partial file was cleaned.",
+                StringComparison.Ordinal)))
+        {
+            AddLog(
+                "Conversion partial file was cleaned.",
+                "El archivo parcial de conversi\u00f3n fue limpiado.");
+        }
+
+        if (result.Logs.Any(log => log.EnglishMessage.StartsWith(
+                "Could not delete conversion partial file.",
+                StringComparison.Ordinal)))
+        {
+            AddLog(
+                "Could not delete conversion partial file.",
+                "No se pudo eliminar el archivo parcial de conversi\u00f3n.");
+        }
+    }
+
+    private void AddStaleConversionPartialCleanupActivityLogs(ConversionExecutionResult result)
+    {
+        if (result.Logs.Any(log => string.Equals(
+                log.EnglishMessage,
+                "Stale conversion partial file was cleaned.",
+                StringComparison.Ordinal)))
+        {
+            AddLog(
+                "Stale conversion partial file was cleaned.",
+                "Se limpi\u00f3 un archivo parcial anterior de conversi\u00f3n.");
+        }
+
+        if (result.Logs.Any(log => log.EnglishMessage.StartsWith(
+                "Could not delete stale partial file.",
+                StringComparison.Ordinal)))
+        {
+            AddLog(
+                "Could not delete stale partial file.",
+                "No se pudo eliminar un archivo parcial anterior.");
         }
     }
 
@@ -3891,9 +4010,9 @@ public sealed class MainWindowViewModel : ObservableObject
         ProgressPercent: 0,
         CurrentStep: new(
             "Local iw3 conversion was canceled.",
-            "La conversion local iw3 fue cancelada."),
+            "La conversi\u00f3n local iw3 fue cancelada."),
         DetailEnglish: "Local iw3 conversion was canceled.",
-        DetailSpanish: "La conversion local iw3 fue cancelada.",
+        DetailSpanish: "La conversi\u00f3n local iw3 fue cancelada.",
         StartedAt: startedAt,
         FinishedAt: finishedAt);
 
@@ -4158,6 +4277,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ResetConversionExecutionState()
     {
+        if (IsConversionRunning)
+        {
+            return;
+        }
+
         _conversionExecutionState = ConversionExecutionState.NotStarted();
         RaiseConversionExecutionPropertiesChanged();
     }
@@ -4192,6 +4316,19 @@ public sealed class MainWindowViewModel : ObservableObject
         string.IsNullOrWhiteSpace(selectedModel.SpanishDisplayName)
             ? selectedModel.DisplayName
             : selectedModel.SpanishDisplayName;
+
+    private void ApplyUiOnlyRefresh(Action refresh)
+    {
+        _isApplyingUiOnlyRefresh = true;
+        try
+        {
+            refresh();
+        }
+        finally
+        {
+            _isApplyingUiOnlyRefresh = false;
+        }
+    }
 
     private string Text(string english, string spanish) => IsSpanish ? spanish : english;
 
@@ -4627,6 +4764,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionExecutionProgressPercent));
         OnPropertyChanged(nameof(ConversionExecutionProgressText));
         OnPropertyChanged(nameof(ConversionExecutionDetailText));
+        OnPropertyChanged(nameof(ConversionReadinessStatusText));
+        OnPropertyChanged(nameof(ConversionBlockedReasonText));
         OnPropertyChanged(nameof(CanCancelConversion));
         OnPropertyChanged(nameof(CancelConversionText));
         OnPropertyChanged(nameof(ConvertPrimaryActionVisibility));

@@ -11,12 +11,7 @@ namespace V3dfy.Tests.Execution;
 
 public sealed class LocalIw3ProcessRequestBuilderTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
     private static readonly LocalModelPlanSelection RecognizedDepthModel = new(
         "depth_anything_metric_depth_indoor.pt",
         Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
@@ -69,16 +64,20 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     [Fact]
     public void Build_UsesStructuredArgumentListWithoutShellWrapper()
     {
-        var processRequest = _builder.Build(CreateRequest());
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
+        var outputPath = TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
+        var processRequest = _builder.Build(CreateRequest(
+            sourcePath: sourcePath,
+            outputPath: outputPath));
 
         Assert.Equal(
             [
                 Iw3CliContract.PythonModuleSwitch,
                 Iw3CliContract.ModuleName,
                 Iw3CliContract.InputSwitch,
-                @"C:\Videos\Movie.mp4",
+                sourcePath,
                 Iw3CliContract.OutputSwitch,
-                @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+                outputPath,
                 Iw3CliContract.HalfTopBottomSwitch,
                 Iw3CliContract.DepthModelSwitch,
                 Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
@@ -209,8 +208,8 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     }
 
     private static ConversionExecutionRequest CreateRequest(
-        string sourcePath = @"C:\Videos\Movie.mp4",
-        string outputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+        string? sourcePath = null,
+        string? outputPath = null,
         LocalModelPlanSelection? selectedModel = null,
         ThreeDOutputFormat outputFormat = ThreeDOutputFormat.HalfTopBottom,
         AiQualityPreset qualityPreset = AiQualityPreset.Balanced,
@@ -220,6 +219,8 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         bool isDryRun = true)
     {
         selectedModel ??= RecognizedDepthModel;
+        sourcePath ??= TestPaths.SourceRoot("Movie.mp4");
+        outputPath ??= TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
 
         var options = new VideoConversionPlanOptions(
             OutputContainer: OutputContainer.MP4,

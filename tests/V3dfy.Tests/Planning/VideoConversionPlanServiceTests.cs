@@ -9,27 +9,27 @@ namespace V3dfy.Tests.Planning;
 
 public sealed class VideoConversionPlanServiceTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
 
     private readonly VideoConversionPlanService _service = new();
 
     [Fact]
     public void Create_Mp4Input_SuggestsTvCompatibleOutputPath()
     {
-        var plan = CreatePlan(@"C:\Videos\Movie.mp4");
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
 
-        Assert.Equal(@"C:\Videos\Movie.v3dfy.3d.htab.mp4", plan.SuggestedOutputPath);
+        var plan = CreatePlan(sourcePath);
+
+        Assert.Equal(TestPaths.SourceRoot("Movie.v3dfy.3d.htab.mp4"), plan.SuggestedOutputPath);
+        Assert.False(plan.SuggestedOutputPath.StartsWith(
+            TestPaths.RuntimeRoot(),
+            StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public void Create_MkvInput_StillSuggestsMp4Output()
     {
-        var plan = CreatePlan(@"C:\Videos\Movie.mkv");
+        var plan = CreatePlan(TestPaths.SourceRoot("Movie.mkv"));
 
         Assert.Equal(OutputContainer.MP4, plan.OutputContainer);
         Assert.EndsWith(".v3dfy.3d.htab.mp4", plan.SuggestedOutputPath);
@@ -52,11 +52,11 @@ public sealed class VideoConversionPlanServiceTests
     {
         var plan = CreatePlan(options: DefaultOptions() with
         {
-            CustomOutputPath = @"D:\Converted\ManualName.custom",
+            CustomOutputPath = TestPaths.OutputRoot("ManualName.custom"),
         });
 
-        Assert.Equal(@"D:\Converted\ManualName.custom", plan.SuggestedOutputPath);
-        Assert.Contains(@"D:\Converted\ManualName.custom", plan.CommandPreview);
+        Assert.Equal(TestPaths.OutputRoot("ManualName.custom"), plan.SuggestedOutputPath);
+        Assert.Contains(TestPaths.OutputRoot("ManualName.custom"), plan.CommandPreview);
     }
 
     [Fact]
@@ -332,14 +332,14 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     private VideoConversionPlan CreatePlan(
-        string inputPath = @"C:\Videos\Movie.mp4",
+        string? inputPath = null,
         VideoConversionPlanOptions? options = null,
         EngineHealthStatus? healthStatus = null,
         TargetDevicePreset? targetPreset = null,
         LocalModelSelectionCandidate? selectedLocalModel = null)
     {
         targetPreset ??= TargetDevicePresets.Lg3dFullHd2012;
-        var analysis = CreateAnalysis(inputPath);
+        var analysis = CreateAnalysis(inputPath ?? TestPaths.SourceRoot("Movie.mp4"));
         var recommendation = new VideoConversionRecommendationService().Recommend(
             analysis,
             targetPreset);

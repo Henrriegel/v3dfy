@@ -13,7 +13,7 @@ public sealed class FfprobeJsonParserTests
         var result = ParseFixture("ffprobe_live_action_1080p.json");
         var video = Assert.IsType<VideoStreamInfo>(result.Video);
 
-        Assert.Equal(@"C:\videos\input.mp4", result.InputPath);
+        Assert.Equal(InputPath(), result.InputPath);
         Assert.Equal(1920, video.Width);
         Assert.Equal(1080, video.Height);
         Assert.Equal(23.976, video.FrameRate!.Value, precision: 3);
@@ -71,6 +71,8 @@ public sealed class FfprobeJsonParserTests
             "Ffprobe",
             fileName);
 
-        return _parser.Parse(@"C:\videos\input.mp4", File.ReadAllText(fixturePath));
+        return _parser.Parse(InputPath(), File.ReadAllText(fixturePath));
     }
+
+    private static string InputPath() => TestPaths.SourceRoot("input.mp4");
 }

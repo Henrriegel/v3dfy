@@ -12,12 +12,7 @@ namespace V3dfy.Tests.Execution;
 
 public sealed class LocalIw3PreviewExecutorTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
 
     [Fact]
     public async Task ExecuteAsync_BuildsShortSourceFfmpegRequestBeforeIw3PreviewRequest()
@@ -243,7 +238,7 @@ public sealed class LocalIw3PreviewExecutorTests
 
         await executor.ExecuteAsync(CreateRequest(
             capabilities: new(
-                ManifestPath: @"C:\v3dfy\engine\iw3\IW3_CLI_CAPABILITIES.json",
+                ManifestPath: Paths.Iw3CliCapabilitiesFile,
                 Status: Iw3CliCapabilitiesStatus.Found,
                 ErrorMessage: null,
                 BundledIw3Version: "nunif-d23721f1",
@@ -364,8 +359,8 @@ public sealed class LocalIw3PreviewExecutorTests
             new[] { ffmpegOutputPath, iw3OutputPath },
             path =>
             {
-                Assert.False(PreviewCachePathSafety.IsPathInsideRoot(@"D:\Videos", path));
-                Assert.False(PreviewCachePathSafety.IsPathInsideRoot(@"E:\Converted", path));
+                Assert.False(PreviewCachePathSafety.IsPathInsideRoot(TestPaths.SourceRoot(), path));
+                Assert.False(PreviewCachePathSafety.IsPathInsideRoot(TestPaths.OutputRoot(), path));
                 Assert.False(PreviewCachePathSafety.IsPathInsideRoot(Directory.GetCurrentDirectory(), path));
             });
     }
@@ -381,7 +376,7 @@ public sealed class LocalIw3PreviewExecutorTests
         await executor.ExecuteAsync(request);
 
         Assert.All(files.DeletedPaths, path =>
-            Assert.False(PreviewCachePathSafety.IsPathInsideRoot(@"D:\Videos", path)));
+            Assert.False(PreviewCachePathSafety.IsPathInsideRoot(TestPaths.SourceRoot(), path)));
         Assert.All(files.Moves.SelectMany(move => new[] { move.SourcePath, move.DestinationPath }), path =>
             Assert.True(PreviewCachePathSafety.IsPathInsideRoot(request.CachePaths.CacheDirectory, path)));
     }
@@ -394,11 +389,11 @@ public sealed class LocalIw3PreviewExecutorTests
         var executor = new LocalIw3PreviewExecutor(runner, files);
         var request = CreateRequest(
             cachePaths: new(
-                CacheDirectory: @"C:\Users\tester\AppData\Local\v3dfy\previews",
-                ShortSourcePath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.source.mkv",
-                PartialShortSourcePath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.source.v3dfy-partial.mkv",
-                PreviewOutputPath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.preview.mp4",
-                PartialPreviewOutputPath: @"D:\Videos\Movie.v3dfy.3d.htab.v3dfy-partial.mp4"));
+                CacheDirectory: TestPaths.PreviewCacheRoot(),
+                ShortSourcePath: TestPaths.PreviewCacheRoot("Movie.source.mkv"),
+                PartialShortSourcePath: TestPaths.PreviewCacheRoot("Movie.source.v3dfy-partial.mkv"),
+                PreviewOutputPath: TestPaths.PreviewCacheRoot("Movie.preview.mp4"),
+                PartialPreviewOutputPath: TestPaths.OutputRoot("Movie.v3dfy.3d.htab.v3dfy-partial.mp4")));
 
         var result = await executor.ExecuteAsync(request);
 
@@ -410,7 +405,7 @@ public sealed class LocalIw3PreviewExecutorTests
         Assert.Contains(
             result.Logs,
             log => log.EnglishMessage.Contains(
-                @"D:\Videos\Movie.v3dfy.3d.htab.v3dfy-partial.mp4",
+                TestPaths.OutputRoot("Movie.v3dfy.3d.htab.v3dfy-partial.mp4"),
                 StringComparison.Ordinal));
     }
 
@@ -460,6 +455,47 @@ public sealed class LocalIw3PreviewExecutorTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_SuccessDeletesCurrentAttemptPreviewPartialsAndTempFiles()
+    {
+        var files = new FakePreviewCacheFileService();
+        var runner = new FakePreviewProcessRunner(files);
+        var executor = new LocalIw3PreviewExecutor(runner, files);
+        var request = CreateRequest();
+        var tempPreviewPartialPath =
+            TestPaths.PreviewCacheRoot("_tmp_success.preview.v3dfy-partial.mp4");
+        files.AddEnumerated(tempPreviewPartialPath);
+
+        var result = await executor.ExecuteAsync(request);
+
+        Assert.True(result.Success);
+        Assert.True(files.Exists(request.CachePaths.PreviewOutputPath));
+        Assert.Contains(request.CachePaths.ShortSourcePath, files.DeletedPaths);
+        Assert.Contains(request.CachePaths.PartialShortSourcePath, files.DeletedPaths);
+        Assert.Contains(request.CachePaths.PartialPreviewOutputPath, files.DeletedPaths);
+        Assert.Contains(tempPreviewPartialPath, files.DeletedPaths);
+        Assert.DoesNotContain(request.CachePaths.PreviewOutputPath, files.DeletedExistingPaths);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoesNotDeleteOldUnrelatedPreviewPartialDuringAttemptCleanup()
+    {
+        var files = new FakePreviewCacheFileService();
+        var runner = new FakePreviewProcessRunner(
+            files,
+            secondResultStatus: ProcessExecutionStatus.Canceled);
+        var executor = new LocalIw3PreviewExecutor(runner, files);
+        var request = CreateRequest();
+        var stalePartialPath =
+            TestPaths.PreviewCacheRoot("_tmp_old.preview.v3dfy-partial.mp4");
+        files.AddEnumerated(stalePartialPath, DateTimeOffset.UtcNow.AddHours(-1));
+
+        var result = await executor.ExecuteAsync(request);
+
+        Assert.True(result.WasCanceled);
+        Assert.DoesNotContain(stalePartialPath, files.DeletedPaths);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CancellationDeletesPartialAndTempPreviewFiles()
     {
         var files = new FakePreviewCacheFileService();
@@ -469,7 +505,7 @@ public sealed class LocalIw3PreviewExecutorTests
         var executor = new LocalIw3PreviewExecutor(runner, files);
         var request = CreateRequest();
         var iw3TempPartialPath =
-            @"C:\Users\tester\AppData\Local\v3dfy\previews\tmp123.preview.v3dfy-partial.mp4";
+            TestPaths.PreviewCacheRoot("_tmp_123.preview.v3dfy-partial.mp4");
         files.AddEnumerated(iw3TempPartialPath);
 
         var result = await executor.ExecuteAsync(request);
@@ -554,7 +590,7 @@ public sealed class LocalIw3PreviewExecutorTests
 
         return new(
             Configuration: new(
-                SourcePath: @"D:\Videos\Movie.mp4",
+                SourcePath: TestPaths.SourceRoot("Movie.mp4"),
                 OutputProfileName: "LG 3D Full HD 2012",
                 OutputContainer: OutputContainer.MP4,
                 QualityPreset: AiQualityPreset.Balanced,
@@ -567,11 +603,11 @@ public sealed class LocalIw3PreviewExecutorTests
                 PreviewStartTime: TimeSpan.FromMinutes(10),
                 PreviewDuration: TimeSpan.FromSeconds(15)),
             CachePaths: cachePaths ?? new(
-                CacheDirectory: @"C:\Users\tester\AppData\Local\v3dfy\previews",
-                ShortSourcePath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.source.mkv",
-                PartialShortSourcePath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.source.v3dfy-partial.mkv",
-                PreviewOutputPath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.preview.mp4",
-                PartialPreviewOutputPath: @"C:\Users\tester\AppData\Local\v3dfy\previews\Movie.preview.v3dfy-partial.mp4"),
+                CacheDirectory: TestPaths.PreviewCacheRoot(),
+                ShortSourcePath: TestPaths.PreviewCacheRoot("Movie.source.mkv"),
+                PartialShortSourcePath: TestPaths.PreviewCacheRoot("Movie.source.v3dfy-partial.mkv"),
+                PreviewOutputPath: TestPaths.PreviewCacheRoot("Movie.preview.mp4"),
+                PartialPreviewOutputPath: TestPaths.PreviewCacheRoot("Movie.preview.v3dfy-partial.mp4")),
             ExpectedToolPaths: Paths,
             SelectedLocalModel: selectedModel,
             Iw3CliCapabilities: capabilities);
@@ -593,8 +629,8 @@ public sealed class LocalIw3PreviewExecutorTests
             ThreeDIntensity.Medium,
             ThreeDOutputFormat.HalfTopBottom);
         var plan = new VideoConversionPlan(
-            SourcePath: @"D:\Videos\Movie.mp4",
-            SuggestedOutputPath: @"D:\Videos\Movie.v3dfy.3d.htab.mp4",
+            SourcePath: TestPaths.SourceRoot("Movie.mp4"),
+            SuggestedOutputPath: TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4"),
             OutputContainer: options.OutputContainer,
             VideoCodec: "H.264",
             AudioCodec: "AAC or AC3",
@@ -826,12 +862,14 @@ public sealed class LocalIw3PreviewExecutorTests
 
         public List<string> DeletedPaths { get; } = [];
 
+        public List<string> DeletedExistingPaths { get; } = [];
+
         public List<(string SourcePath, string DestinationPath, bool Overwrite)> Moves { get; } = [];
 
         public void AddExisting(string path) => _existingPaths.Add(path);
 
-        public void AddEnumerated(string path) =>
-            _enumeratedFiles.Add(new(path, DateTimeOffset.UtcNow));
+        public void AddEnumerated(string path, DateTimeOffset? lastWriteTimeUtc = null) =>
+            _enumeratedFiles.Add(new(path, lastWriteTimeUtc ?? DateTimeOffset.UtcNow));
 
         public void EnsureDirectory(string directory)
         {
@@ -842,7 +880,10 @@ public sealed class LocalIw3PreviewExecutorTests
         public void DeleteIfExists(string path)
         {
             DeletedPaths.Add(path);
-            _existingPaths.Remove(path);
+            if (_existingPaths.Remove(path))
+            {
+                DeletedExistingPaths.Add(path);
+            }
         }
 
         public void Move(string sourcePath, string destinationPath, bool overwrite)

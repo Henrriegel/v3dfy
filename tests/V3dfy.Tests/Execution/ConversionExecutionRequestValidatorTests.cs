@@ -7,12 +7,7 @@ namespace V3dfy.Tests.Execution;
 
 public sealed class ConversionExecutionRequestValidatorTests
 {
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
 
     private readonly ConversionExecutionRequestValidator _validator = new();
 
@@ -52,9 +47,13 @@ public sealed class ConversionExecutionRequestValidatorTests
     [Fact]
     public void Validate_SourceAndOutputSamePath_IsRejected()
     {
+        var sourcePath = TestPaths.SourceRoot("Movie.mp4");
         var result = _validator.Validate(CreateRequest(
-            sourcePath: @"C:\Videos\Movie.mp4",
-            outputPath: @"C:\Videos\.\Movie.mp4"));
+            sourcePath: sourcePath,
+            outputPath: Path.Combine(
+                Path.GetDirectoryName(sourcePath)!,
+                ".",
+                Path.GetFileName(sourcePath))));
 
         AssertIssue(
             result,
@@ -88,7 +87,7 @@ public sealed class ConversionExecutionRequestValidatorTests
         var result = _validator.Validate(CreateRequest(
             selectedModel: new(
                 "Default depth model",
-                @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models\depth.onnx",
+                TestPaths.ModelPath("depth.onnx"),
                 LocalModelPlanSource.CatalogMetadata)));
 
         AssertIssue(
@@ -195,8 +194,8 @@ public sealed class ConversionExecutionRequestValidatorTests
 
     private static ConversionExecutionRequest CreateRequest(
         VideoConversionPlan? plan = null,
-        string sourcePath = @"C:\Videos\Movie.mp4",
-        string outputPath = @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+        string? sourcePath = null,
+        string? outputPath = null,
         TargetDevicePreset? selectedPreset = null,
         VideoConversionPlanOptions? options = null,
         InternalToolPaths? paths = null,
@@ -206,6 +205,8 @@ public sealed class ConversionExecutionRequestValidatorTests
         ConversionDryRunReason dryRunReason = ConversionDryRunReason.MissingLocalAiBundle,
         bool isDryRun = true)
     {
+        sourcePath ??= TestPaths.SourceRoot("Movie.mp4");
+        outputPath ??= TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4");
         options ??= Options();
         plan ??= CreatePlan(
             sourcePath,

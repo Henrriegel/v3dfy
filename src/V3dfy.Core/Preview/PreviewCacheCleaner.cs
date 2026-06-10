@@ -53,7 +53,9 @@ public sealed class PreviewCacheCleaner
         return deleted;
     }
 
-    public int DeletePartialFiles(string cacheDirectory)
+    public int DeletePartialFiles(
+        string cacheDirectory,
+        Action<string, Exception>? onWarning = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheDirectory);
 
@@ -66,8 +68,15 @@ public sealed class PreviewCacheCleaner
                 continue;
             }
 
-            _fileService.DeleteIfExists(file.Path);
-            deleted++;
+            try
+            {
+                _fileService.DeleteIfExists(file.Path);
+                deleted++;
+            }
+            catch (Exception exception)
+            {
+                onWarning?.Invoke(file.Path, exception);
+            }
         }
 
         return deleted;
@@ -83,7 +92,8 @@ public sealed class PreviewCacheCleaner
         }
 
         var fileName = Path.GetFileName(path);
-        return fileName.Contains("v3dfy-partial", StringComparison.OrdinalIgnoreCase);
+        return fileName.Contains(".preview.v3dfy-partial.", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains(".source.v3dfy-partial.", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsPathInsideRoot(string rootDirectory, string path) =>

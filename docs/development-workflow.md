@@ -2,9 +2,11 @@
 
 ## Repository scope
 
-Work only inside `C:\dev\v3dfy`. Keep implementation tasks scoped to the current
-request and do not resume or modify unrelated previous work unless explicitly
-requested.
+Work only inside this repository checkout. In the current development
+environment that checkout is `C:\dev\v3dfy`, but that path is a development
+example only and must not appear in production runtime logic. Keep
+implementation tasks scoped to the current request and do not resume or modify
+unrelated previous work unless explicitly requested.
 
 ## GitHub Desktop workflow
 

@@ -771,6 +771,8 @@
                                                 AutomationProperties.AutomationId="CancelConversionPrimaryActionButton"
                                                 Command="{Binding CancelConversionCommand}"
                                                 Content="{Binding CancelConversionText}"
+                                                MinHeight="44"
+                                                Padding="16,11"
                                                 Style="{StaticResource DestructiveButtonStyle}"
                                                 Visibility="{Binding CancelConversionPrimaryActionVisibility}" />
                                     </Grid>
@@ -1237,6 +1239,8 @@
                                 Visibility="{Binding PreviewGeneratingModalContentVisibility}" />
                         <Button AutomationProperties.AutomationId="CancelPreviewButton"
                                 Margin="8,0,0,0"
+                                MinHeight="44"
+                                Padding="16,11"
                                 Command="{Binding CancelPreviewCommand}"
                                 Content="{Binding CancelPreviewText}"
                                 Style="{StaticResource DestructiveButtonStyle}"

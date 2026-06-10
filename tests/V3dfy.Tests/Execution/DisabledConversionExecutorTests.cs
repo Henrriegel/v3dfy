@@ -69,9 +69,9 @@ public sealed class DisabledConversionExecutorTests
     {
         var request = CreateRequest();
 
-        Assert.Equal(@"C:\Videos\Movie.mp4", request.Plan.SourcePath);
-        Assert.Equal(@"C:\Videos\Movie.mp4", request.SourcePath);
-        Assert.Equal(@"C:\Videos\Movie.v3dfy.3d.htab.mp4", request.OutputPath);
+        Assert.Equal(TestPaths.SourceRoot("Movie.mp4"), request.Plan.SourcePath);
+        Assert.Equal(TestPaths.SourceRoot("Movie.mp4"), request.SourcePath);
+        Assert.Equal(TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4"), request.OutputPath);
         Assert.Equal(TargetDevicePresets.General3dVideo, request.SelectedPreset);
         Assert.Equal(OutputContainer.MP4, request.Options.OutputContainer);
         Assert.Contains("iw3", request.CommandPreview);
@@ -82,8 +82,8 @@ public sealed class DisabledConversionExecutorTests
         CancellationToken cancellationToken = default)
     {
         var plan = new VideoConversionPlan(
-            SourcePath: @"C:\Videos\Movie.mp4",
-            SuggestedOutputPath: @"C:\Videos\Movie.v3dfy.3d.htab.mp4",
+            SourcePath: TestPaths.SourceRoot("Movie.mp4"),
+            SuggestedOutputPath: TestPaths.OutputRoot("Movie.v3dfy.3d.htab.mp4"),
             OutputContainer: OutputContainer.MP4,
             VideoCodec: "H.264",
             AudioCodec: "AAC",
@@ -120,12 +120,7 @@ public sealed class DisabledConversionExecutorTests
             CancellationToken: cancellationToken);
     }
 
-    private static readonly InternalToolPaths Paths = new(
-        FfmpegExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: @"C:\v3dfy\tools\ffmpeg\win-x64\ffprobe.exe",
-        PythonExecutable: @"C:\v3dfy\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\v3dfy\engine\iw3",
-        ModelsDirectory: @"C:\v3dfy\engine\iw3\nunif\iw3\pretrained_models");
+    private static readonly InternalToolPaths Paths = TestPaths.InternalToolPaths();
 
     private sealed class CapturingProgress : IProgress<ConversionExecutionProgressUpdate>
     {

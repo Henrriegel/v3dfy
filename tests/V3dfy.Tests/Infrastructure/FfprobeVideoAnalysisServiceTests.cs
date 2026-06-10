@@ -131,7 +131,7 @@ public sealed class FfprobeVideoAnalysisServiceTests
         Assert.Equal(cancellationTokenSource.Token, runner.CancellationToken);
     }
 
-    private const string InputPath = @"C:\videos\input.mp4";
+    private static readonly string InputPath = TestPaths.SourceRoot("input.mp4");
 
     private const string ValidJson =
         """
@@ -159,12 +159,11 @@ public sealed class FfprobeVideoAnalysisServiceTests
         processRunner: runner,
         parser: new FfprobeJsonParser());
 
-    private static InternalToolPaths CreatePaths(string ffprobePath) => new(
-        FfmpegExecutable: @"C:\bundle\tools\ffmpeg\win-x64\ffmpeg.exe",
-        FfprobeExecutable: ffprobePath,
-        PythonExecutable: @"C:\bundle\engine\iw3\python\python.exe",
-        Iw3EngineDirectory: @"C:\bundle\engine\iw3",
-        ModelsDirectory: @"C:\bundle\engine\iw3\nunif\iw3\pretrained_models");
+    private static InternalToolPaths CreatePaths(string ffprobePath) =>
+        TestPaths.InternalToolPaths() with
+        {
+            FfprobeExecutable = ffprobePath,
+        };
 
     private static string GetExistingSentinelPath() =>
         typeof(FfprobeVideoAnalysisServiceTests).Assembly.Location;
