@@ -59,6 +59,51 @@ public sealed class ModelPackInstallPlannerTests : IDisposable
     }
 
     [Fact]
+    public async Task DryRun_AcceptsSafeDirectoryEntriesWithoutManifestDeclarations()
+    {
+        var zipPath = CreateModelPackZip(directoryEntries: SafeDirectoryEntries);
+
+        var plan = await CreatePlanAsync(zipPath, TargetRoot());
+
+        Assert.True(plan.IsValid);
+        Assert.Empty(plan.ValidationErrors);
+        Assert.Equal(2, plan.FilesToInstall.Count);
+        Assert.Contains(
+            plan.FilesToInstall,
+            file => file.RelativePath == "hub/checkpoints/depth_anything_metric_depth_outdoor.pt");
+        Assert.Contains(
+            plan.FilesToInstall,
+            file => file.RelativePath == "licenses/models/depth-anything-outdoor/LICENSE.txt");
+        Assert.DoesNotContain(
+            plan.ValidationErrors,
+            error => error.Contains("not declared", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            plan.ValidationErrors,
+            error => error.Contains("directory separator", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("hub/../", "traversal")]
+    [InlineData("/hub/", "Absolute")]
+    [InlineData("C:hub/", "rooted")]
+    [InlineData("//server/share/", "UNC")]
+    public async Task DryRun_RejectsUnsafeDirectoryEntries(
+        string directoryEntry,
+        string expectedErrorFragment)
+    {
+        var zipPath = CreateModelPackZip(directoryEntries: [directoryEntry]);
+
+        var plan = await CreatePlanAsync(zipPath, TargetRoot());
+
+        Assert.False(plan.IsValid);
+        Assert.Contains(
+            plan.ValidationErrors,
+            error =>
+                error.Contains("ZIP entry", StringComparison.OrdinalIgnoreCase) &&
+                error.Contains(expectedErrorFragment, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task DryRunPlan_ResolvesPathsUnderTargetPretrainedModelsRoot()
     {
         var zipPath = CreateModelPackZip();
@@ -312,7 +357,8 @@ public sealed class ModelPackInstallPlannerTests : IDisposable
     private string CreateModelPackZip(
         MutableModelPackManifest? manifest = null,
         IReadOnlyList<PackEntry>? extraEntries = null,
-        IReadOnlySet<string>? omitEntryPaths = null)
+        IReadOnlySet<string>? omitEntryPaths = null,
+        IReadOnlyList<string>? directoryEntries = null)
     {
         manifest ??= CreateValidManifest();
         Directory.CreateDirectory(root);
@@ -323,6 +369,11 @@ public sealed class ModelPackInstallPlannerTests : IDisposable
             archive,
             ModelPackManifest.FileName,
             JsonSerializer.SerializeToUtf8Bytes(manifest, JsonOptions));
+
+        foreach (var directoryEntry in directoryEntries ?? [])
+        {
+            WriteZipDirectoryEntry(archive, directoryEntry);
+        }
 
         var fileBytes = CreateFileBytes(manifest);
         foreach (var (relativePath, bytes) in fileBytes)
@@ -363,6 +414,11 @@ public sealed class ModelPackInstallPlannerTests : IDisposable
         var entry = archive.CreateEntry(relativePath.Replace('\\', '/'), CompressionLevel.NoCompression);
         using var stream = entry.Open();
         stream.Write(bytes);
+    }
+
+    private static void WriteZipDirectoryEntry(ZipArchive archive, string relativePath)
+    {
+        archive.CreateEntry(relativePath, CompressionLevel.NoCompression);
     }
 
     private string TargetRoot() =>
@@ -430,6 +486,15 @@ public sealed class ModelPackInstallPlannerTests : IDisposable
 
     private static readonly byte[] LicenseBytes =
         "synthetic license"u8.ToArray();
+
+    private static readonly string[] SafeDirectoryEntries =
+    [
+        "hub/",
+        "hub/checkpoints/",
+        "licenses/",
+        "licenses/models/",
+        "licenses\\models\\depth-anything-outdoor\\",
+    ];
 
     private sealed record PackEntry(string Path, byte[] Bytes);
 

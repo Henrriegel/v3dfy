@@ -10,6 +10,8 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $publishDirectory = Join-Path $repoRoot 'artifacts\publish\v3dfy-win-x64'
 $appProject = Join-Path $repoRoot 'src\V3dfy.App\V3dfy.App.csproj'
+$setupHelperProject = Join-Path $repoRoot 'src\V3dfy.SetupHelper\V3dfy.SetupHelper.csproj'
+$setupHelperPublishDirectory = Join-Path $repoRoot 'artifacts\publish\v3dfy-setup-helper-win-x64'
 $stageIw3BundleScript = Join-Path $PSScriptRoot 'stage-iw3-bundle.ps1'
 $shouldStageIw3Bundle = $IncludeIw3Bundle.IsPresent -or
     -not [string]::IsNullOrWhiteSpace($Iw3BundleRoot)
@@ -105,6 +107,37 @@ function Invoke-Iw3BundleStaging {
     Write-PublishMessage OK 'iw3 bundle staging completed.'
 }
 
+function Publish-SetupHelperForApp {
+    if (Test-Path -LiteralPath $setupHelperPublishDirectory -PathType Container) {
+        Remove-Item -LiteralPath $setupHelperPublishDirectory -Recurse -Force
+    }
+
+    Write-PublishMessage OK 'Publishing setup helper for app model-pack imports.'
+    & dotnet publish $setupHelperProject `
+        --configuration Release `
+        --framework net10.0-windows `
+        --runtime win-x64 `
+        --self-contained true `
+        -p:PublishSingleFile=true `
+        -p:DebugType=None `
+        -p:DebugSymbols=false `
+        --output $setupHelperPublishDirectory
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet publish for setup helper failed with exit code $LASTEXITCODE."
+    }
+
+    $helperExe = Join-Path $setupHelperPublishDirectory 'V3dfy.SetupHelper.exe'
+    if (-not (Test-Path -LiteralPath $helperExe -PathType Leaf)) {
+        throw "Published setup helper was not found: $helperExe"
+    }
+
+    Get-ChildItem -LiteralPath $setupHelperPublishDirectory -Force |
+        Copy-Item -Destination $publishDirectory -Recurse -Force
+
+    Write-PublishMessage OK 'Copied setup helper into app publish output: V3dfy.SetupHelper.exe'
+}
+
 & dotnet publish $appProject `
     --configuration Release `
     --runtime win-x64 `
@@ -114,6 +147,8 @@ function Invoke-Iw3BundleStaging {
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE."
 }
+
+Publish-SetupHelperForApp
 
 # The final installer must include these folders next to the published app.
 # They contain offline tools, the local engine, models, runtime, and licenses.

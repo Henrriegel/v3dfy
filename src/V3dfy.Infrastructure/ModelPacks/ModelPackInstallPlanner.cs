@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Security.Cryptography;
 using System.Text.Json;
 using V3dfy.Core.Models;
 
@@ -7,7 +6,6 @@ namespace V3dfy.Infrastructure.ModelPacks;
 
 public sealed class ModelPackInstallPlanner
 {
-    private const int CopyBufferSize = 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<ModelPackDryRunInstallPlan> CreateDryRunPlanAsync(
@@ -24,9 +22,9 @@ public sealed class ModelPackInstallPlanner
         ModelPackManifest? manifest = null;
         ModelPackManifestSummary? summary = null;
 
-        var zipPath = NormalizeFullPath(request.ModelPackZipPath);
-        var targetRoot = NormalizeFullPath(request.TargetPretrainedModelsRoot);
-        var elevationWouldBeRequired = IsUnderProgramFiles(targetRoot);
+        var zipPath = ModelPackPathRules.NormalizeFullPath(request.ModelPackZipPath);
+        var targetRoot = ModelPackPathRules.NormalizeFullPath(request.TargetPretrainedModelsRoot);
+        var elevationWouldBeRequired = ModelPackPathRules.IsUnderProgramFiles(targetRoot);
 
         if (!File.Exists(zipPath))
         {
@@ -110,14 +108,22 @@ public sealed class ModelPackInstallPlanner
         var files = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in archive.Entries)
         {
-            if (!TryNormalizeRelativePath(entry.FullName, out var relativePath, out var error))
+            if (ModelPackPathRules.IsZipDirectoryEntry(entry))
             {
-                errors.Add($"ZIP entry '{entry.FullName}' is unsafe: {error}");
+                if (!ModelPackPathRules.TryNormalizeArchiveDirectoryPath(
+                        entry.FullName,
+                        out _,
+                        out var directoryError))
+                {
+                    errors.Add($"ZIP entry '{entry.FullName}' is unsafe: {directoryError}");
+                }
+
                 continue;
             }
 
-            if (IsDirectoryEntry(entry))
+            if (!ModelPackPathRules.TryNormalizeArchivePath(entry.FullName, out var relativePath, out var error))
             {
+                errors.Add($"ZIP entry '{entry.FullName}' is unsafe: {error}");
                 continue;
             }
 
@@ -215,13 +221,13 @@ public sealed class ModelPackInstallPlanner
         for (var index = 0; index < files.Count; index++)
         {
             var file = files[index];
-            if (!TryNormalizeModelPackFilePath(file.Path, out var relativePath, out var error))
+            if (!ModelPackPathRules.TryNormalizeModelPackFilePath(file.Path, out var relativePath, out var error))
             {
                 errors.Add($"files[{index}].path is invalid: {error}");
                 continue;
             }
 
-            if (IsProtectedRuntimeDependency(relativePath))
+            if (ModelPackPathRules.IsProtectedRuntimeDependency(relativePath))
             {
                 errors.Add($"Model packs must not include protected iw3 runtime dependency: {relativePath}");
                 continue;
@@ -257,7 +263,7 @@ public sealed class ModelPackInstallPlanner
             ValidateHash(model.Sha256, $"models[{index}].sha256", errors);
             ValidateSize(model.SizeBytes, $"models[{index}].sizeBytes", errors);
 
-            if (!TryNormalizeModelPackFilePath(model.File, out var relativePath, out var error))
+            if (!ModelPackPathRules.TryNormalizeModelPackFilePath(model.File, out var relativePath, out var error))
             {
                 errors.Add($"models[{index}].file is invalid: {error}");
                 continue;
@@ -279,7 +285,7 @@ public sealed class ModelPackInstallPlanner
         var licenses = manifest.Licenses ?? [];
         for (var index = 0; index < licenses.Count; index++)
         {
-            if (!TryNormalizeModelPackFilePath(licenses[index], out var relativePath, out var error))
+            if (!ModelPackPathRules.TryNormalizeModelPackFilePath(licenses[index], out var relativePath, out var error))
             {
                 errors.Add($"licenses[{index}] is invalid: {error}");
                 continue;
@@ -338,7 +344,7 @@ public sealed class ModelPackInstallPlanner
             }
 
             await using var stream = entry.Open();
-            var actualSha256 = await ComputeSha256Async(stream, cancellationToken);
+            var actualSha256 = await ModelPackFileHash.ComputeSha256Async(stream, cancellationToken);
             if (!string.Equals(actualSha256, declaredFile.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 errors.Add(
@@ -357,7 +363,7 @@ public sealed class ModelPackInstallPlanner
     {
         foreach (var file in declaredFiles.Values.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase))
         {
-            var destinationPath = ResolveDestinationPath(targetRoot, file.RelativePath);
+            var destinationPath = ModelPackPathRules.ResolveDestinationPath(targetRoot, file.RelativePath);
             var plannedFile = new ModelPackPlannedFile(
                 file.RelativePath,
                 destinationPath,
@@ -376,7 +382,7 @@ public sealed class ModelPackInstallPlanner
             if (existingSize == file.SizeBytes)
             {
                 await using var existingStream = File.OpenRead(destinationPath);
-                existingSha256 = await ComputeSha256Async(existingStream, cancellationToken);
+                existingSha256 = await ModelPackFileHash.ComputeSha256Async(existingStream, cancellationToken);
             }
 
             if (existingSize == file.SizeBytes &&
@@ -395,104 +401,6 @@ public sealed class ModelPackInstallPlanner
                 existingSize,
                 $"Target file already exists with different content: {file.RelativePath}"));
         }
-    }
-
-    private static string ResolveDestinationPath(string targetRoot, string relativePath)
-    {
-        var destinationPath = Path.GetFullPath(Path.Combine(
-            [targetRoot, .. relativePath.Split('/')]));
-        if (!IsSameOrUnderDirectory(targetRoot, destinationPath))
-        {
-            throw new InvalidOperationException($"Resolved destination escapes target root: {relativePath}");
-        }
-
-        return destinationPath;
-    }
-
-    private static bool TryNormalizeModelPackFilePath(
-        string? rawPath,
-        out string relativePath,
-        out string error)
-    {
-        if (!TryNormalizeRelativePath(rawPath, out relativePath, out error))
-        {
-            return false;
-        }
-
-        if (string.Equals(relativePath, ModelPackManifest.FileName, StringComparison.OrdinalIgnoreCase))
-        {
-            error = $"{ModelPackManifest.FileName} is reserved.";
-            return false;
-        }
-
-        if (relativePath.StartsWith("engine/iw3/", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(relativePath, "engine/iw3", StringComparison.OrdinalIgnoreCase))
-        {
-            error = "Paths are relative to pretrained_models and must not include engine/iw3.";
-            return false;
-        }
-
-        if (relativePath.StartsWith("pretrained_models/", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(relativePath, "pretrained_models", StringComparison.OrdinalIgnoreCase))
-        {
-            error = "Paths are relative to pretrained_models and must not include pretrained_models.";
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool TryNormalizeRelativePath(
-        string? rawPath,
-        out string relativePath,
-        out string error)
-    {
-        relativePath = string.Empty;
-        error = string.Empty;
-
-        if (string.IsNullOrWhiteSpace(rawPath))
-        {
-            error = "Path is required.";
-            return false;
-        }
-
-        var candidate = rawPath.Trim().Replace('\\', '/');
-        if (candidate.StartsWith("//", StringComparison.Ordinal) ||
-            candidate.StartsWith("/", StringComparison.Ordinal) ||
-            Path.IsPathRooted(candidate))
-        {
-            error = "Absolute, rooted, and UNC paths are not allowed.";
-            return false;
-        }
-
-        if (candidate.EndsWith("/", StringComparison.Ordinal))
-        {
-            error = "File path must not end with a directory separator.";
-            return false;
-        }
-
-        var segments = candidate.Split('/');
-        if (segments.Length == 0 ||
-            segments.Any(string.IsNullOrWhiteSpace))
-        {
-            error = "Path segments must not be empty.";
-            return false;
-        }
-
-        if (segments.Any(segment => segment is "." or ".."))
-        {
-            error = "Path traversal segments are not allowed.";
-            return false;
-        }
-
-        if (segments.Any(segment => segment.Contains(':')))
-        {
-            error = "Rooted drive paths are not allowed.";
-            return false;
-        }
-
-        relativePath = string.Join('/', segments);
-        return true;
     }
 
     private static void RequireString(string value, string propertyName, ICollection<string> errors)
@@ -520,60 +428,6 @@ public sealed class ModelPackInstallPlanner
             errors.Add($"MODEL_PACK.json contains an invalid {propertyName} value.");
         }
     }
-
-    private static bool IsProtectedRuntimeDependency(string relativePath) =>
-        string.Equals(
-            relativePath,
-            "hub/checkpoints/" + Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyFileName,
-            StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsDirectoryEntry(ZipArchiveEntry entry) =>
-        string.IsNullOrEmpty(entry.Name);
-
-    private static async Task<string> ComputeSha256Async(
-        Stream stream,
-        CancellationToken cancellationToken)
-    {
-        using var sha256 = SHA256.Create();
-        var buffer = new byte[CopyBufferSize];
-        int bytesRead;
-        while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0)
-        {
-            sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
-        }
-
-        sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        return Convert.ToHexString(sha256.Hash ?? []);
-    }
-
-    private static bool IsUnderProgramFiles(string path)
-    {
-        var roots = new[]
-        {
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-        };
-
-        return roots
-            .Where(root => !string.IsNullOrWhiteSpace(root))
-            .Select(NormalizeFullPath)
-            .Any(root => IsSameOrUnderDirectory(root, path));
-    }
-
-    private static bool IsSameOrUnderDirectory(string rootDirectory, string candidatePath)
-    {
-        var root = NormalizeFullPath(rootDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var candidate = NormalizeFullPath(candidatePath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        return string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase) ||
-            candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-            candidate.StartsWith(root + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeFullPath(string path) =>
-        Path.GetFullPath(path);
 
     private sealed record DeclaredModelPackFile(
         string RelativePath,

@@ -43,3 +43,23 @@ public sealed record ModelPackDryRunInstallPlan(
     IReadOnlyList<string> ValidationErrors,
     IReadOnlyList<string> Warnings,
     bool ElevationWouldBeRequired);
+
+public sealed record ModelPackInstallRequest(
+    string ModelPackZipPath,
+    string TargetPretrainedModelsRoot,
+    string StagingRoot,
+    string? CurrentIw3Version = null,
+    string? CurrentV3dfyVersion = null);
+
+public sealed record ModelPackInstallResult(
+    bool Success,
+    ModelPackManifestSummary? Manifest,
+    string ModelPackZipPath,
+    string TargetPretrainedModelsRoot,
+    string? StagingPath,
+    IReadOnlyList<ModelPackPlannedFile> InstalledFiles,
+    IReadOnlyList<ModelPackPlannedFile> AlreadyInstalledFiles,
+    IReadOnlyList<ModelPackPlannedFile> SkippedFiles,
+    IReadOnlyList<ModelPackPlannedFile> RollbackFilesRemoved,
+    IReadOnlyList<string> Errors,
+    IReadOnlyList<string> Warnings);

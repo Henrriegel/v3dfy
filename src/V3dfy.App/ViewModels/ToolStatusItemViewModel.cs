@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 
 namespace V3dfy.App.ViewModels;
 
@@ -9,4 +10,5 @@ public sealed record ToolStatusItemViewModel(
     string DetailText,
     string ContextActionText = "",
     string ContextActionToolTip = "",
-    Visibility ContextActionVisibility = Visibility.Collapsed);
+    Visibility ContextActionVisibility = Visibility.Collapsed,
+    ICommand? ContextActionCommand = null);

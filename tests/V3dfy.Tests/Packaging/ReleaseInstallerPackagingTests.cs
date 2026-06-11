@@ -54,6 +54,44 @@ public sealed class ReleaseInstallerPackagingTests
     }
 
     [Fact]
+    public void PublishScript_PublishesSetupHelperIntoAppPublishRoot()
+    {
+        var script = ReadRepoFile("scripts", "publish-win-x64.ps1");
+        var helperPublishFunction = ExtractSourceRange(
+            script,
+            "function Publish-SetupHelperForApp",
+            "& dotnet publish $appProject");
+
+        Assert.Contains("$setupHelperProject = Join-Path $repoRoot 'src\\V3dfy.SetupHelper\\V3dfy.SetupHelper.csproj'", script);
+        Assert.Contains("$setupHelperPublishDirectory = Join-Path $repoRoot 'artifacts\\publish\\v3dfy-setup-helper-win-x64'", script);
+        Assert.Contains("& dotnet publish $setupHelperProject", helperPublishFunction);
+        Assert.Contains("--configuration Release", helperPublishFunction);
+        Assert.Contains("--framework net10.0-windows", helperPublishFunction);
+        Assert.Contains("--runtime win-x64", helperPublishFunction);
+        Assert.Contains("--self-contained true", helperPublishFunction);
+        Assert.Contains("-p:PublishSingleFile=true", helperPublishFunction);
+        Assert.Contains("Join-Path $setupHelperPublishDirectory 'V3dfy.SetupHelper.exe'", helperPublishFunction);
+        Assert.Contains("Copy-Item -Destination $publishDirectory -Recurse -Force", helperPublishFunction);
+        Assert.Contains("Publish-SetupHelperForApp", script);
+    }
+
+    [Fact]
+    public void PublishScript_SetupHelperPublishDoesNotCopyDebugOutput()
+    {
+        var script = ReadRepoFile("scripts", "publish-win-x64.ps1");
+        var helperPublishFunction = ExtractSourceRange(
+            script,
+            "function Publish-SetupHelperForApp",
+            "& dotnet publish $appProject");
+
+        Assert.DoesNotContain("bin\\Debug", helperPublishFunction, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("bin/Debug", helperPublishFunction, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Debug\\net", helperPublishFunction, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("--configuration Release", helperPublishFunction);
+        Assert.Contains("--runtime win-x64", helperPublishFunction);
+    }
+
+    [Fact]
     public void SetupHelperSource_ContainsClassicProgressLogUi()
     {
         var uiSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
@@ -170,4 +208,15 @@ public sealed class ReleaseInstallerPackagingTests
 
     private static string BackslashPath(params string[] segments) =>
         string.Join(Backslash, segments);
+
+    private static string ExtractSourceRange(string source, string startMarker, string endMarker)
+    {
+        var start = source.IndexOf(startMarker, StringComparison.Ordinal);
+        var end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+
+        Assert.True(start >= 0);
+        Assert.True(end > start);
+
+        return source[start..end];
+    }
 }

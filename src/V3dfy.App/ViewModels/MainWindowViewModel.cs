@@ -24,6 +24,7 @@ using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
 using V3dfy.Infrastructure.Files;
 using V3dfy.Infrastructure.Health;
+using V3dfy.Infrastructure.ModelPacks;
 using V3dfy.Infrastructure.Paths;
 using V3dfy.Infrastructure.Processes;
 
@@ -31,6 +32,8 @@ namespace V3dfy.App.ViewModels;
 
 public sealed class MainWindowViewModel : ObservableObject
 {
+    private const string SetupHelperExecutableName = "V3dfy.SetupHelper.exe";
+
     private static readonly HashSet<string> SupportedVideoExtensions =
     [
         ".mp4",
@@ -69,6 +72,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IPreviewCacheFileService _previewCacheFileService;
     private readonly IPreviewCachePathProvider _previewCachePathProvider;
     private readonly PreviewOutputOpenService _previewOutputOpenService;
+    private readonly ModelPackAppImportCoordinator _modelPackImportCoordinator;
     private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
     private readonly ConversionWorkflowState _workflowState = new();
@@ -106,10 +110,17 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _previewGpuMetricsStatusText = "GPU metrics: Detecting...";
     private string _previewStageEnglishText = "Preparing preview";
     private string _previewStageSpanishText = "Preparando vista previa";
+    private string _modelPackImportStatusEnglishText = "No model pack import has run yet.";
+    private string _modelPackImportStatusSpanishText = "Aun no se ha importado ningun paquete de modelos.";
+    private string _lastModelPackImportSummaryEnglishText = string.Empty;
+    private string _lastModelPackImportSummarySpanishText = string.Empty;
     private ProcessMetricSample? _lastProcessMetricSample;
     private ProcessMetricSample? _lastPreviewMetricSample;
     private PreviewCachePaths? _lastPreviewCachePaths;
     private TaskCompletionSource<bool>? _replaceVideoConfirmationCompletion;
+    private TaskCompletionSource<bool>? _modelPackImportConfirmationCompletion;
+    private ModelPackImportConfirmationPrompt? _modelPackImportConfirmationPrompt;
+    private bool _reopenModelInventoryAfterImport;
     private CancellationTokenSource? _conversionCancellationTokenSource;
     private CancellationTokenSource? _previewCancellationTokenSource;
     private CancellationTokenSource? _logCopyNotificationCancellationTokenSource;
@@ -118,6 +129,8 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _isTechnicalDetailsModalOpen;
     private bool _isProfileDetailsModalOpen;
     private bool _isReplaceVideoConfirmationModalOpen;
+    private bool _isModelPackImportConfirmationModalOpen;
+    private bool _isModelInventoryModalOpen;
     private bool _isActivityLogModalOpen;
     private bool _isPreviewGeneratingModalOpen;
     private bool _isPreviewReadyModalOpen;
@@ -130,6 +143,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _isPreviewCancellationRequested;
     private bool _hasLoggedPreviewCancellationSummary;
     private bool _isApplyingUiOnlyRefresh;
+    private bool _isModelPackImportRunning;
 
     public MainWindowViewModel()
     {
@@ -166,22 +180,32 @@ public sealed class MainWindowViewModel : ObservableObject
         _previewOutputOpenService = new(
             new FileSystemConversionOutputFileService(),
             new ShellOutputFileOpenService());
+        _modelPackImportCoordinator = new ModelPackAppImportCoordinator(
+            new ModelPackFilePicker(() => IsSpanish),
+            confirmationService: new InAppModelPackImportConfirmationService(ConfirmModelPackImportAsync));
 
-        SelectVideoCommand = new RelayCommand(SelectVideo, () => !IsConversionRunning && !IsPreviewGenerating);
+        SelectVideoCommand = new RelayCommand(
+            SelectVideo,
+            () => !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning);
         AnalyzeCommand = new AsyncRelayCommand(
             AnalyzeAsync,
-            () => !IsAnalyzing && !IsConversionRunning && !IsPreviewGenerating);
+            () => !IsAnalyzing && !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning);
         RefreshEngineStatusCommand = new AsyncRelayCommand(
             () => RefreshEngineStatusAsync(logRefresh: true),
             () => CanUseSystemStatusActions);
         OpenEngineFolderCommand = new RelayCommand(OpenEngineFolder);
+        OpenModelsFolderCommand = new RelayCommand(OpenModelsFolder);
+        ShowModelInventoryCommand = new RelayCommand(
+            ShowModelInventory,
+            () => CanUseSystemStatusActions);
+        CloseModelInventoryCommand = new RelayCommand(CloseModelInventory);
         ClearLogsCommand = new RelayCommand(ClearLogs);
         BrowseOutputFolderCommand = new RelayCommand(
             BrowseOutputFolder,
-            () => !IsConversionRunning && !IsPreviewGenerating);
+            () => !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning);
         ResetOutputPathCommand = new RelayCommand(
             ResetOutputPath,
-            () => !IsConversionRunning && !IsPreviewGenerating);
+            () => !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning);
         StartConversionCommand = new RelayCommand(
             StartOrCancelConversion,
             () => CanStartOrCancelConversion);
@@ -203,8 +227,13 @@ public sealed class MainWindowViewModel : ObservableObject
         CloseTechnicalDetailsCommand = new RelayCommand(CloseTechnicalDetails);
         ShowProfileDetailsCommand = new RelayCommand(
             ShowProfileDetails,
-            () => !IsConversionRunning && !IsPreviewGenerating);
+            () => !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning);
         CloseProfileDetailsCommand = new RelayCommand(CloseProfileDetails);
+        ImportModelPackCommand = new AsyncRelayCommand(
+            ImportModelPackAsync,
+            () => CanImportModelPack);
+        ConfirmModelPackImportCommand = new RelayCommand(ConfirmModelPackImport);
+        CancelModelPackImportCommand = new RelayCommand(CancelModelPackImport);
         ConfirmReplaceVideoCommand = new RelayCommand(ConfirmReplaceVideo);
         CancelReplaceVideoCommand = new RelayCommand(CancelReplaceVideo);
 
@@ -502,11 +531,12 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public bool CanChangeLgCompatibilityCopyOptions =>
-        !IsConversionRunning && !IsPreviewGenerating && IsLgOutputProfileSelected;
+        !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning && IsLgOutputProfileSelected;
 
     public bool CanPreferLgCompatibilityCopyWhenOpening =>
         !IsConversionRunning &&
         !IsPreviewGenerating &&
+        !IsModelPackImportRunning &&
         IsLgOutputProfileSelected &&
         CreateLgCompatibilityCopy;
 
@@ -547,7 +577,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool CanOpenSystemStatusConversionTab =>
         _workflowState.CanOpenSystemStatusConversionTab;
 
-    public bool CanOpenSystemStatusToolsTab => !IsConversionRunning && !IsPreviewGenerating;
+    public bool CanOpenSystemStatusToolsTab => !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning;
 
     public bool IsAnalyzing
     {
@@ -558,11 +588,60 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 AnalyzeCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(AnalysisStatusText));
+                RaiseModelPackImportAvailabilityPropertiesChanged();
             }
         }
     }
 
     public string VideoAnalysisTitle => Text("Video analysis", "Análisis de video");
+
+    public bool IsModelPackImportRunning
+    {
+        get => _isModelPackImportRunning;
+        private set
+        {
+            if (SetProperty(ref _isModelPackImportRunning, value))
+            {
+                OnPropertyChanged(nameof(ModelPackImportStatusText));
+                RaiseModelPackImportAvailabilityPropertiesChanged();
+                RaisePreviewPropertiesChanged();
+                RaiseConversionExecutionPropertiesChanged();
+                RaiseSystemStatusPropertiesChanged();
+                SelectVideoCommand.RaiseCanExecuteChanged();
+                AnalyzeCommand.RaiseCanExecuteChanged();
+                BrowseOutputFolderCommand.RaiseCanExecuteChanged();
+                ResetOutputPathCommand.RaiseCanExecuteChanged();
+                ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool CanImportModelPack =>
+        !IsConversionRunning &&
+        !IsPreviewGenerating &&
+        !IsAnalyzing &&
+        !IsModelPackImportRunning;
+
+    public string ImportModelPackText => IsModelPackImportRunning
+        ? Text("Importing model pack...", "Importando paquete de modelos...")
+        : Text("Import model pack...", "Importar paquete de modelos...");
+
+    public string ModelPackImportInstructionText => Text(
+        "Valid model packs are reviewed before Windows asks for administrator permission.",
+        "Los paquetes de modelos validos se revisan antes de que Windows pida permiso de administrador.");
+
+    public string ModelPackImportStatusText => Text(
+        _modelPackImportStatusEnglishText,
+        _modelPackImportStatusSpanishText);
+
+    public string LastModelPackImportSummary => Text(
+        _lastModelPackImportSummaryEnglishText,
+        _lastModelPackImportSummarySpanishText);
+
+    public Visibility LastModelPackImportSummaryVisibility =>
+        string.IsNullOrWhiteSpace(LastModelPackImportSummary)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
 
     public string AnalysisStatusText => IsAnalyzing
         ? Text("Analyzing video...", "Analizando video...")
@@ -746,6 +825,46 @@ public sealed class MainWindowViewModel : ObservableObject
         (_dependencyHealth?.ModelInventory.SelectionCandidates.Count ?? 0) >
         LocalModelCandidates.Count;
 
+    public string ViewModelsText => Text("View models", "Ver modelos");
+
+    public string ViewModelsToolTipText => Text(
+        "View local 3D models and import model packs.",
+        "Ver modelos 3D locales e importar paquetes de modelos.");
+
+    public string ModelInventoryTitleText => Text("3D models", "Modelos 3D");
+
+    public string ModelInventoryIntroText => Text(
+        "Review local models detected by v3dfy. Only mapped and verified models are selectable for conversion.",
+        "Revisa los modelos locales detectados por v3dfy. Solo los modelos mapeados y verificados son seleccionables para convertir.");
+
+    public string ModelInventoryFolderLabelText => Text("Model folder", "Carpeta de modelos");
+
+    public string ModelInventoryFolderPathText => GetCurrentModelInventory().ModelsDirectory;
+
+    public string SelectableModelsSectionTitleText => Text(
+        "Selectable models",
+        "Modelos seleccionables");
+
+    public string SelectableModelsInventoryText => CreateSelectableModelsInventoryText();
+
+    public string DiagnosticModelsSectionTitleText => Text(
+        "Detected but not selectable",
+        "Detectados no seleccionables");
+
+    public string DiagnosticModelsInventoryText => CreateDiagnosticModelsInventoryText();
+
+    public string RuntimeDependenciesSectionTitleText => Text(
+        "Runtime dependencies",
+        "Dependencias de runtime");
+
+    public string RuntimeDependenciesInventoryText => CreateRuntimeDependenciesInventoryText();
+
+    public string ModelInventoryActionsTitleText => Text("Actions", "Acciones");
+
+    public string OpenModelsFolderText => Text(
+        "Open models folder",
+        "Abrir carpeta de modelos");
+
     public string OutputPathLabel => Text("Output path", "Ruta de salida");
 
     public string BrowseOutputFolderText => Text("Browse...", "Examinar...");
@@ -761,7 +880,7 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _openOutputWhenFinished;
         set
         {
-            if (IsConversionRunning || IsPreviewGenerating)
+            if (IsConversionRunning || IsPreviewGenerating || IsModelPackImportRunning)
             {
                 OnPropertyChanged();
                 return;
@@ -771,7 +890,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public bool CanChangeOpenOutputWhenFinished => !IsConversionRunning && !IsPreviewGenerating;
+    public bool CanChangeOpenOutputWhenFinished => !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning;
 
     public bool HasCustomOutputPath => _outputPathState.HasCustomOutputPath;
 
@@ -1104,6 +1223,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _analysis?.File.Duration is not null &&
         !IsConversionRunning &&
         !IsPreviewGenerating &&
+        !IsModelPackImportRunning &&
         !IsPreviewRangeEditingBlockedByModal;
 
     public string PreviewOutdatedText => Text(
@@ -1140,12 +1260,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool CanOpenPreview =>
         !IsConversionRunning &&
+        !IsModelPackImportRunning &&
         _previewState.Status == PreviewGenerationStatus.Ready &&
         IsPreviewFingerprintCurrent();
 
     public bool CanDeletePreview =>
         !IsConversionRunning &&
         !IsPreviewGenerating &&
+        !IsModelPackImportRunning &&
         _previewState.Status is
             PreviewGenerationStatus.Ready or
             PreviewGenerationStatus.Accepted or
@@ -1184,6 +1306,8 @@ public sealed class MainWindowViewModel : ObservableObject
         IsTechnicalDetailsModalOpen ||
         IsProfileDetailsModalOpen ||
         IsReplaceVideoConfirmationModalOpen ||
+        IsModelInventoryModalOpen ||
+        IsModelPackImportConfirmationModalOpen ||
         IsActivityLogModalOpen ||
         IsPreviewGeneratingModalOpen ||
         IsPreviewReadyModalOpen;
@@ -1356,6 +1480,20 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ReplaceVideoConfirmText => Text("Replace", "Reemplazar");
 
+    public string ModelPackImportConfirmationTitleText => Text(
+        _modelPackImportConfirmationPrompt?.EnglishTitle ?? "Confirm model pack import",
+        _modelPackImportConfirmationPrompt?.SpanishTitle ?? "Confirmar importacion de paquete de modelos");
+
+    public string ModelPackImportConfirmationIntroText => Text(
+        "Review this model pack before Windows asks for administrator permission.",
+        "Revisa este paquete de modelos antes de que Windows pida permiso de administrador.");
+
+    public string ModelPackImportConfirmationMessageText => Text(
+        _modelPackImportConfirmationPrompt?.EnglishMessage ?? string.Empty,
+        _modelPackImportConfirmationPrompt?.SpanishMessage ?? string.Empty);
+
+    public string ModelPackImportConfirmationContinueText => Text("Continue", "Continuar");
+
     public string ProfileDetailsTitleText => Text(
         "Profile details",
         "Detalles del perfil");
@@ -1414,6 +1552,16 @@ public sealed class MainWindowViewModel : ObservableObject
                 return ReplaceSelectedVideoTitleText;
             }
 
+            if (IsModelPackImportConfirmationModalOpen)
+            {
+                return ModelPackImportConfirmationTitleText;
+            }
+
+            if (IsModelInventoryModalOpen)
+            {
+                return ModelInventoryTitleText;
+            }
+
             return IsProfileDetailsModalOpen
                 ? ProfileDetailsTitleText
                 : SystemStatusTechnicalDetailsTitle;
@@ -1424,12 +1572,16 @@ public sealed class MainWindowViewModel : ObservableObject
         IsTechnicalDetailsModalOpen ||
         IsProfileDetailsModalOpen ||
         IsReplaceVideoConfirmationModalOpen ||
+        IsModelInventoryModalOpen ||
+        IsModelPackImportConfirmationModalOpen ||
         IsActivityLogModalOpen ||
         IsPreviewGeneratingModalOpen ||
         IsPreviewReadyModalOpen;
 
     public Visibility ModalOverlayVisibility =>
         IsAnyModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public double ActiveModalWidth => IsModelInventoryModalOpen ? 1000d : 760d;
 
     public bool IsTechnicalDetailsModalOpen
     {
@@ -1461,6 +1613,30 @@ public sealed class MainWindowViewModel : ObservableObject
         private set
         {
             if (SetProperty(ref _isReplaceVideoConfirmationModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsModelPackImportConfirmationModalOpen
+    {
+        get => _isModelPackImportConfirmationModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isModelPackImportConfirmationModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsModelInventoryModalOpen
+    {
+        get => _isModelInventoryModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isModelInventoryModalOpen, value))
             {
                 RaiseModalStatePropertiesChanged();
             }
@@ -1511,6 +1687,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public Visibility ReplaceVideoConfirmationModalContentVisibility =>
         IsReplaceVideoConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ModelPackImportConfirmationModalContentVisibility =>
+        IsModelPackImportConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ModelInventoryModalContentVisibility =>
+        IsModelInventoryModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility ActivityLogModalContentVisibility =>
         IsActivityLogModalOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -1647,6 +1829,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _conversionExecutionState.Status is not ConversionExecutionStatus.Running and
             not ConversionExecutionStatus.Canceling &&
         !IsPreviewGenerating &&
+        !IsModelPackImportRunning &&
         EvaluateConversionStartGate().CanStart &&
         CurrentExecutionRequestCanStart();
 
@@ -1662,7 +1845,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _ => Text("Convert", "Convertir"),
     };
 
-    public bool CanUseSystemStatusActions => !IsConversionRunning && !IsPreviewGenerating;
+    public bool CanUseSystemStatusActions => !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning;
 
     public string ToolStatusTitle => Text(
         "Internal tool status",
@@ -1745,6 +1928,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand OpenEngineFolderCommand { get; }
 
+    public RelayCommand OpenModelsFolderCommand { get; }
+
+    public RelayCommand ShowModelInventoryCommand { get; }
+
+    public RelayCommand CloseModelInventoryCommand { get; }
+
     public RelayCommand ClearLogsCommand { get; }
 
     public RelayCommand BrowseOutputFolderCommand { get; }
@@ -1781,13 +1970,19 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand CloseProfileDetailsCommand { get; }
 
+    public AsyncRelayCommand ImportModelPackCommand { get; }
+
+    public RelayCommand ConfirmModelPackImportCommand { get; }
+
+    public RelayCommand CancelModelPackImportCommand { get; }
+
     public RelayCommand ConfirmReplaceVideoCommand { get; }
 
     public RelayCommand CancelReplaceVideoCommand { get; }
 
     public async void SelectDroppedVideo(string path)
     {
-        if (IsConversionRunning || IsPreviewGenerating)
+        if (IsConversionRunning || IsPreviewGenerating || IsModelPackImportRunning)
         {
             return;
         }
@@ -1808,7 +2003,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async void SelectVideo()
     {
-        if (IsConversionRunning || IsPreviewGenerating)
+        if (IsConversionRunning || IsPreviewGenerating || IsModelPackImportRunning)
         {
             return;
         }
@@ -1831,7 +2026,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async Task AnalyzeAsync()
     {
-        if (IsConversionRunning || IsPreviewGenerating)
+        if (IsConversionRunning || IsPreviewGenerating || IsModelPackImportRunning)
         {
             return;
         }
@@ -1971,6 +2166,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _toolHealth = _dependencyHealth.Summary;
         UpdateLocalModelSelectionCandidates();
         UpdateToolStatuses();
+        RaiseModelInventoryPropertiesChanged();
         UpdateConversionReadiness();
         if (logRefresh)
         {
@@ -1979,6 +2175,438 @@ public sealed class MainWindowViewModel : ObservableObject
                 "Estado de herramientas internas actualizado.");
         }
     }
+
+    private async Task ImportModelPackAsync()
+    {
+        if (!CanImportModelPack)
+        {
+            AddLog(
+                "Model pack import is unavailable while another operation is running.",
+                "La importacion de paquetes de modelos no esta disponible mientras hay otra operacion en ejecucion.");
+            return;
+        }
+
+        _reopenModelInventoryAfterImport = IsModelInventoryModalOpen;
+        IsModelPackImportRunning = true;
+        try
+        {
+            var result = await _modelPackImportCoordinator.ImportAsync(
+                CreateModelPackAppImportRequest());
+            ApplyModelPackImportResult(result);
+        }
+        catch (OperationCanceledException)
+        {
+            SetModelPackImportStatus(
+                "Model pack import was canceled.",
+                "La importacion del paquete de modelos fue cancelada.");
+            AddLog(
+                "Model pack import was canceled.",
+                "La importacion del paquete de modelos fue cancelada.");
+        }
+        catch (Exception exception)
+        {
+            var errorLogPath = AppErrorLogService.LogRecoverableException(
+                "Import model pack",
+                exception);
+            SetModelPackImportStatus(
+                "Model pack import failed unexpectedly.",
+                "La importacion del paquete de modelos fallo inesperadamente.");
+            SetLastModelPackImportSummary(
+                $"Model pack import failed unexpectedly. Details were written to {errorLogPath}. {exception.Message}",
+                $"La importacion del paquete de modelos fallo inesperadamente. Los detalles se escribieron en {errorLogPath}. {exception.Message}");
+            AddLog(
+                $"Model pack import failed unexpectedly: {exception.Message}",
+                $"La importacion del paquete de modelos fallo inesperadamente: {exception.Message}");
+        }
+        finally
+        {
+            IsModelPackImportRunning = false;
+            if (_reopenModelInventoryAfterImport && !IsAnyModalOpen)
+            {
+                IsModelInventoryModalOpen = true;
+            }
+
+            _reopenModelInventoryAfterImport = false;
+        }
+    }
+
+    private ModelPackAppImportRequest CreateModelPackAppImportRequest() => new(
+        RuntimeRoot: AppContext.BaseDirectory,
+        HelperExecutablePath: Path.Combine(AppContext.BaseDirectory, SetupHelperExecutableName),
+        CurrentIw3Version: _dependencyHealth?.Iw3CliCapabilities.BundledIw3Version ?? string.Empty,
+        CurrentV3dfyVersion: GetCurrentV3dfyVersion())
+    {
+        BeforeExecutionAsync = (preparation, _) =>
+        {
+            RecordValidModelPackPreparation(preparation);
+            return Task.CompletedTask;
+        },
+        RefreshAfterSuccessfulImportAsync = async _ =>
+            await RefreshEngineStatusAsync(logRefresh: true),
+    };
+
+    private async Task<bool> ConfirmModelPackImportAsync(
+        ModelPackImportConfirmationPrompt prompt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(prompt);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        _modelPackImportConfirmationCompletion?.TrySetResult(false);
+        ResetModelPackImportConfirmationModal();
+        IsModelInventoryModalOpen = false;
+        _modelPackImportConfirmationPrompt = prompt;
+        _modelPackImportConfirmationCompletion =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        RaiseModelPackImportConfirmationPropertiesChanged();
+        IsModelPackImportConfirmationModalOpen = true;
+
+        try
+        {
+            return await _modelPackImportConfirmationCompletion.Task.WaitAsync(cancellationToken);
+        }
+        finally
+        {
+            var completion = _modelPackImportConfirmationCompletion;
+            if (completion is not null)
+            {
+                ResetModelPackImportConfirmationModal();
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    completion.TrySetCanceled(cancellationToken);
+                }
+                else
+                {
+                    completion.TrySetResult(false);
+                }
+            }
+        }
+    }
+
+    private void ApplyModelPackImportResult(ModelPackAppImportResult result)
+    {
+        if (result.Canceled)
+        {
+            if (result.ConfirmationCanceled)
+            {
+                RecordCanceledModelPackImport(result);
+            }
+
+            return;
+        }
+
+        if (result.Status == ModelPackAppImportStatus.Invalid)
+        {
+            RecordInvalidModelPackPreparation(result);
+            return;
+        }
+
+        if (result.Status == ModelPackAppImportStatus.Failed)
+        {
+            RecordFailedModelPackImport(result);
+            return;
+        }
+
+        if (result.Success)
+        {
+            RecordSuccessfulModelPackImport(result);
+        }
+    }
+
+    private void RecordValidModelPackPreparation(ModelPackImportPreparationResult preparation)
+    {
+        SetModelPackImportStatus(
+            "Model pack validated. Review the confirmation before Windows asks for administrator permission.",
+            "Paquete de modelos validado. Revisa la confirmacion antes de que Windows pida permiso de administrador.");
+        var prompt = ModelPackImportConfirmationFormatter.CreatePrompt(preparation);
+        SetLastModelPackImportSummary(prompt.EnglishMessage, prompt.SpanishMessage);
+        AddLog(
+            $"Model pack validated: {GetModelPackDisplayName(preparation)}. Files to install: {preparation.FilesToInstall.Count}. Already installed: {preparation.AlreadyInstalledFiles.Count}.",
+            $"Paquete de modelos validado: {GetModelPackDisplayName(preparation)}. Archivos por instalar: {preparation.FilesToInstall.Count}. Ya instalados: {preparation.AlreadyInstalledFiles.Count}.");
+        AddLog(
+            $"Model pack install target: {preparation.TargetPretrainedModelsRoot}",
+            $"Destino de instalacion del paquete de modelos: {preparation.TargetPretrainedModelsRoot}");
+
+        if (preparation.ElevationRequired)
+        {
+            AddLog(
+                "Windows administrator permission is required because the model target is under Program Files.",
+                "Se requiere permiso de administrador de Windows porque el destino de modelos esta en Program Files.");
+        }
+        else
+        {
+            AddLog(
+                "The model target is outside Program Files; administrator permission may not be required for this target.",
+                "El destino de modelos esta fuera de Program Files; puede que este destino no requiera permiso de administrador.");
+        }
+
+        LogModelPackWarnings(preparation.Warnings);
+    }
+
+    private void RecordCanceledModelPackImport(ModelPackAppImportResult result)
+    {
+        SetModelPackImportStatus(
+            "Model pack import canceled before Windows administrator permission.",
+            "Importacion del paquete de modelos cancelada antes del permiso de administrador de Windows.");
+        SetLastModelPackImportSummary(
+            "Model pack import canceled. No files were installed.",
+            "Importacion del paquete de modelos cancelada. No se instalo ningun archivo.");
+        AddLog(
+            $"Model pack import canceled before launching the helper: {Path.GetFileName(result.SelectedModelPackZipPath)}",
+            $"Importacion del paquete de modelos cancelada antes de iniciar el helper: {Path.GetFileName(result.SelectedModelPackZipPath)}");
+    }
+
+    private void RecordInvalidModelPackPreparation(ModelPackAppImportResult result)
+    {
+        SetModelPackImportStatus(
+            "Model pack validation failed.",
+            "La validacion del paquete de modelos fallo.");
+        IReadOnlyList<string> errors = result.Errors.Count == 0
+            ? ["Model pack import preparation did not produce a launchable helper request."]
+            : result.Errors;
+        SetLastModelPackImportSummary(
+            CreateModelPackErrorSummary("Model pack validation failed.", errors),
+            CreateModelPackErrorSummary("La validacion del paquete de modelos fallo.", errors));
+        AddLog(
+            "Model pack validation failed. Helper was not launched.",
+            "La validacion del paquete de modelos fallo. No se inicio el helper.");
+        foreach (var error in errors)
+        {
+            AddLog(
+                $"Model pack validation error: {error}",
+                $"Error de validacion del paquete de modelos: {error}");
+        }
+
+        LogModelPackWarnings(result.Warnings);
+    }
+
+    private void RecordFailedModelPackImport(ModelPackAppImportResult result)
+    {
+        var helperWasNotStarted = result.ExecutionResult?.HelperProcessStarted != true;
+        SetModelPackImportStatus(
+            helperWasNotStarted
+                ? "Model pack import did not start. Windows administrator permission may have been canceled."
+                : "Model pack import failed.",
+            helperWasNotStarted
+                ? "La importacion del paquete de modelos no inicio. Es posible que se haya cancelado el permiso de administrador de Windows."
+                : "La importacion del paquete de modelos fallo.");
+        IReadOnlyList<string> errors = result.Errors.Count == 0
+            ? ["Model pack helper did not report a successful install."]
+            : result.Errors;
+        SetLastModelPackImportSummary(
+            CreateModelPackErrorSummary(
+                helperWasNotStarted
+                    ? "Model pack import did not start. No files were installed."
+                    : "Model pack import failed.",
+                errors),
+            CreateModelPackErrorSummary(
+                helperWasNotStarted
+                    ? "La importacion del paquete de modelos no inicio. No se instalo ningun archivo."
+                    : "La importacion del paquete de modelos fallo.",
+                errors));
+        AddLog(
+            helperWasNotStarted
+                ? "Model pack import did not start. Windows administrator permission may have been canceled."
+                : "Model pack import failed.",
+            helperWasNotStarted
+                ? "La importacion del paquete de modelos no inicio. Es posible que se haya cancelado el permiso de administrador de Windows."
+                : "La importacion del paquete de modelos fallo.");
+        foreach (var error in errors)
+        {
+            AddLog(
+                $"Model pack import error: {error}",
+                $"Error de importacion del paquete de modelos: {error}");
+        }
+
+        LogModelPackWarnings(result.ExecutionResult?.HelperResult?.Warnings ?? []);
+    }
+
+    private void RecordSuccessfulModelPackImport(ModelPackAppImportResult result)
+    {
+        SetModelPackImportStatus(
+            "Model pack import completed.",
+            "Importacion del paquete de modelos completada.");
+        SetLastModelPackImportSummary(
+            CreateModelPackSuccessSummary(result, useSpanish: false),
+            CreateModelPackSuccessSummary(result, useSpanish: true));
+        AddLog(
+            CreateModelPackSuccessLog(result, useSpanish: false),
+            CreateModelPackSuccessLog(result, useSpanish: true));
+        if (result.AppRefreshCompleted)
+        {
+            AddLog(
+                "Model inventory refreshed after model pack import.",
+                "Inventario de modelos actualizado despues de importar el paquete.");
+        }
+
+        LogModelPackWarnings(result.ExecutionResult?.HelperResult?.Warnings ?? []);
+    }
+
+    private void SetModelPackImportStatus(string englishText, string spanishText)
+    {
+        _modelPackImportStatusEnglishText = englishText;
+        _modelPackImportStatusSpanishText = spanishText;
+        OnPropertyChanged(nameof(ModelPackImportStatusText));
+    }
+
+    private void SetLastModelPackImportSummary(string englishText, string spanishText)
+    {
+        _lastModelPackImportSummaryEnglishText = englishText;
+        _lastModelPackImportSummarySpanishText = spanishText;
+        OnPropertyChanged(nameof(LastModelPackImportSummary));
+        OnPropertyChanged(nameof(LastModelPackImportSummaryVisibility));
+    }
+
+    private static string GetCurrentV3dfyVersion() =>
+        typeof(MainWindowViewModel).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+    private static string GetModelPackDisplayName(ModelPackImportPreparationResult preparation) =>
+        preparation.Manifest?.DisplayName ??
+        Path.GetFileName(preparation.ModelPackZipPath);
+
+    private static string CreateModelPackSuccessSummary(
+        ModelPackAppImportResult result,
+        bool useSpanish)
+    {
+        var helperResult = result.ExecutionResult?.HelperResult;
+        var manifestName = helperResult?.Manifest?.DisplayName ??
+            result.LaunchPreparation?.Preparation.Manifest?.DisplayName ??
+            Path.GetFileName(result.SelectedModelPackZipPath);
+        IReadOnlyList<string> lines = useSpanish
+            ?
+            [
+                $"Paquete importado: {manifestName}",
+                $"Archivos instalados: {helperResult?.InstalledFiles.Count ?? 0}",
+                $"Archivos ya presentes: {helperResult?.AlreadyInstalledFiles.Count ?? 0}",
+                $"Archivos omitidos: {helperResult?.SkippedFiles.Count ?? 0}",
+                $"Inventario actualizado: {(result.AppRefreshCompleted ? "si" : "no")}",
+                "Modelos seleccionables: solo se muestran para conversion los modelos soportados/mapeados.",
+            ]
+            :
+            [
+                $"Imported pack: {manifestName}",
+                $"Installed files: {helperResult?.InstalledFiles.Count ?? 0}",
+                $"Already present files: {helperResult?.AlreadyInstalledFiles.Count ?? 0}",
+                $"Skipped files: {helperResult?.SkippedFiles.Count ?? 0}",
+                $"Inventory refreshed: {(result.AppRefreshCompleted ? "yes" : "no")}",
+                "Selectable models: only supported/mapped models are shown for conversion.",
+            ];
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string CreateModelPackSuccessLog(
+        ModelPackAppImportResult result,
+        bool useSpanish)
+    {
+        var helperResult = result.ExecutionResult?.HelperResult;
+        var manifestName = helperResult?.Manifest?.DisplayName ??
+            result.LaunchPreparation?.Preparation.Manifest?.DisplayName ??
+            Path.GetFileName(result.SelectedModelPackZipPath);
+        return useSpanish
+            ? $"Paquete de modelos importado: {manifestName}. Archivos instalados: {helperResult?.InstalledFiles.Count ?? 0}."
+            : $"Model pack imported: {manifestName}. Installed files: {helperResult?.InstalledFiles.Count ?? 0}.";
+    }
+
+    private static string CreateModelPackErrorSummary(
+        string heading,
+        IReadOnlyList<string> errors)
+    {
+        var lines = new List<string> { heading };
+        lines.AddRange(errors.Select(error => $"- {error}"));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private void LogModelPackWarnings(IReadOnlyList<string> warnings)
+    {
+        foreach (var warning in warnings)
+        {
+            AddLog(
+                $"Model pack warning: {warning}",
+                $"Advertencia de paquete de modelos: {warning}");
+        }
+    }
+
+    private LocalModelInventory GetCurrentModelInventory() =>
+        _dependencyHealth?.ModelInventory ??
+        LocalModelInventory.Empty(_toolPaths.ModelsDirectory);
+
+    private string CreateSelectableModelsInventoryText()
+    {
+        var candidates = Iw3DepthModelMapper.CreateSelectableCandidates(
+            GetCurrentModelInventory().SelectionCandidates,
+            IsSpanish);
+        if (candidates.Count == 0)
+        {
+            return Text(
+                "No selectable models are available. A verified v3dfy mapping is required before a detected file can be used for conversion.",
+                "No hay modelos seleccionables disponibles. Se requiere un mapeo verificado de v3dfy antes de usar un archivo detectado para convertir.");
+        }
+
+        var lines = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            lines.Add($"- {GetCandidateDisplayName(candidate)}");
+            lines.Add($"  --depth-model {candidate.Iw3DepthModelName ?? "-"}");
+            lines.Add($"  {candidate.RelativePath}");
+            var note = Text(candidate.EnglishStatusNote, candidate.SpanishStatusNote);
+            if (!string.IsNullOrWhiteSpace(note))
+            {
+                lines.Add($"  {note}");
+            }
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string CreateDiagnosticModelsInventoryText()
+    {
+        var unmappedCandidates = Iw3DepthModelMapper.GetUnmappedCandidates(
+            GetCurrentModelInventory().SelectionCandidates);
+        if (unmappedCandidates.Count == 0)
+        {
+            return Text(
+                "No diagnostic-only model files were detected.",
+                "No se detectaron modelos solo de diagnostico.");
+        }
+
+        var lines = new List<string>();
+        foreach (var candidate in unmappedCandidates)
+        {
+            lines.Add($"- {GetCandidateDisplayName(candidate)}");
+            lines.Add($"  {candidate.RelativePath}");
+            lines.Add(Text(
+                "  Reason: no verified v3dfy mapping / diagnostic only.",
+                "  Motivo: sin mapeo verificado de v3dfy / solo diagnostico."));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string CreateRuntimeDependenciesInventoryText()
+    {
+        var dependency = _dependencyHealth?.Iw3RuntimeDependencies ?? new ToolDependencyHealth(
+            ToolHealthStatus.Missing,
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing,
+            _toolPaths.Iw3DefaultStereoRuntimeDependencyFile);
+        var statusText = dependency.Status == ToolHealthStatus.Found
+            ? Text("Found", "Encontrada")
+            : Text("Missing", "Faltante");
+        return string.Join(
+            Environment.NewLine,
+            [
+                $"- {Path.GetFileName(dependency.ExpectedPath)}",
+                $"  {statusText}",
+                $"  {dependency.ExpectedPath}",
+                Text(
+                    "  Note: runtime dependency, not a selectable model.",
+                    "  Nota: dependencia de runtime, no es un modelo seleccionable."),
+            ]);
+    }
+
+    private string GetCandidateDisplayName(LocalModelSelectionCandidate candidate) =>
+        IsSpanish && !string.IsNullOrWhiteSpace(candidate.SpanishDisplayName)
+            ? candidate.SpanishDisplayName
+            : candidate.DisplayName;
 
     private void OpenEngineFolder()
     {
@@ -2006,12 +2634,60 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void OpenModelsFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(_toolPaths.ModelsDirectory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _toolPaths.ModelsDirectory,
+                UseShellExecute = true,
+            });
+
+            AddLog(
+                $"Opened expected models folder: {_toolPaths.ModelsDirectory}",
+                $"Carpeta esperada de modelos abierta: {_toolPaths.ModelsDirectory}");
+        }
+        catch (Exception exception)
+        {
+            AddLog(
+                $"Could not open expected models folder: {exception.Message}",
+                $"No se pudo abrir la carpeta esperada de modelos: {exception.Message}");
+        }
+    }
+
+    private void ShowModelInventory()
+    {
+        if (IsConversionRunning ||
+            IsPreviewGenerating ||
+            IsTechnicalDetailsModalOpen ||
+            IsProfileDetailsModalOpen ||
+            IsReplaceVideoConfirmationModalOpen ||
+            IsModelPackImportConfirmationModalOpen ||
+            IsActivityLogModalOpen ||
+            IsPreviewReadyModalOpen)
+        {
+            return;
+        }
+
+        RaiseModelInventoryPropertiesChanged();
+        IsModelInventoryModalOpen = true;
+    }
+
+    private void CloseModelInventory()
+    {
+        IsModelInventoryModalOpen = false;
+    }
+
     private void ShowTechnicalDetails()
     {
         if (IsConversionRunning ||
             IsPreviewGenerating ||
             IsProfileDetailsModalOpen ||
             IsReplaceVideoConfirmationModalOpen ||
+            IsModelInventoryModalOpen ||
+            IsModelPackImportConfirmationModalOpen ||
             IsActivityLogModalOpen ||
             IsPreviewReadyModalOpen)
         {
@@ -2033,6 +2709,8 @@ public sealed class MainWindowViewModel : ObservableObject
             IsPreviewGenerating ||
             IsTechnicalDetailsModalOpen ||
             IsReplaceVideoConfirmationModalOpen ||
+            IsModelInventoryModalOpen ||
+            IsModelPackImportConfirmationModalOpen ||
             IsActivityLogModalOpen ||
             IsPreviewReadyModalOpen)
         {
@@ -2121,6 +2799,31 @@ public sealed class MainWindowViewModel : ObservableObject
     private void CancelReplaceVideo()
     {
         CompleteReplaceVideoConfirmation(replaceVideo: false);
+    }
+
+    private void ConfirmModelPackImport()
+    {
+        CompleteModelPackImportConfirmation(confirmImport: true);
+    }
+
+    private void CancelModelPackImport()
+    {
+        CompleteModelPackImportConfirmation(confirmImport: false);
+    }
+
+    private void CompleteModelPackImportConfirmation(bool confirmImport)
+    {
+        var completion = _modelPackImportConfirmationCompletion;
+        ResetModelPackImportConfirmationModal();
+        completion?.TrySetResult(confirmImport);
+    }
+
+    private void ResetModelPackImportConfirmationModal()
+    {
+        IsModelPackImportConfirmationModalOpen = false;
+        _modelPackImportConfirmationCompletion = null;
+        _modelPackImportConfirmationPrompt = null;
+        RaiseModelPackImportConfirmationPropertiesChanged();
     }
 
     private void CompleteReplaceVideoConfirmation(bool replaceVideo)
@@ -2310,22 +3013,36 @@ public sealed class MainWindowViewModel : ObservableObject
         string englishName,
         string spanishName,
         ToolDependencyHealth dependencyHealth,
-        ToolStatusComponent component) => new(
-        Name: Text(englishName, spanishName),
-        StatusText: dependencyHealth.Status == ToolHealthStatus.Found
-            ? Text("Found", "Encontrado")
-            : Text("Missing", "Faltante"),
-        ReasonText: ToolStatusReasonText(dependencyHealth, component),
-        DetailText: ToolStatusDetailText(dependencyHealth, component),
-        ContextActionText: component == ToolStatusComponent.Iw3Engine
-            ? Text("Open", "Abrir")
-            : string.Empty,
-        ContextActionToolTip: component == ToolStatusComponent.Iw3Engine
-            ? OpenEngineFolderText
-            : string.Empty,
-        ContextActionVisibility: component == ToolStatusComponent.Iw3Engine
-            ? Visibility.Visible
-            : Visibility.Collapsed);
+        ToolStatusComponent component)
+    {
+        var isEngine = component == ToolStatusComponent.Iw3Engine;
+        var isModels = component == ToolStatusComponent.Models;
+        return new(
+            Name: Text(englishName, spanishName),
+            StatusText: dependencyHealth.Status == ToolHealthStatus.Found
+                ? Text("Found", "Encontrado")
+                : Text("Missing", "Faltante"),
+            ReasonText: ToolStatusReasonText(dependencyHealth, component),
+            DetailText: ToolStatusDetailText(dependencyHealth, component),
+            ContextActionText: isEngine
+                ? Text("Open", "Abrir")
+                : isModels
+                    ? ViewModelsText
+                    : string.Empty,
+            ContextActionToolTip: isEngine
+                ? OpenEngineFolderText
+                : isModels
+                    ? ViewModelsToolTipText
+                    : string.Empty,
+            ContextActionVisibility: isEngine || isModels
+                ? Visibility.Visible
+                : Visibility.Collapsed,
+            ContextActionCommand: isEngine
+                ? OpenEngineFolderCommand
+                : isModels
+                    ? ShowModelInventoryCommand
+                    : null);
+    }
 
     private string ToolStatusReasonText(
         ToolDependencyHealth dependencyHealth,
@@ -4598,6 +5315,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ToolStatusTitle));
         OnPropertyChanged(nameof(RefreshText));
         OnPropertyChanged(nameof(OpenEngineFolderText));
+        OnPropertyChanged(nameof(OpenModelsFolderText));
+        OnPropertyChanged(nameof(ViewModelsText));
+        OnPropertyChanged(nameof(ViewModelsToolTipText));
         OnPropertyChanged(nameof(ActivityLogTitle));
         OnPropertyChanged(nameof(ViewLogText));
         OnPropertyChanged(nameof(CopyFullLogText));
@@ -4779,6 +5499,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanPreferLgCompatibilityCopyWhenOpening));
         StartConversionCommand.RaiseCanExecuteChanged();
         ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+        RaiseModelPackImportAvailabilityPropertiesChanged();
     }
 
     private void RaisePreviewPropertiesChanged()
@@ -4865,6 +5586,8 @@ public sealed class MainWindowViewModel : ObservableObject
         RefreshEngineStatusCommand.RaiseCanExecuteChanged();
         ShowProfileDetailsCommand.RaiseCanExecuteChanged();
         ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();
+        ShowModelInventoryCommand.RaiseCanExecuteChanged();
+        RaiseModelPackImportAvailabilityPropertiesChanged();
     }
 
     private void RaiseConversionRunningModePropertiesChanged()
@@ -4907,8 +5630,10 @@ public sealed class MainWindowViewModel : ObservableObject
         RefreshEngineStatusCommand.RaiseCanExecuteChanged();
         ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();
         ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+        ShowModelInventoryCommand.RaiseCanExecuteChanged();
         StartConversionCommand.RaiseCanExecuteChanged();
         RaiseSystemStatusPropertiesChanged();
+        RaiseModelPackImportAvailabilityPropertiesChanged();
     }
 
     private void RaiseWorkflowAvailabilityPropertiesChanged()
@@ -4933,6 +5658,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ReplaceSelectedVideoTitleText));
         OnPropertyChanged(nameof(ReplaceSelectedVideoBodyText));
         OnPropertyChanged(nameof(ReplaceVideoConfirmText));
+        RaiseModelPackImportConfirmationPropertiesChanged();
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsBodyText));
         OnPropertyChanged(nameof(ProfileDetailsBodyText));
@@ -4942,28 +5668,72 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
         OnPropertyChanged(nameof(ConversionReadinessEmptyText));
         OnPropertyChanged(nameof(VramUsageText));
+        RaiseModelInventoryPropertiesChanged();
         OnPropertyChanged(nameof(ViewLogText));
         OnPropertyChanged(nameof(CopyFullLogText));
         OnPropertyChanged(nameof(CopyPreviewLogText));
+        OnPropertyChanged(nameof(ImportModelPackText));
+        OnPropertyChanged(nameof(ModelPackImportInstructionText));
+        OnPropertyChanged(nameof(ModelPackImportStatusText));
+        OnPropertyChanged(nameof(LastModelPackImportSummary));
+        OnPropertyChanged(nameof(LastModelPackImportSummaryVisibility));
         OnPropertyChanged(nameof(LogCopiedText));
         OnPropertyChanged(nameof(CouldNotCopyLogText));
         OnPropertyChanged(nameof(LogCopyNotificationText));
+        RaiseModelPackImportAvailabilityPropertiesChanged();
+        ShowModelInventoryCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseModelPackImportAvailabilityPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(CanImportModelPack));
+        OnPropertyChanged(nameof(ImportModelPackText));
+        ImportModelPackCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseModalStatePropertiesChanged()
     {
         OnPropertyChanged(nameof(IsAnyModalOpen));
         OnPropertyChanged(nameof(ModalOverlayVisibility));
+        OnPropertyChanged(nameof(ActiveModalWidth));
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ProfileDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ReplaceVideoConfirmationModalContentVisibility));
+        OnPropertyChanged(nameof(ModelPackImportConfirmationModalContentVisibility));
+        OnPropertyChanged(nameof(ModelInventoryModalContentVisibility));
         OnPropertyChanged(nameof(ActivityLogModalContentVisibility));
         OnPropertyChanged(nameof(PreviewGeneratingModalContentVisibility));
         OnPropertyChanged(nameof(PreviewReadyModalContentVisibility));
         OnPropertyChanged(nameof(CanEditPreviewTimeRange));
         OnPropertyChanged(nameof(CanGeneratePreview));
         GeneratePreviewCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseModelInventoryPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(ModelInventoryTitleText));
+        OnPropertyChanged(nameof(ModelInventoryIntroText));
+        OnPropertyChanged(nameof(ModelInventoryFolderLabelText));
+        OnPropertyChanged(nameof(ModelInventoryFolderPathText));
+        OnPropertyChanged(nameof(SelectableModelsSectionTitleText));
+        OnPropertyChanged(nameof(SelectableModelsInventoryText));
+        OnPropertyChanged(nameof(DiagnosticModelsSectionTitleText));
+        OnPropertyChanged(nameof(DiagnosticModelsInventoryText));
+        OnPropertyChanged(nameof(RuntimeDependenciesSectionTitleText));
+        OnPropertyChanged(nameof(RuntimeDependenciesInventoryText));
+        OnPropertyChanged(nameof(ModelInventoryActionsTitleText));
+        OnPropertyChanged(nameof(OpenModelsFolderText));
+        OnPropertyChanged(nameof(ActiveModalTitleText));
+    }
+
+    private void RaiseModelPackImportConfirmationPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(ModelPackImportConfirmationTitleText));
+        OnPropertyChanged(nameof(ModelPackImportConfirmationIntroText));
+        OnPropertyChanged(nameof(ModelPackImportConfirmationMessageText));
+        OnPropertyChanged(nameof(ModelPackImportConfirmationContinueText));
+        OnPropertyChanged(nameof(ActiveModalTitleText));
     }
 
     private void RaiseConversionReadinessPropertiesChanged()
@@ -5029,6 +5799,19 @@ public sealed class MainWindowViewModel : ObservableObject
                     "Video analysis failed.",
                     "El análisis de video falló.");
                 break;
+        }
+    }
+
+    private sealed class InAppModelPackImportConfirmationService(
+        Func<ModelPackImportConfirmationPrompt, CancellationToken, Task<bool>> confirmAsync)
+        : IModelPackImportConfirmationService
+    {
+        public Task<bool> ConfirmAsync(
+            ModelPackImportConfirmationPrompt prompt,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(prompt);
+            return confirmAsync(prompt, cancellationToken);
         }
     }
 }

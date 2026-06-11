@@ -9,6 +9,11 @@
     <UseWindowsForms Condition="'$(TargetFramework)' == 'net10.0-windows'">true</UseWindowsForms>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\V3dfy.Core\V3dfy.Core.csproj" />
+    <ProjectReference Include="..\V3dfy.Infrastructure\V3dfy.Infrastructure.csproj" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
     <Compile Remove="SetupHelperUiRunner.NonWindows.cs" />
   </ItemGroup>

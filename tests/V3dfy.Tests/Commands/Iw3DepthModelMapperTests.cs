@@ -37,6 +37,20 @@ public sealed class Iw3DepthModelMapperTests
     }
 
     [Fact]
+    public void CreateSelectableCandidates_ImportedUnmappedModelPackModelRemainsDiagnosticOnly()
+    {
+        var candidates = Iw3DepthModelMapper.CreateSelectableCandidates(
+            [ImportedOutdoorModelPackCandidate()],
+            useSpanish: false);
+
+        Assert.Empty(candidates);
+        var unmapped = Assert.Single(Iw3DepthModelMapper.GetUnmappedCandidates([ImportedOutdoorModelPackCandidate()]));
+        Assert.Equal("hub/checkpoints/depth_anything_metric_depth_outdoor.pt", unmapped.RelativePath);
+        Assert.Null(unmapped.MappingKey);
+        Assert.Null(unmapped.Iw3DepthModelName);
+    }
+
+    [Fact]
     public void CreateSelectableCandidates_KnownModelUsesFriendlyNameAndMappingMetadata()
     {
         var candidate = Assert.Single(Iw3DepthModelMapper.CreateSelectableCandidates(
@@ -91,4 +105,14 @@ public sealed class Iw3DepthModelMapperTests
         ModelType: string.Empty,
         Purpose: string.Empty,
         IsCatalogManaged: false);
+
+    private static LocalModelSelectionCandidate ImportedOutdoorModelPackCandidate() => new(
+        Id: "depth-anything-metric-outdoor",
+        DisplayName: "Depth Anything Metric Outdoor",
+        RelativePath: "hub/checkpoints/depth_anything_metric_depth_outdoor.pt",
+        FileName: "depth_anything_metric_depth_outdoor.pt",
+        Extension: ".pt",
+        ModelType: "depth",
+        Purpose: "outdoor",
+        IsCatalogManaged: true);
 }
