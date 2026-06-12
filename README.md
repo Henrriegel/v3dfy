@@ -12,16 +12,20 @@ It is designed for users who want to create 3D video files from their own videos
 
 ## Download
 
-Get the latest version from the releases page:
+Download v3dfy from the GitHub Releases page:
 
-**[Download v3dfy](https://github.com/Henrriegel/v3dfy/releases/latest)**
+**[Download v3dfy](https://github.com/Henrriegel/v3dfy/releases)**
+
+For preview releases, use the newest release shown on the Releases page. In the
+file names below, `vX.Y.Z-preview.N` means the newest preview version shown
+there.
 
 ### Recommended installer
 
 For most users, download only:
 
 ```text
-v3dfy-v0.1.0-preview.1-web-setup.exe
+v3dfy-vX.Y.Z-preview.N-web-setup.exe
 ```
 
 Run the installer and follow the setup wizard.
@@ -35,16 +39,19 @@ Use this option if the computer where v3dfy will be installed does not have inte
 Download all of these files into the same folder:
 
 ```text
-v3dfy-v0.1.0-preview.1-offline-setup.exe
-v3dfy-v0.1.0-preview.1-win-x64-portable.zip.part01
-v3dfy-v0.1.0-preview.1-win-x64-portable.zip.part02
-v3dfy-v0.1.0-preview.1-win-x64-portable.zip.part03
+v3dfy-vX.Y.Z-preview.N-offline-setup.exe
+v3dfy-vX.Y.Z-preview.N-win-x64-portable.zip.part01
+v3dfy-vX.Y.Z-preview.N-win-x64-portable.zip.part02
+v3dfy-vX.Y.Z-preview.N-win-x64-portable.zip.part03
 ```
+
+Keep the `.part01`, `.part02`, and `.part03` files in the same folder as the
+offline setup executable. Do not rename the split payload files.
 
 Then run:
 
 ```text
-v3dfy-v0.1.0-preview.1-offline-setup.exe
+v3dfy-vX.Y.Z-preview.N-offline-setup.exe
 ```
 
 No PowerShell, manual extraction, or command-line setup is required.
@@ -110,6 +117,7 @@ v3dfy provides a recommended web installer and an offline installer option.
 * MP4 and MKV output options
 * Adjustable 3D layout, quality, and intensity
 * Video analysis before conversion
+* 3D model inventory and model-pack import status
 * English and Spanish interface
 * Light and dark themes
 * Live conversion status
@@ -198,6 +206,13 @@ Release installer payloads must be built from the current publish output in
 order: publish `artifacts\publish\v3dfy-win-x64`, run
 `scripts\package-release-payload.ps1`, then run
 `scripts\package-release-installers.ps1`.
+
+---
+
+## AI assistance disclosure
+
+v3dfy is developed by the maintainer with assistance from OpenAI Codex, under
+human supervision, review, and manual validation.
 
 ---
 
