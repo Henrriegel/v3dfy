@@ -12,6 +12,18 @@ public sealed class Iw3CommandBuilderTests
         Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
         LocalModelPlanSource.UnmanagedLocalFile);
 
+    public static TheoryData<string, string> KnownDepthModelData => new()
+    {
+        { Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDAnyNDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
+    };
+
     [Fact]
     public void Build_UsesConfirmedBaseStructuredArguments()
     {
@@ -54,6 +66,27 @@ public sealed class Iw3CommandBuilderTests
             argument => argument.Contains(
                 Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
                 StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [MemberData(nameof(KnownDepthModelData))]
+    public void Build_RecognizedDepthModelsUseMappedIw3DepthModelArgument(
+        string relativePath,
+        string depthModelName)
+    {
+        var command = Build(selectedLocalModel: new(
+            Path.GetFileName(relativePath),
+            relativePath,
+            LocalModelPlanSource.UnmanagedLocalFile));
+
+        AssertContainsAdjacentArguments(
+            command.Arguments,
+            Iw3CliContract.DepthModelSwitch,
+            depthModelName);
+        Assert.DoesNotContain("--model", command.Arguments);
+        Assert.DoesNotContain(
+            command.Arguments,
+            argument => argument.Contains(relativePath, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -196,6 +229,23 @@ public sealed class Iw3CommandBuilderTests
     private static string OutputPath() => TestPaths.OutputRoot("output video.mp4");
 
     private static string Quote(string path) => $"\"{path}\"";
+
+    private static void AssertContainsAdjacentArguments(
+        IReadOnlyList<string> arguments,
+        string name,
+        string value)
+    {
+        for (var index = 0; index < arguments.Count - 1; index++)
+        {
+            if (arguments[index] == name && arguments[index + 1] == value)
+            {
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Expected adjacent arguments '{name} {value}' in: {string.Join(' ', arguments)}");
+    }
 
     private static EngineHealthStatus CompleteHealth() => new(
         Ffmpeg: ToolHealthStatus.Found,

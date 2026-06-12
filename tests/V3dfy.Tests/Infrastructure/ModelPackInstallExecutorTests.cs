@@ -2,6 +2,8 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using V3dfy.Core.Models;
+using V3dfy.Engine.Iw3.Commands;
+using V3dfy.Infrastructure.Health;
 using V3dfy.Infrastructure.ModelPacks;
 
 namespace V3dfy.Tests.Infrastructure;
@@ -41,6 +43,47 @@ public sealed class ModelPackInstallExecutorTests : IDisposable
         AssertTargetFile(targetRoot, "hub/checkpoints/depth_anything_metric_depth_outdoor.pt", OutdoorCheckpointBytes);
         AssertTargetFile(targetRoot, "licenses/models/depth-anything-outdoor/LICENSE.txt", LicenseBytes);
         Assert.False(File.Exists(Path.Combine(targetRoot, ModelPackManifest.FileName)));
+    }
+
+    [Fact]
+    public async Task ValidModelPack_InstalledMappedOptionalCheckpointIsSelectableAfterInventoryRefresh()
+    {
+        var zipPath = CreateModelPackZip();
+        var targetRoot = TargetRoot();
+
+        var result = await InstallAsync(zipPath, targetRoot);
+        var health = new InternalToolsHealthChecker().CheckDetailed(PathsForTargetRoot(targetRoot));
+
+        Assert.True(result.Success);
+        var selectable = Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false);
+        var candidate = Assert.Single(selectable);
+        Assert.Equal(Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey, candidate.MappingKey);
+        Assert.Equal(Iw3DepthModelMapper.ZoeDAnyKDepthModelName, candidate.Iw3DepthModelName);
+        Assert.Equal(Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, candidate.RelativePath);
+    }
+
+    [Fact]
+    public async Task ValidModelPack_InstalledUnmappedCompatibleCheckpointRemainsDiagnosticOnlyAfterInventoryRefresh()
+    {
+        var manifest = CreateValidManifest(
+            checkpointPath: "hub/checkpoints/unmapped_model_pack_depth.pt");
+        var zipPath = CreateModelPackZip(manifest);
+        var targetRoot = TargetRoot();
+
+        var result = await InstallAsync(zipPath, targetRoot);
+        var health = new InternalToolsHealthChecker().CheckDetailed(PathsForTargetRoot(targetRoot));
+
+        Assert.True(result.Success);
+        Assert.Empty(Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false));
+        var unmapped = Assert.Single(Iw3DepthModelMapper.GetUnmappedCandidates(
+            health.ModelInventory.SelectionCandidates));
+        Assert.Equal("hub/checkpoints/unmapped_model_pack_depth.pt", unmapped.RelativePath);
+        Assert.Null(unmapped.MappingKey);
+        Assert.Null(unmapped.Iw3DepthModelName);
     }
 
     [Fact]
@@ -393,6 +436,13 @@ public sealed class ModelPackInstallExecutorTests : IDisposable
 
     private string StagingRoot() =>
         Path.Combine(root, "staging");
+
+    private InternalToolPaths PathsForTargetRoot(string targetRoot) => new(
+        FfmpegExecutable: Path.Combine(root, "app", "tools", "ffmpeg", "win-x64", "ffmpeg.exe"),
+        FfprobeExecutable: Path.Combine(root, "app", "tools", "ffmpeg", "win-x64", "ffprobe.exe"),
+        PythonExecutable: Path.Combine(root, "app", "engine", "iw3", "python", "python.exe"),
+        Iw3EngineDirectory: Path.Combine(root, "app", "engine", "iw3"),
+        ModelsDirectory: targetRoot);
 
     private static string TargetPath(string targetRoot, string relativePath) =>
         Path.Combine([targetRoot, .. relativePath.Split('/')]);

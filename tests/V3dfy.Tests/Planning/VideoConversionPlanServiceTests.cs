@@ -13,6 +13,18 @@ public sealed class VideoConversionPlanServiceTests
 
     private readonly VideoConversionPlanService _service = new();
 
+    public static TheoryData<string, string> KnownDepthModelData => new()
+    {
+        { Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDAnyNDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
+    };
+
     [Fact]
     public void Create_Mp4Input_SuggestsTvCompatibleOutputPath()
     {
@@ -314,6 +326,24 @@ public sealed class VideoConversionPlanServiceTests
             plan.CommandPreview);
     }
 
+    [Theory]
+    [MemberData(nameof(KnownDepthModelData))]
+    public void Create_RecognizedDepthModels_AddMatchingDepthModelToCommandPreview(
+        string relativePath,
+        string depthModelName)
+    {
+        var plan = CreatePlan(selectedLocalModel: RecognizedDepthModel(relativePath));
+
+        Assert.NotNull(plan.SelectedLocalModel);
+        Assert.Equal(depthModelName, plan.SelectedLocalModel.Iw3DepthModelName);
+        Assert.Contains($"--depth-model {depthModelName}", plan.CommandPreview);
+        Assert.Contains(
+            plan.Steps,
+            step => step.EnglishText.Contains(
+                $"iw3 depth model: {depthModelName}",
+                StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Create_SelectedModel_DoesNotEnableConversionWhenBundleIsMissing()
     {
@@ -374,15 +404,25 @@ public sealed class VideoConversionPlanServiceTests
         Purpose: string.Empty,
         IsCatalogManaged: false);
 
-    private static LocalModelSelectionCandidate RecognizedDepthModel() => new(
-        Id: Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
-        DisplayName: "depth_anything_metric_depth_indoor.pt",
-        RelativePath: Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
-        FileName: "depth_anything_metric_depth_indoor.pt",
+    private static LocalModelSelectionCandidate RecognizedDepthModel(
+        string? relativePath = null)
+    {
+        relativePath ??= Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath;
+        var fileName = relativePath
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Last();
+
+        return new(
+        Id: relativePath,
+        DisplayName: fileName,
+        RelativePath: relativePath,
+        FileName: fileName,
         Extension: ".pt",
         ModelType: string.Empty,
         Purpose: string.Empty,
         IsCatalogManaged: false);
+    }
 
     private static VideoConversionPlanOptions DefaultOptions() => new(
         OutputContainer: OutputContainer.MP4,

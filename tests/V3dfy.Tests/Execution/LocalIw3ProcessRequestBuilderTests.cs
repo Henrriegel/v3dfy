@@ -19,6 +19,18 @@ public sealed class LocalIw3ProcessRequestBuilderTests
 
     private readonly LocalIw3ProcessRequestBuilder _builder = new();
 
+    public static TheoryData<string, string> KnownDepthModelData => new()
+    {
+        { Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDAnyNDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
+    };
+
     [Fact]
     public void Build_UsesEmbeddedPythonExecutableFromRequest()
     {
@@ -118,6 +130,27 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         Assert.Contains(Iw3CliContract.DepthModelSwitch, processRequest.Arguments);
         Assert.Contains(Iw3DepthModelMapper.ZoeDAnyNDepthModelName, processRequest.Arguments);
         Assert.DoesNotContain("--model", processRequest.Arguments);
+    }
+
+    [Theory]
+    [MemberData(nameof(KnownDepthModelData))]
+    public void Build_RecognizedSelectedLocalModelsAddMatchingVerifiedDepthModelArgument(
+        string relativePath,
+        string depthModelName)
+    {
+        var processRequest = _builder.Build(CreateRequest(selectedModel: new(
+            FileName(relativePath),
+            relativePath,
+            LocalModelPlanSource.UnmanagedLocalFile)));
+
+        AssertContainsAdjacentArguments(
+            processRequest.Arguments,
+            Iw3CliContract.DepthModelSwitch,
+            depthModelName);
+        Assert.DoesNotContain("--model", processRequest.Arguments);
+        Assert.DoesNotContain(
+            processRequest.Arguments,
+            argument => argument.Contains(relativePath, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -293,6 +326,29 @@ public sealed class LocalIw3ProcessRequestBuilderTests
         Python: ToolHealthStatus.Found,
         Iw3EngineDirectory: ToolHealthStatus.Found,
         ModelsDirectory: ToolHealthStatus.Found);
+
+    private static void AssertContainsAdjacentArguments(
+        IReadOnlyList<string> arguments,
+        string name,
+        string value)
+    {
+        for (var index = 0; index < arguments.Count - 1; index++)
+        {
+            if (arguments[index] == name && arguments[index + 1] == value)
+            {
+                return;
+            }
+        }
+
+        Assert.Fail(
+            $"Expected adjacent arguments '{name} {value}' in: {string.Join(' ', arguments)}");
+    }
+
+    private static string FileName(string relativePath) =>
+        relativePath
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Last();
 
     private sealed class CountingProcessRequestBuilder : LocalIw3ProcessRequestBuilder
     {

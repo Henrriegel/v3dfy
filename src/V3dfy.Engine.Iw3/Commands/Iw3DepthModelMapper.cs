@@ -9,15 +9,25 @@ public sealed record Iw3DepthModelMapping(
     string SpanishName,
     string ModelRelativePath,
     string DepthModelName,
+    string Category,
+    Iw3DepthModelAvailability Availability,
     string EnglishStatusNote,
     string SpanishStatusNote,
     bool IsReadySelectable);
+
+public enum Iw3DepthModelAvailability
+{
+    EmbeddedBase,
+    OptionalImportable,
+}
 
 public sealed record Iw3DepthModelRegistryEntry(
     string Key,
     string EnglishName,
     string SpanishName,
     string DepthModelName,
+    string Category,
+    Iw3DepthModelAvailability Availability,
     IReadOnlyList<string> ExpectedRelativePaths,
     IReadOnlyList<string> ExpectedFileNames,
     IReadOnlyList<string> CatalogIdentifiers,
@@ -26,6 +36,12 @@ public sealed record Iw3DepthModelRegistryEntry(
     bool IsReadySelectable,
     bool RequiresLocalFile)
 {
+    public bool IsEmbeddedBase =>
+        Availability == Iw3DepthModelAvailability.EmbeddedBase;
+
+    public bool IsOptionalImportable =>
+        Availability == Iw3DepthModelAvailability.OptionalImportable;
+
     public bool MatchesCandidate(LocalModelSelectionCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
@@ -64,6 +80,8 @@ public sealed record Iw3DepthModelRegistryEntry(
         SpanishName,
         modelRelativePath,
         DepthModelName,
+        Category,
+        Availability,
         EnglishStatusNote,
         SpanishStatusNote,
         IsReadySelectable);
@@ -81,28 +99,138 @@ public static class Iw3DepthModelMapper
     public const string DepthAnythingMetricDepthIndoorSpanishName =
         "Depth Anything Metric Indoor";
 
+    public const string DepthAnythingMetricDepthOutdoorKey =
+        "depth-anything-metric-outdoor";
+    public const string DepthAnythingMetricDepthOutdoorRelativePath =
+        "hub/checkpoints/depth_anything_metric_depth_outdoor.pt";
+    public const string ZoeDAnyKDepthModelName = "ZoeD_Any_K";
+    public const string DepthAnythingMetricDepthOutdoorEnglishName =
+        "Depth Anything Metric Outdoor";
+    public const string DepthAnythingMetricDepthOutdoorSpanishName =
+        "Depth Anything Metric Outdoor";
+
+    public const string ZoeDepthIndoorKey = "zoedepth-indoor";
+    public const string ZoeDepthIndoorRelativePath =
+        "hub/checkpoints/ZoeD_M12_N.pt";
+    public const string ZoeDIndoorDepthModelName = "ZoeD_N";
+    public const string ZoeDepthIndoorEnglishName = "ZoeDepth Indoor";
+    public const string ZoeDepthIndoorSpanishName = "ZoeDepth Indoor";
+
+    public const string ZoeDepthOutdoorKey = "zoedepth-outdoor";
+    public const string ZoeDepthOutdoorRelativePath =
+        "hub/checkpoints/ZoeD_M12_K.pt";
+    public const string ZoeDOutdoorDepthModelName = "ZoeD_K";
+    public const string ZoeDepthOutdoorEnglishName = "ZoeDepth Outdoor";
+    public const string ZoeDepthOutdoorSpanishName = "ZoeDepth Outdoor";
+
+    public const string ZoeDepthIndoorOutdoorKey = "zoedepth-indoor-outdoor";
+    public const string ZoeDepthIndoorOutdoorRelativePath =
+        "hub/checkpoints/ZoeD_M12_NK.pt";
+    public const string ZoeDIndoorOutdoorDepthModelName = "ZoeD_NK";
+    public const string ZoeDepthIndoorOutdoorEnglishName =
+        "ZoeDepth Indoor Outdoor";
+    public const string ZoeDepthIndoorOutdoorSpanishName =
+        "ZoeDepth Indoor Outdoor";
+
+    public const string DepthAnythingSmallKey = "depth-anything-small";
+    public const string DepthAnythingSmallRelativePath =
+        "hub/checkpoints/depth_anything_vits14.pth";
+    public const string AnySDepthModelName = "Any_S";
+    public const string DepthAnythingSmallEnglishName = "Depth Anything Small";
+    public const string DepthAnythingSmallSpanishName = "Depth Anything Small";
+
+    public const string DepthAnythingBaseKey = "depth-anything-base";
+    public const string DepthAnythingBaseRelativePath =
+        "hub/checkpoints/depth_anything_vitb14.pth";
+    public const string AnyBDepthModelName = "Any_B";
+    public const string DepthAnythingBaseEnglishName = "Depth Anything Base";
+    public const string DepthAnythingBaseSpanishName = "Depth Anything Base";
+
+    public const string DepthAnythingV2SmallKey = "depth-anything-v2-small";
+    public const string DepthAnythingV2SmallRelativePath =
+        "hub/checkpoints/depth_anything_v2_vits.pth";
+    public const string AnyV2SDepthModelName = "Any_V2_S";
+    public const string DepthAnythingV2SmallEnglishName =
+        "Depth Anything V2 Small";
+    public const string DepthAnythingV2SmallSpanishName =
+        "Depth Anything V2 Small";
+
     public static IReadOnlyList<Iw3DepthModelRegistryEntry> RegistryEntries { get; } =
     [
-        new(
-            Key: DepthAnythingMetricDepthIndoorKey,
-            EnglishName: DepthAnythingMetricDepthIndoorEnglishName,
-            SpanishName: DepthAnythingMetricDepthIndoorSpanishName,
-            DepthModelName: ZoeDAnyNDepthModelName,
-            ExpectedRelativePaths: [DepthAnythingMetricDepthIndoorRelativePath],
-            ExpectedFileNames: ["depth_anything_metric_depth_indoor.pt"],
-            CatalogIdentifiers:
+        CreateRegistryEntry(
+            key: DepthAnythingMetricDepthIndoorKey,
+            englishName: DepthAnythingMetricDepthIndoorEnglishName,
+            spanishName: DepthAnythingMetricDepthIndoorSpanishName,
+            expectedRelativePath: DepthAnythingMetricDepthIndoorRelativePath,
+            depthModelName: ZoeDAnyNDepthModelName,
+            category: "Metric indoor depth",
+            availability: Iw3DepthModelAvailability.EmbeddedBase,
+            additionalCatalogIdentifiers:
             [
-                DepthAnythingMetricDepthIndoorKey,
                 "depth-anything-metric-depth-indoor",
                 "zoed-any-n",
-                ZoeDAnyNDepthModelName,
-            ],
-            EnglishStatusNote:
-                "Ready when the verified local checkpoint exists in the bundled iw3 pretrained_models folder.",
-            SpanishStatusNote:
-                "Listo cuando el checkpoint local verificado existe en la carpeta pretrained_models incluida de iw3.",
-            IsReadySelectable: true,
-            RequiresLocalFile: true),
+            ]),
+        CreateRegistryEntry(
+            key: DepthAnythingMetricDepthOutdoorKey,
+            englishName: DepthAnythingMetricDepthOutdoorEnglishName,
+            spanishName: DepthAnythingMetricDepthOutdoorSpanishName,
+            expectedRelativePath: DepthAnythingMetricDepthOutdoorRelativePath,
+            depthModelName: ZoeDAnyKDepthModelName,
+            category: "Metric outdoor depth",
+            availability: Iw3DepthModelAvailability.OptionalImportable,
+            additionalCatalogIdentifiers:
+            [
+                "depth-anything-metric-depth-outdoor",
+                "zoed-any-k",
+            ]),
+        CreateRegistryEntry(
+            key: ZoeDepthIndoorKey,
+            englishName: ZoeDepthIndoorEnglishName,
+            spanishName: ZoeDepthIndoorSpanishName,
+            expectedRelativePath: ZoeDepthIndoorRelativePath,
+            depthModelName: ZoeDIndoorDepthModelName,
+            category: "ZoeDepth indoor",
+            availability: Iw3DepthModelAvailability.OptionalImportable),
+        CreateRegistryEntry(
+            key: ZoeDepthOutdoorKey,
+            englishName: ZoeDepthOutdoorEnglishName,
+            spanishName: ZoeDepthOutdoorSpanishName,
+            expectedRelativePath: ZoeDepthOutdoorRelativePath,
+            depthModelName: ZoeDOutdoorDepthModelName,
+            category: "ZoeDepth outdoor",
+            availability: Iw3DepthModelAvailability.OptionalImportable),
+        CreateRegistryEntry(
+            key: ZoeDepthIndoorOutdoorKey,
+            englishName: ZoeDepthIndoorOutdoorEnglishName,
+            spanishName: ZoeDepthIndoorOutdoorSpanishName,
+            expectedRelativePath: ZoeDepthIndoorOutdoorRelativePath,
+            depthModelName: ZoeDIndoorOutdoorDepthModelName,
+            category: "ZoeDepth indoor/outdoor",
+            availability: Iw3DepthModelAvailability.OptionalImportable),
+        CreateRegistryEntry(
+            key: DepthAnythingSmallKey,
+            englishName: DepthAnythingSmallEnglishName,
+            spanishName: DepthAnythingSmallSpanishName,
+            expectedRelativePath: DepthAnythingSmallRelativePath,
+            depthModelName: AnySDepthModelName,
+            category: "Depth Anything v1 small",
+            availability: Iw3DepthModelAvailability.OptionalImportable),
+        CreateRegistryEntry(
+            key: DepthAnythingBaseKey,
+            englishName: DepthAnythingBaseEnglishName,
+            spanishName: DepthAnythingBaseSpanishName,
+            expectedRelativePath: DepthAnythingBaseRelativePath,
+            depthModelName: AnyBDepthModelName,
+            category: "Depth Anything v1 base",
+            availability: Iw3DepthModelAvailability.OptionalImportable),
+        CreateRegistryEntry(
+            key: DepthAnythingV2SmallKey,
+            englishName: DepthAnythingV2SmallEnglishName,
+            spanishName: DepthAnythingV2SmallSpanishName,
+            expectedRelativePath: DepthAnythingV2SmallRelativePath,
+            depthModelName: AnyV2SDepthModelName,
+            category: "Depth Anything V2 small",
+            availability: Iw3DepthModelAvailability.OptionalImportable),
     ];
 
     public static IReadOnlyList<LocalModelSelectionCandidate> CreateSelectableCandidates(
@@ -217,5 +345,61 @@ public static class Iw3DepthModelMapper
             EnglishStatusNote = mapping.EnglishStatusNote,
             SpanishStatusNote = mapping.SpanishStatusNote,
         };
+    }
+
+    private static Iw3DepthModelRegistryEntry CreateRegistryEntry(
+        string key,
+        string englishName,
+        string spanishName,
+        string expectedRelativePath,
+        string depthModelName,
+        string category,
+        Iw3DepthModelAvailability availability,
+        IReadOnlyList<string>? additionalCatalogIdentifiers = null)
+    {
+        var normalizedPath = NormalizeRelativePath(expectedRelativePath);
+        var statusNotes = GetStatusNotes(availability);
+        var identifiers = new List<string>
+        {
+            key,
+            depthModelName,
+        };
+        identifiers.AddRange(additionalCatalogIdentifiers ?? []);
+
+        return new(
+            Key: key,
+            EnglishName: englishName,
+            SpanishName: spanishName,
+            DepthModelName: depthModelName,
+            Category: category,
+            Availability: availability,
+            ExpectedRelativePaths: [normalizedPath],
+            ExpectedFileNames: [GetFileName(normalizedPath)],
+            CatalogIdentifiers: identifiers
+                .Where(identifier => !string.IsNullOrWhiteSpace(identifier))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            EnglishStatusNote: statusNotes.English,
+            SpanishStatusNote: statusNotes.Spanish,
+            IsReadySelectable: true,
+            RequiresLocalFile: true);
+    }
+
+    private static (string English, string Spanish) GetStatusNotes(
+        Iw3DepthModelAvailability availability) =>
+        availability == Iw3DepthModelAvailability.EmbeddedBase
+            ? (
+                "Ready when the verified local checkpoint exists in the bundled iw3 pretrained_models folder.",
+                "Listo cuando el checkpoint local verificado existe en la carpeta pretrained_models incluida de iw3.")
+            : (
+                "Selectable when this optional checkpoint exists in the iw3 pretrained_models folder; install it with a v3dfy model pack.",
+                "Seleccionable cuando este checkpoint opcional existe en la carpeta pretrained_models de iw3; instalelo con un paquete de modelos de v3dfy.");
+
+    private static string GetFileName(string relativePath)
+    {
+        var normalized = NormalizeRelativePath(relativePath);
+        return normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .LastOrDefault() ?? string.Empty;
     }
 }

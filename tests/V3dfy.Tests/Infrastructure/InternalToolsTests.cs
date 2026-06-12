@@ -1,4 +1,5 @@
 using V3dfy.Core.Models;
+using V3dfy.Engine.Iw3.Commands;
 using V3dfy.Infrastructure.Health;
 using V3dfy.Infrastructure.Paths;
 
@@ -812,6 +813,101 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
+    public void DetailedHealthCheck_WithOnlyBaseKnownModel_OnlyBaseModelIsSelectable()
+    {
+        var paths = CreateToolLayout();
+        WriteModelFile(paths, Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        var selectable = Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false);
+        var candidate = Assert.Single(selectable);
+        Assert.Equal(Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey, candidate.MappingKey);
+        Assert.Equal(Iw3DepthModelMapper.ZoeDAnyNDepthModelName, candidate.Iw3DepthModelName);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_WithIndoorAndOutdoorKnownModels_BothAreSelectable()
+    {
+        var paths = CreateToolLayout();
+        WriteModelFile(paths, Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath);
+        WriteModelFile(paths, Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath);
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        var selectable = Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false);
+        Assert.Equal(2, selectable.Count);
+        Assert.Contains(
+            selectable,
+            candidate => candidate.MappingKey == Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey &&
+                candidate.Iw3DepthModelName == Iw3DepthModelMapper.ZoeDAnyNDepthModelName);
+        Assert.Contains(
+            selectable,
+            candidate => candidate.MappingKey == Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey &&
+                candidate.Iw3DepthModelName == Iw3DepthModelMapper.ZoeDAnyKDepthModelName);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_WithAllKnownModelFiles_AllEightAreSelectable()
+    {
+        var paths = CreateToolLayout();
+        foreach (var relativePath in KnownIw3DepthModelRelativePaths())
+        {
+            WriteModelFile(paths, relativePath);
+        }
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        var selectable = Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false);
+        Assert.Equal(8, selectable.Count);
+        Assert.Equal(
+            Iw3DepthModelMapper.RegistryEntries.Select(entry => entry.Key).Order(StringComparer.OrdinalIgnoreCase),
+            selectable.Select(candidate => candidate.MappingKey).Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_RandomCompatibleModelRemainsDiagnosticOnly()
+    {
+        var paths = CreateToolLayout();
+        WriteModelFile(paths, "hub/checkpoints/random_test_model.pt");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Single(health.ModelInventory.SelectionCandidates);
+        Assert.Empty(Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false));
+        var unmapped = Assert.Single(Iw3DepthModelMapper.GetUnmappedCandidates(
+            health.ModelInventory.SelectionCandidates));
+        Assert.Equal("hub/checkpoints/random_test_model.pt", unmapped.RelativePath);
+        Assert.Null(unmapped.MappingKey);
+        Assert.Null(unmapped.Iw3DepthModelName);
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_ProtectedRuntimeDependencyDoesNotBecomeSelectionCandidate()
+    {
+        var paths = CreateToolLayout();
+        Directory.CreateDirectory(Path.GetDirectoryName(paths.Iw3DefaultStereoRuntimeDependencyFile)!);
+        File.WriteAllText(paths.Iw3DefaultStereoRuntimeDependencyFile, "row-flow");
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        Assert.Equal(ToolHealthStatus.Missing, health.ModelsDirectory.Status);
+        Assert.Empty(health.ModelInventory.CompatibleModelFiles);
+        Assert.Empty(health.ModelInventory.SelectionCandidates);
+        Assert.Empty(Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false));
+    }
+
+    [Fact]
     public void DetailedHealthCheck_MissingUnsupportedAndUnsafeCatalogReferences_DoNotBecomeSelectionCandidates()
     {
         var paths = CreateToolLayout();
@@ -890,6 +986,18 @@ public sealed class InternalToolsTests
 
         return new InternalToolPathResolver(baseDirectory).Resolve();
     }
+
+    private static void WriteModelFile(InternalToolPaths paths, string relativePath)
+    {
+        var path = Path.Combine([paths.ModelsDirectory, .. relativePath.Split('/')]);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "synthetic test checkpoint");
+    }
+
+    private static IReadOnlyList<string> KnownIw3DepthModelRelativePaths() =>
+        Iw3DepthModelMapper.RegistryEntries
+            .SelectMany(entry => entry.ExpectedRelativePaths)
+            .ToArray();
 
     private static void CreateReadyIw3Engine(InternalToolPaths paths)
     {

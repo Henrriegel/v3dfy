@@ -9,6 +9,17 @@ public sealed class Iw3ConversionReadinessServiceTests
 {
     private readonly Iw3ConversionReadinessService _service = new();
 
+    public static TheoryData<string, string> KnownOptionalDepthModelData => new()
+    {
+        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
+        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
+        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
+    };
+
     [Fact]
     public void ApplyIw3ExecutionRequirements_MappedModelKeepsReadinessReady()
     {
@@ -23,6 +34,24 @@ public sealed class Iw3ConversionReadinessServiceTests
         Assert.Empty(readiness.Issues);
     }
 
+    [Theory]
+    [MemberData(nameof(KnownOptionalDepthModelData))]
+    public void ApplyIw3ExecutionRequirements_MappedOptionalModelKeepsReadinessReady(
+        string relativePath,
+        string depthModelName)
+    {
+        var readiness = _service.ApplyIw3ExecutionRequirements(
+            ReadyReadiness(),
+            new(
+                FileName(relativePath),
+                relativePath,
+                LocalModelPlanSource.UnmanagedLocalFile,
+                Iw3DepthModelName: depthModelName));
+
+        Assert.True(readiness.CanConvert);
+        Assert.Empty(readiness.Issues);
+    }
+
     [Fact]
     public void ApplyIw3ExecutionRequirements_UnmappedModelBlocksReadiness()
     {
@@ -32,6 +61,20 @@ public sealed class Iw3ConversionReadinessServiceTests
                 "Default depth model",
                 "depth/default-depth.onnx",
                 LocalModelPlanSource.CatalogMetadata));
+
+        Assert.False(readiness.CanConvert);
+        Assert.Contains(
+            readiness.Issues,
+            issue => issue.EnglishMessage ==
+                "Selected local model is not mapped to a verified iw3 depth model yet.");
+    }
+
+    [Fact]
+    public void ApplyIw3ExecutionRequirements_MissingSelectedModelBlocksReadiness()
+    {
+        var readiness = _service.ApplyIw3ExecutionRequirements(
+            ReadyReadiness(),
+            null);
 
         Assert.False(readiness.CanConvert);
         Assert.Contains(
@@ -67,4 +110,10 @@ public sealed class Iw3ConversionReadinessServiceTests
         Issues: [new("missing", "faltante")],
         EnglishRequiredComponentsSummary: "required",
         SpanishRequiredComponentsSummary: "requeridos");
+
+    private static string FileName(string relativePath) =>
+        relativePath
+            .Replace('\\', '/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Last();
 }
