@@ -30,5 +30,9 @@ Source: "..\..\artifacts\publish\v3dfy-win-x64\*"; DestDir: "{app}"; Flags: igno
 [Icons]
 Name: "{group}\v3dfy"; Filename: "{app}\{#MyAppExeName}"
 
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}\*"
+Type: dirifempty; Name: "{app}"
+
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch v3dfy"; Flags: nowait postinstall skipifsilent

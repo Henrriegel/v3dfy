@@ -18,6 +18,34 @@ public sealed class PayloadInstallerTests : IDisposable
     }
 
     [Fact]
+    public void SetupProgressEvent_OverallFieldsAreOptional()
+    {
+        var currentOnly = new SetupProgressEvent(
+            SetupProgressPhase.DownloadingPart,
+            "Downloading payload part.",
+            "payload.part01",
+            5,
+            10);
+
+        Assert.Equal(50.0, currentOnly.Percent.GetValueOrDefault());
+        Assert.Null(currentOnly.OverallCompletedUnits);
+        Assert.Null(currentOnly.OverallTotalUnits);
+        Assert.Null(currentOnly.OverallMessage);
+        Assert.Null(currentOnly.OverallPercent);
+
+        var withOverall = currentOnly with
+        {
+            OverallCompletedUnits = 3333,
+            OverallTotalUnits = 10000,
+            OverallMessage = "Verifying package parts",
+        };
+
+        Assert.Equal(50.0, withOverall.Percent.GetValueOrDefault());
+        Assert.InRange(withOverall.OverallPercent.GetValueOrDefault(), 33.3, 33.4);
+        Assert.Equal("Verifying package parts", withOverall.OverallMessage);
+    }
+
+    [Fact]
     public async Task OfflineInstall_VerifiesPartsAndFinalZipBeforeInstalling()
     {
         var fixture = CreatePayloadFixture();
@@ -39,6 +67,64 @@ public sealed class PayloadInstallerTests : IDisposable
         Assert.True(File.Exists(Path.Combine(targetDirectory, "engine", "iw3", "python", "python.exe")));
         Assert.True(File.Exists(Path.Combine(targetDirectory, "tools", "ffmpeg", "win-x64", "ffprobe.exe")));
         Assert.False(Directory.Exists(Path.Combine(root, "work")));
+    }
+
+    [Fact]
+    public async Task OfflineInstall_ReinstallReplacesExistingTargetAndRemovesStaleFiles()
+    {
+        var fixture = CreatePayloadFixture();
+        var targetDirectory = Path.Combine(root, "install");
+        var siblingDirectory = Path.Combine(root, "sibling");
+        Directory.CreateDirectory(siblingDirectory);
+        var siblingSentinel = Path.Combine(siblingDirectory, "outside-target.txt");
+        await File.WriteAllTextAsync(siblingSentinel, "do not delete");
+
+        await new PayloadInstaller().InstallAsync(
+            new PayloadInstallOptions
+            {
+                Mode = PayloadInstallMode.Offline,
+                ManifestPath = fixture.ManifestPath,
+                PartsDirectory = fixture.PartsDirectory,
+                TargetDirectory = targetDirectory,
+                WorkDirectory = Path.Combine(root, "work-first"),
+            },
+            new TestSetupLog(),
+            CancellationToken.None);
+
+        var staleFile = Path.Combine(targetDirectory, "leftover-test.txt");
+        var importedModel = Path.Combine(
+            targetDirectory,
+            "engine",
+            "iw3",
+            "nunif",
+            "iw3",
+            "pretrained_models",
+            "hub",
+            "checkpoints",
+            "imported-model-pack-test.pt");
+        Directory.CreateDirectory(Path.GetDirectoryName(importedModel)!);
+        await File.WriteAllTextAsync(staleFile, "stale");
+        await File.WriteAllTextAsync(importedModel, "imported model");
+
+        await new PayloadInstaller().InstallAsync(
+            new PayloadInstallOptions
+            {
+                Mode = PayloadInstallMode.Offline,
+                ManifestPath = fixture.ManifestPath,
+                PartsDirectory = fixture.PartsDirectory,
+                TargetDirectory = targetDirectory,
+                WorkDirectory = Path.Combine(root, "work-second"),
+            },
+            new TestSetupLog(),
+            CancellationToken.None);
+
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "V3dfy.App.exe")));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "engine", "iw3", "python", "python.exe")));
+        Assert.True(File.Exists(Path.Combine(targetDirectory, "tools", "ffmpeg", "win-x64", "ffprobe.exe")));
+        Assert.False(File.Exists(staleFile));
+        Assert.False(File.Exists(importedModel));
+        Assert.True(File.Exists(siblingSentinel));
+        Assert.Empty(Directory.EnumerateDirectories(root, "install.previous-*", SearchOption.TopDirectoryOnly));
     }
 
     [Fact]
@@ -75,6 +161,99 @@ public sealed class PayloadInstallerTests : IDisposable
         Assert.Contains(progress.Events, e => e.Phase == SetupProgressPhase.CleaningUp &&
             e.Message.Contains("Cleaning temporary files", StringComparison.Ordinal));
         Assert.Contains(progress.Events, e => e.Percent is >= 0 and <= 100);
+    }
+
+    [Fact]
+    public async Task OfflineInstall_ReportsFullInstallOverallProgress()
+    {
+        var fixture = CreatePayloadFixture();
+        var progress = new CollectingSetupProgress();
+
+        Assert.Equal(3, fixture.PartFileNames.Length);
+
+        await new PayloadInstaller().InstallAsync(
+            new PayloadInstallOptions
+            {
+                Mode = PayloadInstallMode.Offline,
+                ManifestPath = fixture.ManifestPath,
+                PartsDirectory = fixture.PartsDirectory,
+                TargetDirectory = Path.Combine(root, "install"),
+                WorkDirectory = Path.Combine(root, "work"),
+            },
+            new TestSetupLog(),
+            CancellationToken.None,
+            progress);
+
+        var overallEvents = progress.Events
+            .Where(static e => e.OverallPercent is not null)
+            .ToArray();
+
+        Assert.NotEmpty(overallEvents);
+        Assert.All(overallEvents[..^1], e => Assert.True(e.OverallPercent < 100));
+        Assert.Equal(100, overallEvents[^1].OverallPercent);
+        Assert.Equal(SetupProgressPhase.Completed, overallEvents[^1].Phase);
+
+        for (var index = 1; index < overallEvents.Length; index++)
+        {
+            Assert.True(
+                overallEvents[index].OverallPercent >= overallEvents[index - 1].OverallPercent,
+                $"Overall progress decreased from {overallEvents[index - 1].OverallPercent} to {overallEvents[index].OverallPercent} at event {index}.");
+        }
+
+        var firstPartVerified = FindCompletedFileEvent(
+            progress.Events,
+            SetupProgressPhase.VerifyingPart,
+            fixture.PartFileNames[0]);
+        var secondPartVerified = FindCompletedFileEvent(
+            progress.Events,
+            SetupProgressPhase.VerifyingPart,
+            fixture.PartFileNames[1]);
+        var thirdPartVerified = FindCompletedFileEvent(
+            progress.Events,
+            SetupProgressPhase.VerifyingPart,
+            fixture.PartFileNames[2]);
+        var rebuildComplete = FindCompletedFileEvent(
+            progress.Events,
+            SetupProgressPhase.RebuildingZip,
+            fixture.ZipFileName);
+        var finalZipVerified = FindCompletedFileEvent(
+            progress.Events,
+            SetupProgressPhase.VerifyingZip,
+            fixture.ZipFileName);
+        var extractionComplete = progress.Events.Last(e =>
+            e.Phase == SetupProgressPhase.ExtractingPayload &&
+            e.CurrentFile is null &&
+            e.CurrentBytes == e.TotalBytes &&
+            e.OverallPercent is not null);
+        var installProgress = progress.Events.First(e =>
+            e.Phase == SetupProgressPhase.InstallingPayload &&
+            e.OverallPercent is not null);
+        var cleanupProgress = progress.Events.First(e =>
+            e.Phase == SetupProgressPhase.CleaningUp &&
+            e.OverallPercent is not null);
+
+        Assert.InRange(firstPartVerified.OverallPercent.GetValueOrDefault(), 1, 100);
+        Assert.True(firstPartVerified.OverallPercent < 100);
+        Assert.True(secondPartVerified.OverallPercent < 100);
+        Assert.True(thirdPartVerified.OverallPercent < 100);
+        Assert.True(rebuildComplete.OverallPercent > thirdPartVerified.OverallPercent);
+        Assert.True(rebuildComplete.OverallPercent < 100);
+        Assert.True(finalZipVerified.OverallPercent > rebuildComplete.OverallPercent);
+        Assert.True(finalZipVerified.OverallPercent < 100);
+        Assert.True(extractionComplete.OverallPercent > finalZipVerified.OverallPercent);
+        Assert.True(extractionComplete.OverallPercent < 100);
+        Assert.True(installProgress.OverallPercent > extractionComplete.OverallPercent);
+        Assert.True(installProgress.OverallPercent < 100);
+        Assert.True(cleanupProgress.OverallPercent > installProgress.OverallPercent);
+        Assert.True(cleanupProgress.OverallPercent < 100);
+
+        Assert.Contains(overallEvents, e => e.OverallMessage == "Verifying package parts");
+        Assert.Contains(overallEvents, e => e.OverallMessage == "Rebuilding portable package");
+        Assert.Contains(overallEvents, e => e.OverallMessage == "Verifying portable package");
+        Assert.Contains(overallEvents, e => e.OverallMessage == "Extracting files");
+        Assert.Contains(overallEvents, e => e.OverallMessage == "Installing files");
+        Assert.Contains(overallEvents, e => e.OverallMessage == "Finalizing installation");
+        Assert.Contains(overallEvents, e => e.OverallMessage == "Installation complete");
     }
 
     [Fact]
@@ -244,6 +423,16 @@ public sealed class PayloadInstallerTests : IDisposable
         using var stream = File.OpenRead(path);
         return Convert.ToHexString(SHA256.HashData(stream));
     }
+
+    private static SetupProgressEvent FindCompletedFileEvent(
+        IEnumerable<SetupProgressEvent> events,
+        SetupProgressPhase phase,
+        string fileName) =>
+        events.Last(e =>
+            e.Phase == phase &&
+            string.Equals(e.CurrentFile, fileName, StringComparison.OrdinalIgnoreCase) &&
+            e.CurrentBytes == e.TotalBytes &&
+            e.OverallPercent is not null);
 
     private sealed record PayloadFixture(
         string PartsDirectory,

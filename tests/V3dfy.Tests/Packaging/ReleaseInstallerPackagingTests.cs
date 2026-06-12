@@ -20,6 +20,20 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("They do not duplicate the 5.4 GB payload into Inno", docs);
         Assert.Contains("classic installer-style v3dfy setup progress window", docs);
         Assert.Contains("large timestamped scrolling setup log", docs);
+        Assert.Contains("Uninstall removes the complete `{app}` install tree", docs);
+        Assert.Contains("model packs", docs);
+        Assert.Contains("engine\\iw3\\nunif\\iw3\\pretrained_models", docs);
+        Assert.Contains("User videos, converted outputs, and", docs);
+        Assert.Contains("AppData are outside `{app}`", docs);
+        Assert.Contains("package-release-payload.ps1", docs);
+        Assert.Contains("package-release-installers.ps1", docs);
+        Assert.Contains("publish `artifacts\\publish\\v3dfy-win-x64`", docs);
+        Assert.Contains("ZIP is older than the publish output", docs);
+
+        var readme = ReadRepoFile("README.md");
+        Assert.Contains("package-release-payload.ps1", readme);
+        Assert.Contains("package-release-installers.ps1", readme);
+        Assert.Contains("publish `artifacts\\publish\\v3dfy-win-x64`", readme);
     }
 
     [Fact]
@@ -29,6 +43,11 @@ public sealed class ReleaseInstallerPackagingTests
 
         Assert.Contains("v3dfy-v$Version-web-setup.exe", script);
         Assert.Contains("v3dfy-v$Version-offline-setup.exe", script);
+        Assert.Contains("$bootstrapScript = Join-Path $repoRoot 'packaging\\inno\\v3dfy-payload-bootstrap.iss'", script);
+        Assert.Contains("'/DWebInstaller=1'", script);
+        Assert.Contains("'/DOfflineInstaller=1'", script);
+        Assert.Contains("-Flavor 'web'", script);
+        Assert.Contains("-Flavor 'offline'", script);
         Assert.Contains("README_WEB_INSTALLER.txt", script);
         Assert.Contains("README_OFFLINE_INSTALLER.txt", script);
         Assert.Contains("SHA256SUMS.installers.txt", script);
@@ -38,6 +57,44 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("live download", script);
         Assert.Contains("large scrolling setup log", script);
         Assert.Contains("--framework net10.0-windows", script);
+    }
+
+    [Fact]
+    public void ReleasePayloadScript_CreatesPortableZipAndSplitPartsFromPublishOutput()
+    {
+        var script = ReadRepoFile("scripts", "package-release-payload.ps1");
+
+        Assert.Contains("[string]$PublishDir = 'artifacts\\publish\\v3dfy-win-x64'", script);
+        Assert.Contains("[string]$ReleaseDir = 'artifacts\\release'", script);
+        Assert.Contains("[string]$SplitDir = 'artifacts\\release\\split'", script);
+        Assert.Contains("[int]$PartCount = 3", script);
+        Assert.Contains("$portableZipFileName = \"v3dfy-v$Version-win-x64-portable.zip\"", script);
+        Assert.Contains("Get-RequiredFile (Join-Path $publishDirectory 'V3dfy.App.exe')", script);
+        Assert.Contains("Get-RequiredFile (Join-Path $publishDirectory 'V3dfy.SetupHelper.exe')", script);
+        Assert.Contains("[System.IO.Compression.ZipFile]::CreateFromDirectory", script);
+        Assert.Contains("Get-ChildItem -LiteralPath $TargetDirectory -Filter \"$ZipFileName.part*\" -File", script);
+        Assert.Contains("'{0}.part{1:D2}' -f $ZipFileName, $index", script);
+        Assert.Contains("SHA256SUMS.txt", script);
+        Assert.Contains("Release payload split count must remain 3", script);
+    }
+
+    [Fact]
+    public void InstallerPackagingScript_RequiresFreshPayloadFromPublishOutput()
+    {
+        var script = ReadRepoFile("scripts", "package-release-installers.ps1");
+
+        Assert.Contains("$publishRoot = Join-Path $repoRoot 'artifacts\\publish\\v3dfy-win-x64'", script);
+        Assert.Contains("$portableZipFileName = \"v3dfy-v$Version-win-x64-portable.zip\"", script);
+        Assert.Contains("Get-RequiredFile $portableZipPath 'Release portable ZIP'", script);
+        Assert.Contains("Get-RequiredFile (Join-Path $PartsDirectory $partName) \"Payload part $index\"", script);
+        Assert.Contains("Unexpected stale payload split part files", script);
+        Assert.Contains("Get-NewestPublishFileWriteTimeUtc", script);
+        Assert.Contains("$PortableZipFile.LastWriteTimeUtc -lt $newestPublishFileUtc", script);
+        Assert.Contains("Release portable ZIP is stale", script);
+        Assert.Contains("Get-JoinedPayloadPartsSha256", script);
+        Assert.Contains("do not recombine to the portable ZIP", script);
+        Assert.Contains("scripts\\package-release-payload.ps1", script);
+        Assert.DoesNotContain("Using final ZIP SHA256 from checksum file", script);
     }
 
     [Fact]
@@ -101,6 +158,13 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("Text = \"v3dfy Setup\"", uiSource);
         Assert.Contains("Text = \"Installing v3dfy\"", uiSource);
         Assert.Contains("statusLabel", uiSource);
+        Assert.Contains("overallProgressTextLabel", uiSource);
+        Assert.Contains("overallProgressBar", uiSource);
+        Assert.Contains("Text = \"Overall progress\"", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(overallProgressTextLabel, 0, 0)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(overallProgressBar, 0, 1)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(statusLabel, 0, 2)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(progressBar, 0, 3)", uiSource);
         Assert.Contains("ProgressBar", uiSource);
         Assert.Contains("progressTextLabel", uiSource);
         Assert.Contains("ListBox", uiSource);
@@ -116,14 +180,34 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("Install files", uiSource);
         Assert.Contains("Clean temporary files", uiSource);
         Assert.Contains("Complete", uiSource);
+        Assert.DoesNotContain("of 3", uiSource);
+        Assert.DoesNotContain("All package parts verified", uiSource);
         Assert.Contains("SetupProgressPhase.DownloadingPart", installerSource);
         Assert.Contains("SetupProgressPhase.VerifyingPart", installerSource);
         Assert.Contains("SetupProgressPhase.RebuildingZip", installerSource);
         Assert.Contains("SetupProgressPhase.ExtractingPayload", installerSource);
         Assert.Contains("SetupProgressPhase.InstallingPayload", installerSource);
+        Assert.Contains("SetupOverallProgressTracker", installerSource);
+        Assert.Contains("CreateWebPhaseRanges", installerSource);
+        Assert.Contains("CreateOfflinePhaseRanges", installerSource);
+        Assert.Contains("Downloading package parts", installerSource);
+        Assert.Contains("Verifying package parts", installerSource);
+        Assert.Contains("Rebuilding portable package", installerSource);
+        Assert.Contains("Verifying portable package", installerSource);
+        Assert.Contains("Extracting files", installerSource);
+        Assert.Contains("Installing files", installerSource);
+        Assert.Contains("Finalizing installation", installerSource);
+        Assert.DoesNotContain("PayloadPartSetupProgress", installerSource);
+        Assert.DoesNotContain("ReportVerifiedPackagePart", installerSource);
+        Assert.DoesNotContain("OverallTotalUnits: manifest.Parts.Count", installerSource);
+        Assert.DoesNotContain("OverallTotalUnits = totalParts", installerSource);
+        Assert.Contains("manifest.Parts.Count", installerSource);
         Assert.Contains("DownloadingPart", progressSource);
         Assert.Contains("CurrentBytes", progressSource);
         Assert.Contains("TotalBytes", progressSource);
+        Assert.Contains("OverallCompletedUnits", progressSource);
+        Assert.Contains("OverallTotalUnits", progressSource);
+        Assert.Contains("OverallPercent", progressSource);
     }
 
     [Fact]
@@ -142,6 +226,16 @@ public sealed class ReleaseInstallerPackagingTests
     }
 
     [Fact]
+    public void InnoScripts_RemoveOnlyAppInstallTreeOnUninstall()
+    {
+        var bootstrapScript = ReadRepoFile("packaging", "inno", "v3dfy-payload-bootstrap.iss");
+        var legacyScript = ReadRepoFile("packaging", "inno", "v3dfy.iss");
+
+        AssertCleanUninstallPolicy(bootstrapScript);
+        AssertCleanUninstallPolicy(legacyScript);
+    }
+
+    [Fact]
     public void PackagingSource_DoesNotContainForbiddenUserSpecificPaths()
     {
         var forbiddenFragments = new[]
@@ -155,6 +249,8 @@ public sealed class ReleaseInstallerPackagingTests
 
         var files = new[]
         {
+            Path.Combine("README.md"),
+            Path.Combine("scripts", "package-release-payload.ps1"),
             Path.Combine("scripts", "package-release-installers.ps1"),
             Path.Combine("packaging", "inno", "v3dfy-payload-bootstrap.iss"),
             Path.Combine("docs", "packaging.md"),
@@ -208,6 +304,25 @@ public sealed class ReleaseInstallerPackagingTests
 
     private static string BackslashPath(params string[] segments) =>
         string.Join(Backslash, segments);
+
+    private static void AssertCleanUninstallPolicy(string installerScript)
+    {
+        var uninstallDeleteSection = ExtractSourceRange(
+            installerScript,
+            "[UninstallDelete]",
+            installerScript.Contains("[Code]", StringComparison.Ordinal)
+                ? "[Code]"
+                : "[Run]");
+
+        Assert.Contains("Type: filesandordirs; Name: \"{app}\\*\"", uninstallDeleteSection);
+        Assert.Contains("Type: dirifempty; Name: \"{app}\"", uninstallDeleteSection);
+        Assert.DoesNotContain("Name: \"{autopf}\"", uninstallDeleteSection, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Name: \"{pf}\"", uninstallDeleteSection, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Name: \"{commonpf}\"", uninstallDeleteSection, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Name: \"{userdocs}\"", uninstallDeleteSection, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Name: \"{userappdata}\"", uninstallDeleteSection, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Name: \"{localappdata}\"", uninstallDeleteSection, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string ExtractSourceRange(string source, string startMarker, string endMarker)
     {

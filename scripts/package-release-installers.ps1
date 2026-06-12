@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $bootstrapScript = Join-Path $repoRoot 'packaging\inno\v3dfy-payload-bootstrap.iss'
 $helperProject = Join-Path $repoRoot 'src\V3dfy.SetupHelper\V3dfy.SetupHelper.csproj'
+$publishRoot = Join-Path $repoRoot 'artifacts\publish\v3dfy-win-x64'
 $portableZipFileName = "v3dfy-v$Version-win-x64-portable.zip"
 $webInstallerName = "v3dfy-v$Version-web-setup.exe"
 $offlineInstallerName = "v3dfy-v$Version-offline-setup.exe"
@@ -90,8 +91,32 @@ function Get-RequiredFile {
     return Get-Item -LiteralPath $Path
 }
 
+function Get-RequiredDirectory {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        throw "$Description is missing: $Path"
+    }
+
+    return Get-Item -LiteralPath $Path
+}
+
 function Get-PayloadPartFiles {
     param([string]$PartsDirectory)
+
+    $expectedPartNames = foreach ($index in 1..3) {
+        '{0}.part{1:D2}' -f $portableZipFileName, $index
+    }
+
+    $unexpectedPartFiles = @(Get-ChildItem -LiteralPath $PartsDirectory -Filter "$portableZipFileName.part*" -File -ErrorAction SilentlyContinue |
+        Where-Object { $expectedPartNames -notcontains $_.Name })
+    if ($unexpectedPartFiles.Count -gt 0) {
+        $names = ($unexpectedPartFiles | Select-Object -ExpandProperty Name) -join ', '
+        throw "Unexpected stale payload split part files were found in $PartsDirectory`: $names"
+    }
 
     $parts = foreach ($index in 1..3) {
         $partName = '{0}.part{1:D2}' -f $portableZipFileName, $index
@@ -102,31 +127,82 @@ function Get-PayloadPartFiles {
 }
 
 function Get-FinalZipHash {
+    param([string]$ZipPath)
+
+    Write-InstallerMessage INFO "Computing final ZIP SHA256: $ZipPath"
+    return (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash.ToUpperInvariant()
+}
+
+function Get-JoinedPayloadPartsSha256 {
+    param([System.IO.FileInfo[]]$PartFiles)
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $buffer = New-Object byte[] 1048576
+    try {
+        foreach ($partFile in $PartFiles) {
+            $stream = [System.IO.File]::OpenRead($partFile.FullName)
+            try {
+                while (($bytesRead = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    $sha256.TransformBlock($buffer, 0, $bytesRead, $null, 0) | Out-Null
+                }
+            }
+            finally {
+                $stream.Dispose()
+            }
+        }
+
+        $emptyBytes = New-Object byte[] 0
+        $sha256.TransformFinalBlock($emptyBytes, 0, 0) | Out-Null
+        return (($sha256.Hash | ForEach-Object { $_.ToString('X2') }) -join '')
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function Get-NewestPublishFileWriteTimeUtc {
+    param([string]$PublishDirectory)
+
+    $newestFile = Get-ChildItem -LiteralPath $PublishDirectory -Recurse -File |
+        Sort-Object LastWriteTimeUtc -Descending |
+        Select-Object -First 1
+
+    if (-not $newestFile) {
+        throw "Publish output contains no files: $PublishDirectory"
+    }
+
+    return $newestFile.LastWriteTimeUtc
+}
+
+function Assert-ReleasePayloadFreshness {
     param(
-        [string]$PartsDirectory,
-        [string]$ZipFileName
+        [string]$PublishDirectory,
+        [System.IO.FileInfo]$PortableZipFile,
+        [System.IO.FileInfo[]]$PartFiles
     )
 
-    $releaseDirectory = Split-Path -Parent $PartsDirectory
-    $zipPath = Join-Path $releaseDirectory $ZipFileName
-    if (Test-Path -LiteralPath $zipPath -PathType Leaf) {
-        Write-InstallerMessage INFO "Computing final ZIP SHA256: $zipPath"
-        return (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    Get-RequiredDirectory $PublishDirectory 'Windows x64 publish output' | Out-Null
+    Get-RequiredFile (Join-Path $PublishDirectory 'V3dfy.App.exe') 'Published app executable' | Out-Null
+    Get-RequiredFile (Join-Path $PublishDirectory 'V3dfy.SetupHelper.exe') 'Published setup helper executable' | Out-Null
+
+    $newestPublishFileUtc = Get-NewestPublishFileWriteTimeUtc $PublishDirectory
+    if ($PortableZipFile.LastWriteTimeUtc -lt $newestPublishFileUtc) {
+        throw "Release portable ZIP is stale. Recreate it from $PublishDirectory with scripts\package-release-payload.ps1 before packaging installers: $($PortableZipFile.FullName)"
     }
 
-    $checksumPath = Join-Path $PartsDirectory 'SHA256SUMS.txt'
-    if (Test-Path -LiteralPath $checksumPath -PathType Leaf) {
-        $hashLine = Get-Content -LiteralPath $checksumPath |
-            Where-Object { $_ -match 'Hash\s*:\s*([A-Fa-f0-9]{64})' } |
-            Select-Object -First 1
-
-        if ($hashLine -match '([A-Fa-f0-9]{64})') {
-            Write-InstallerMessage WARN "Using final ZIP SHA256 from checksum file because the ZIP was not found: $checksumPath"
-            return $Matches[1].ToUpperInvariant()
-        }
+    $partsTotalBytes = ($PartFiles | Measure-Object -Property Length -Sum).Sum
+    if ($partsTotalBytes -ne $PortableZipFile.Length) {
+        throw "Release split payload parts do not match the portable ZIP size. Recreate the split payload with scripts\package-release-payload.ps1."
     }
 
-    throw "Could not determine final ZIP SHA256. Expected $zipPath or $checksumPath."
+    $zipHash = Get-FinalZipHash $PortableZipFile.FullName
+    $joinedPartsHash = Get-JoinedPayloadPartsSha256 $PartFiles
+    if (-not [string]::Equals($zipHash, $joinedPartsHash, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Release split payload parts are stale or do not recombine to the portable ZIP. Recreate them with scripts\package-release-payload.ps1."
+    }
+
+    Write-InstallerMessage OK 'Release payload ZIP and split parts match the current publish output.'
+    return $zipHash
 }
 
 function New-PayloadManifest {
@@ -369,7 +445,13 @@ if (-not $SkipCompile.IsPresent) {
 }
 
 $partFiles = Get-PayloadPartFiles $partsDirectory
-$zipSha256 = Get-FinalZipHash $partsDirectory $portableZipFileName
+$releaseDirectory = Split-Path -Parent $partsDirectory
+$portableZipPath = Join-Path $releaseDirectory $portableZipFileName
+$portableZipFile = Get-RequiredFile $portableZipPath 'Release portable ZIP'
+$zipSha256 = Assert-ReleasePayloadFreshness `
+    -PublishDirectory $publishRoot `
+    -PortableZipFile $portableZipFile `
+    -PartFiles $partFiles
 $manifestPath = Join-Path $installerOutputDirectory "payload-manifest-v$Version.json"
 New-PayloadManifest -PartFiles $partFiles -ZipSha256 $zipSha256 -ManifestPath $manifestPath
 Write-InstallerReadmes $installerOutputDirectory

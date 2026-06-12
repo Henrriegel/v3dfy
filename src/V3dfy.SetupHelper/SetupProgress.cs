@@ -19,13 +19,23 @@ public sealed record SetupProgressEvent(
     string Message,
     string? CurrentFile = null,
     long? CurrentBytes = null,
-    long? TotalBytes = null)
+    long? TotalBytes = null,
+    int? OverallCompletedUnits = null,
+    int? OverallTotalUnits = null,
+    string? OverallMessage = null)
 {
     public double? Percent =>
         CurrentBytes is { } current &&
         TotalBytes is { } total &&
         total > 0
             ? Math.Clamp(current * 100.0 / total, 0, 100)
+            : null;
+
+    public double? OverallPercent =>
+        OverallCompletedUnits is { } completed &&
+        OverallTotalUnits is { } total &&
+        total > 0
+            ? Math.Clamp(completed * 100.0 / total, 0, 100)
             : null;
 }
 

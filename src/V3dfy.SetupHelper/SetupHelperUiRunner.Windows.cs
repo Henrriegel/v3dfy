@@ -26,6 +26,8 @@ internal sealed class SetupProgressForm : Form
     private readonly string? logPath;
     private readonly CancellationTokenSource cancellationTokenSource;
     private readonly Label statusLabel;
+    private readonly Label overallProgressTextLabel;
+    private readonly ProgressBar overallProgressBar;
     private readonly Label progressTextLabel;
     private readonly ProgressBar progressBar;
     private readonly ListBox logListBox;
@@ -54,10 +56,9 @@ internal sealed class SetupProgressForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 6,
+            RowCount = 5,
             Padding = new Padding(16),
         };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -83,11 +84,34 @@ internal sealed class SetupProgressForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 5,
             Margin = new Padding(0, 0, 0, 12),
         };
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        overallProgressTextLabel = new Label
+        {
+            AutoSize = true,
+            Text = "Overall progress",
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 0, 0, 4),
+        };
+        overallProgressBar = new ProgressBar
+        {
+            Dock = DockStyle.Fill,
+            Height = 18,
+            Style = ProgressBarStyle.Continuous,
+            MarqueeAnimationSpeed = 0,
+            Minimum = 0,
+            Maximum = 1000,
+            Value = 0,
+        };
+
+        statusLabel.Margin = new Padding(0, 10, 0, 4);
 
         progressBar = new ProgressBar
         {
@@ -105,8 +129,11 @@ internal sealed class SetupProgressForm : Form
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = new Padding(0, 6, 0, 0),
         };
-        progressPanel.Controls.Add(progressBar, 0, 0);
-        progressPanel.Controls.Add(progressTextLabel, 0, 1);
+        progressPanel.Controls.Add(overallProgressTextLabel, 0, 0);
+        progressPanel.Controls.Add(overallProgressBar, 0, 1);
+        progressPanel.Controls.Add(statusLabel, 0, 2);
+        progressPanel.Controls.Add(progressBar, 0, 3);
+        progressPanel.Controls.Add(progressTextLabel, 0, 4);
 
         var logLabel = new Label
         {
@@ -140,11 +167,10 @@ internal sealed class SetupProgressForm : Form
         buttonPanel.Controls.Add(actionButton);
 
         root.Controls.Add(headingLabel, 0, 0);
-        root.Controls.Add(statusLabel, 0, 1);
-        root.Controls.Add(progressPanel, 0, 2);
-        root.Controls.Add(logLabel, 0, 3);
-        root.Controls.Add(logListBox, 0, 4);
-        root.Controls.Add(buttonPanel, 0, 5);
+        root.Controls.Add(progressPanel, 0, 1);
+        root.Controls.Add(logLabel, 0, 2);
+        root.Controls.Add(logListBox, 0, 3);
+        root.Controls.Add(buttonPanel, 0, 4);
         Controls.Add(root);
     }
 
@@ -237,6 +263,7 @@ internal sealed class SetupProgressForm : Form
 
         BeginInvoke(() =>
         {
+            UpdateOverallProgress(progress);
             statusLabel.Text = FormatStatus(progress);
 
             if (progress.Percent is { } percent)
@@ -288,6 +315,9 @@ internal sealed class SetupProgressForm : Form
         {
             running = false;
             statusLabel.Text = "Installation complete";
+            overallProgressBar.Style = ProgressBarStyle.Continuous;
+            overallProgressBar.Value = overallProgressBar.Maximum;
+            overallProgressTextLabel.Text = "Installation complete";
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Value = progressBar.Maximum;
             progressTextLabel.Text = "Complete";
@@ -312,6 +342,7 @@ internal sealed class SetupProgressForm : Form
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Value = 0;
             progressTextLabel.Text = "Failed";
+            overallProgressTextLabel.Text = "Failed";
             statusLabel.Text = "Installation failed";
             actionButton.Text = "Close";
             actionButton.Enabled = true;
@@ -353,11 +384,11 @@ internal sealed class SetupProgressForm : Form
         return progress.Phase switch
         {
             SetupProgressPhase.DownloadingPart when partNumber is not null =>
-                $"Downloading payload part {partNumber} of 3",
+                FormatPartStatus("Downloading", partNumber.Value),
             SetupProgressPhase.VerifyingPart when partNumber is not null =>
-                $"Verifying payload part {partNumber} of 3",
+                FormatPartStatus("Verifying", partNumber.Value),
             SetupProgressPhase.FindingPart when partNumber is not null =>
-                $"Finding payload part {partNumber} of 3",
+                FormatPartStatus("Finding", partNumber.Value),
             SetupProgressPhase.RebuildingZip => "Rebuilding portable package",
             SetupProgressPhase.VerifyingZip => "Verifying portable package",
             SetupProgressPhase.ExtractingPayload => "Extracting files",
@@ -366,6 +397,39 @@ internal sealed class SetupProgressForm : Form
             SetupProgressPhase.Completed => "Installation complete",
             _ => progress.Message.TrimEnd('.'),
         };
+    }
+
+    private void UpdateOverallProgress(SetupProgressEvent progress)
+    {
+        if (progress.OverallPercent is not { } percent)
+        {
+            return;
+        }
+
+        overallProgressBar.Style = ProgressBarStyle.Continuous;
+        overallProgressBar.MarqueeAnimationSpeed = 0;
+        overallProgressBar.Value = Math.Clamp(
+            (int)Math.Round(percent * 10),
+            overallProgressBar.Minimum,
+            overallProgressBar.Maximum);
+        overallProgressTextLabel.Text = !string.IsNullOrWhiteSpace(progress.OverallMessage)
+            ? progress.OverallMessage
+            : FormatOverallProgressText(progress.OverallCompletedUnits, progress.OverallTotalUnits);
+    }
+
+    private static string FormatPartStatus(string action, int partNumber) =>
+        $"{action} payload part {partNumber}";
+
+    private static string FormatOverallProgressText(int? completedUnits, int? totalUnits)
+    {
+        if (completedUnits is not { } completed || totalUnits is not { } total || total <= 0)
+        {
+            return "Overall progress";
+        }
+
+        return completed >= total
+            ? "Installation complete"
+            : "Overall progress";
     }
 
     private string FormatLogLine(SetupProgressEvent progress)

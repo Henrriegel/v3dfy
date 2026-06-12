@@ -194,6 +194,11 @@ Packaging details are available in:
 docs/packaging.md
 ```
 
+Release installer payloads must be built from the current publish output in
+order: publish `artifacts\publish\v3dfy-win-x64`, run
+`scripts\package-release-payload.ps1`, then run
+`scripts\package-release-installers.ps1`.
+
 ---
 
 ## License

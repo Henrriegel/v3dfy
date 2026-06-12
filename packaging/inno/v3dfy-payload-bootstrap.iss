@@ -70,7 +70,8 @@ Name: "{group}\v3dfy"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{autodesktop}\v3dfy"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{app}\*"
+Type: dirifempty; Name: "{app}"
 
 [Code]
 var

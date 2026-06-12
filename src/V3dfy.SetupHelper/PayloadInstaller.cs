@@ -44,9 +44,13 @@ public sealed class PayloadInstaller
         var stagingDirectory = Path.Combine(
             targetParent.FullName,
             $"{Path.GetFileName(targetDirectory)}.staging-{Guid.NewGuid():N}");
+        var overallProgress = SetupOverallProgressTracker.Create(
+            options.Mode,
+            manifest,
+            progress);
 
         log.Info($"Installing {manifest.ProductName} {manifest.Version} to {targetDirectory}");
-        progress.Report(new SetupProgressEvent(
+        overallProgress.Report(new SetupProgressEvent(
             SetupProgressPhase.Preparing,
             $"Installing {manifest.ProductName} {manifest.Version}."));
 
@@ -58,14 +62,14 @@ public sealed class PayloadInstaller
                     manifest,
                     options.PartsDirectory,
                     log,
-                    progress,
+                    overallProgress,
                     cancellationToken),
                 PayloadInstallMode.Web => await DownloadAndVerifyPartsAsync(
                     manifest,
                     workDirectory,
                     options.ReleaseBaseUrlOverride,
                     log,
-                    progress,
+                    overallProgress,
                     cancellationToken),
                 _ => throw new PayloadInstallException("Unsupported installer mode."),
             };
@@ -76,7 +80,7 @@ public sealed class PayloadInstaller
                 manifest.ZipSizeBytes,
                 "temporary rebuilt payload ZIP");
 
-            await RebuildZipAsync(manifest, partPaths, zipPath, log, progress, cancellationToken);
+            await RebuildZipAsync(manifest, partPaths, zipPath, log, overallProgress, cancellationToken);
             await VerifyFileAsync(
                 zipPath,
                 manifest.ZipSha256,
@@ -84,7 +88,7 @@ public sealed class PayloadInstaller
                 "rebuilt payload ZIP",
                 SetupProgressPhase.VerifyingZip,
                 log,
-                progress,
+                overallProgress,
                 cancellationToken);
 
             await ExtractAndInstallAsync(
@@ -93,13 +97,8 @@ public sealed class PayloadInstaller
                 stagingDirectory,
                 targetDirectory,
                 log,
-                progress,
+                overallProgress,
                 cancellationToken);
-
-            log.Info("Payload installation completed successfully.");
-            progress.Report(new SetupProgressEvent(
-                SetupProgressPhase.Completed,
-                "Payload installation completed successfully."));
         }
         catch
         {
@@ -110,12 +109,17 @@ public sealed class PayloadInstaller
         {
             if (!options.KeepWorkDirectory)
             {
-                progress.Report(new SetupProgressEvent(
+                overallProgress.Report(new SetupProgressEvent(
                     SetupProgressPhase.CleaningUp,
                     "Cleaning temporary files."));
                 TryDeleteDirectory(workDirectory, log);
             }
         }
+
+        log.Info("Payload installation completed successfully.");
+        overallProgress.Report(new SetupProgressEvent(
+            SetupProgressPhase.Completed,
+            "Payload installation completed successfully."));
     }
 
     private static async Task<IReadOnlyList<string>> VerifyOfflinePartsAsync(
@@ -139,8 +143,10 @@ public sealed class PayloadInstaller
 
         log.Info($"Reading offline payload parts from {sourceDirectory}");
         var partPaths = new List<string>(manifest.Parts.Count);
-        foreach (var part in manifest.Parts)
+        var totalParts = manifest.Parts.Count;
+        for (var index = 0; index < totalParts; index++)
         {
+            var part = manifest.Parts[index];
             var partPath = Path.Combine(sourceDirectory, part.FileName);
             progress.Report(new SetupProgressEvent(
                 SetupProgressPhase.FindingPart,
@@ -186,8 +192,10 @@ public sealed class PayloadInstaller
             new ProductInfoHeaderValue("v3dfy-setup", manifest.Version));
 
         var partPaths = new List<string>(manifest.Parts.Count);
-        foreach (var part in manifest.Parts)
+        var totalParts = manifest.Parts.Count;
+        for (var index = 0; index < totalParts; index++)
         {
+            var part = manifest.Parts[index];
             var partPath = Path.Combine(downloadDirectory, part.FileName);
             if (File.Exists(partPath) &&
                 await FileMatchesAsync(partPath, part.Sha256, part.SizeBytes, cancellationToken))
@@ -768,6 +776,231 @@ public sealed class PayloadInstaller
             fileName,
             currentBytes,
             totalBytes));
+    }
+
+    private sealed class SetupOverallProgressTracker : ISetupProgress
+    {
+        private const int OverallUnits = 10000;
+
+        private readonly ISetupProgress inner;
+        private readonly PayloadManifest manifest;
+        private readonly IReadOnlyDictionary<SetupProgressPhase, OverallPhaseRange> phaseRanges;
+        private readonly Dictionary<string, PartProgressInfo> partProgress;
+        private readonly long totalPartBytes;
+        private int lastOverallCompletedUnits;
+
+        private SetupOverallProgressTracker(
+            ISetupProgress inner,
+            PayloadManifest manifest,
+            IReadOnlyDictionary<SetupProgressPhase, OverallPhaseRange> phaseRanges)
+        {
+            this.inner = inner;
+            this.manifest = manifest;
+            this.phaseRanges = phaseRanges;
+            partProgress = BuildPartProgress(manifest, out totalPartBytes);
+        }
+
+        public static SetupOverallProgressTracker Create(
+            PayloadInstallMode mode,
+            PayloadManifest manifest,
+            ISetupProgress inner) =>
+            new(inner, manifest, mode == PayloadInstallMode.Web
+                ? CreateWebPhaseRanges()
+                : CreateOfflinePhaseRanges());
+
+        public void Report(SetupProgressEvent progress)
+        {
+            if (CalculateOverallProgress(progress) is not { } overall)
+            {
+                inner.Report(progress);
+                return;
+            }
+
+            var completedUnits = Math.Clamp(
+                Math.Max(overall.CompletedUnits, lastOverallCompletedUnits),
+                0,
+                OverallUnits);
+            lastOverallCompletedUnits = completedUnits;
+
+            inner.Report(progress with
+            {
+                OverallCompletedUnits = completedUnits,
+                OverallTotalUnits = OverallUnits,
+                OverallMessage = overall.Message,
+            });
+        }
+
+        private OverallProgressSnapshot? CalculateOverallProgress(SetupProgressEvent progress)
+        {
+            if (progress.Phase == SetupProgressPhase.Completed)
+            {
+                return new OverallProgressSnapshot(OverallUnits, "Installation complete");
+            }
+
+            if (!phaseRanges.TryGetValue(progress.Phase, out var range))
+            {
+                return null;
+            }
+
+            return progress.Phase switch
+            {
+                SetupProgressPhase.FindingPart => CalculatePartIndexProgress(
+                    progress,
+                    range,
+                    "Finding package parts"),
+                SetupProgressPhase.DownloadingPart => CalculatePartByteProgress(
+                    progress,
+                    range,
+                    "Downloading package parts"),
+                SetupProgressPhase.VerifyingPart => CalculatePartByteProgress(
+                    progress,
+                    range,
+                    "Verifying package parts"),
+                SetupProgressPhase.RebuildingZip => CalculateByteProgress(
+                    progress,
+                    range,
+                    "Rebuilding portable package"),
+                SetupProgressPhase.VerifyingZip => CalculateByteProgress(
+                    progress,
+                    range,
+                    "Verifying portable package"),
+                SetupProgressPhase.ExtractingPayload => CalculateByteProgress(
+                    progress,
+                    range,
+                    "Extracting files"),
+                SetupProgressPhase.InstallingPayload => new OverallProgressSnapshot(
+                    range.EndUnits,
+                    "Installing files"),
+                SetupProgressPhase.CleaningUp => new OverallProgressSnapshot(
+                    range.EndUnits,
+                    "Finalizing installation"),
+                SetupProgressPhase.Preparing => new OverallProgressSnapshot(
+                    range.EndUnits,
+                    "Preparing payload"),
+                _ => new OverallProgressSnapshot(range.StartUnits, "Overall progress"),
+            };
+        }
+
+        private OverallProgressSnapshot CalculatePartIndexProgress(
+            SetupProgressEvent progress,
+            OverallPhaseRange range,
+            string message)
+        {
+            if (!TryGetPartInfo(progress.CurrentFile, out var partInfo) || manifest.Parts.Count == 0)
+            {
+                return new OverallProgressSnapshot(range.StartUnits, message);
+            }
+
+            var ratio = (partInfo.Index + 1) / (double)manifest.Parts.Count;
+            return new OverallProgressSnapshot(range.Interpolate(ratio), message);
+        }
+
+        private OverallProgressSnapshot CalculatePartByteProgress(
+            SetupProgressEvent progress,
+            OverallPhaseRange range,
+            string message)
+        {
+            if (totalPartBytes <= 0 || !TryGetPartInfo(progress.CurrentFile, out var partInfo))
+            {
+                return new OverallProgressSnapshot(range.StartUnits, message);
+            }
+
+            var currentBytes = Math.Clamp(
+                progress.CurrentBytes ?? 0,
+                0,
+                partInfo.SizeBytes);
+            var completedBytes = partInfo.BytesBefore + currentBytes;
+            var ratio = completedBytes / (double)totalPartBytes;
+            return new OverallProgressSnapshot(range.Interpolate(ratio), message);
+        }
+
+        private static OverallProgressSnapshot CalculateByteProgress(
+            SetupProgressEvent progress,
+            OverallPhaseRange range,
+            string message)
+        {
+            if (progress.Percent is not { } percent)
+            {
+                return new OverallProgressSnapshot(range.StartUnits, message);
+            }
+
+            return new OverallProgressSnapshot(range.Interpolate(percent / 100.0), message);
+        }
+
+        private bool TryGetPartInfo(string? fileName, out PartProgressInfo partInfo)
+        {
+            partInfo = default;
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                return false;
+            }
+
+            return partProgress.TryGetValue(Path.GetFileName(fileName), out partInfo);
+        }
+
+        private static Dictionary<string, PartProgressInfo> BuildPartProgress(
+            PayloadManifest manifest,
+            out long totalPartBytes)
+        {
+            var result = new Dictionary<string, PartProgressInfo>(StringComparer.OrdinalIgnoreCase);
+            long bytesBefore = 0;
+            for (var index = 0; index < manifest.Parts.Count; index++)
+            {
+                var part = manifest.Parts[index];
+                result[part.FileName] = new PartProgressInfo(
+                    index,
+                    bytesBefore,
+                    part.SizeBytes);
+                bytesBefore += part.SizeBytes;
+            }
+
+            totalPartBytes = bytesBefore;
+            return result;
+        }
+
+        private static IReadOnlyDictionary<SetupProgressPhase, OverallPhaseRange> CreateWebPhaseRanges() =>
+            new Dictionary<SetupProgressPhase, OverallPhaseRange>
+            {
+                [SetupProgressPhase.Preparing] = new(0, 200),
+                [SetupProgressPhase.DownloadingPart] = new(200, 2700),
+                [SetupProgressPhase.VerifyingPart] = new(2700, 4200),
+                [SetupProgressPhase.RebuildingZip] = new(4200, 5700),
+                [SetupProgressPhase.VerifyingZip] = new(5700, 6500),
+                [SetupProgressPhase.ExtractingPayload] = new(6500, 9000),
+                [SetupProgressPhase.InstallingPayload] = new(9000, 9600),
+                [SetupProgressPhase.CleaningUp] = new(9600, 9900),
+            };
+
+        private static IReadOnlyDictionary<SetupProgressPhase, OverallPhaseRange> CreateOfflinePhaseRanges() =>
+            new Dictionary<SetupProgressPhase, OverallPhaseRange>
+            {
+                [SetupProgressPhase.Preparing] = new(0, 200),
+                [SetupProgressPhase.FindingPart] = new(200, 700),
+                [SetupProgressPhase.VerifyingPart] = new(700, 3200),
+                [SetupProgressPhase.RebuildingZip] = new(3200, 5000),
+                [SetupProgressPhase.VerifyingZip] = new(5000, 6000),
+                [SetupProgressPhase.ExtractingPayload] = new(6000, 9000),
+                [SetupProgressPhase.InstallingPayload] = new(9000, 9600),
+                [SetupProgressPhase.CleaningUp] = new(9600, 9900),
+            };
+
+        private readonly record struct OverallProgressSnapshot(
+            int CompletedUnits,
+            string Message);
+
+        private readonly record struct OverallPhaseRange(int StartUnits, int EndUnits)
+        {
+            public int Interpolate(double ratio)
+            {
+                var clampedRatio = Math.Clamp(ratio, 0, 1);
+                return StartUnits + (int)Math.Round((EndUnits - StartUnits) * clampedRatio);
+            }
+        }
+
+        private readonly record struct PartProgressInfo(
+            int Index,
+            long BytesBefore,
+            long SizeBytes);
     }
 
     private static string BuildPartUrl(

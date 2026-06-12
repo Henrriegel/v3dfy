@@ -121,11 +121,28 @@ payload:
    extraction. Prefer the web installer for normal users and the offline
    installer for air-gapped or preloaded installs.
 
-Build both release installers from the shared split payload with:
+Build the release payload from the current publish output before building
+installers:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release-payload.ps1 -Version 0.1.0-preview.1
+```
+
+That script zips `artifacts\publish\v3dfy-win-x64` into
+`artifacts\release\v3dfy-v0.1.0-preview.1-win-x64-portable.zip`, removes stale
+split payload parts, writes `.part01`, `.part02`, and `.part03` under
+`artifacts\release\split`, and writes `SHA256SUMS.txt`.
+
+Build both release installers from the fresh shared split payload with:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-release-installers.ps1 -Version 0.1.0-preview.1 -ReleaseBaseUrl "https://github.com/Henrriegel/v3dfy/releases/download/v0.1.0-preview.1" -PayloadPartsDir ".\artifacts\release\split"
 ```
+
+The installer packaging script fails if the release portable ZIP or any split
+part is missing, if the ZIP is older than the publish output, or if the split
+parts do not recombine to the ZIP. This prevents compiling fresh installers
+around a stale app payload.
 
 The packaging script defaults to:
 
@@ -136,6 +153,10 @@ The packaging script defaults to:
 
 Generated assets:
 
+- `artifacts\release\v3dfy-v0.1.0-preview.1-win-x64-portable.zip`
+- `artifacts\release\split\v3dfy-v0.1.0-preview.1-win-x64-portable.zip.part01`
+- `artifacts\release\split\v3dfy-v0.1.0-preview.1-win-x64-portable.zip.part02`
+- `artifacts\release\split\v3dfy-v0.1.0-preview.1-win-x64-portable.zip.part03`
 - `artifacts\installer\v3dfy-v0.1.0-preview.1-web-setup.exe`
 - `artifacts\installer\v3dfy-v0.1.0-preview.1-offline-setup.exe`
 - `artifacts\installer\README_WEB_INSTALLER.txt`
@@ -147,6 +168,12 @@ only a small self-contained Windows x64 setup helper plus a payload manifest.
 They do not duplicate the 5.4 GB payload into Inno `.bin` files. The helper
 does not require the .NET SDK, Python, Git, FFmpeg, iw3, or external tools on
 the user's machine.
+
+Uninstall removes the complete `{app}` install tree. This includes the app,
+bundled tools, bundled iw3 engine, embedded Python, bundled models, model packs
+imported under `engine\iw3\nunif\iw3\pretrained_models`, and stale payload
+files left under the install directory. User videos, converted outputs, and
+AppData are outside `{app}` and are not part of installer uninstall cleanup.
 
 ## Legacy embedded installer
 
@@ -189,8 +216,11 @@ downloads, or installs.
 
 Before release, verify that the published app works on a clean Windows x64
 machine without global .NET, Python, FFmpeg, models, or development tools.
-Run installer packaging only after the publish output contains the expected
-`engine\iw3` layout for the bundle you intend to ship.
+Run release packaging in this order: publish `artifacts\publish\v3dfy-win-x64`,
+run `scripts\package-release-payload.ps1`, then run
+`scripts\package-release-installers.ps1`. Run installer packaging only after the
+publish output contains the expected `engine\iw3` layout for the bundle you
+intend to ship.
 
 ## Runtime and user data paths
 
