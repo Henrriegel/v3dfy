@@ -20,5 +20,9 @@ public sealed class PayloadInstallOptions
 
     public string? ReleaseBaseUrlOverride { get; init; }
 
+    public string? ModelPacksManifestPath { get; init; }
+
+    public string? ModelPacksSourceDirectory { get; init; }
+
     public bool KeepWorkDirectory { get; init; }
 }
