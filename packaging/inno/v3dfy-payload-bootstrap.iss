@@ -36,6 +36,10 @@
 #define HelperExeName "V3dfy.SetupHelper.exe"
 #define ManifestFileName "payload-manifest.json"
 
+#ifdef ModelPackManifestFile
+#define ModelPackManifestFileName ExtractFileName(ModelPackManifestFile)
+#endif
+
 [Setup]
 AppId={{BEEFB38B-5640-49F7-94E8-57EBE668198F}
 AppName={#MyAppName}
@@ -61,6 +65,9 @@ RestartIfNeededByRun=no
 [Files]
 Source: "{#HelperExe}"; DestDir: "{tmp}"; DestName: "{#HelperExeName}"; Flags: dontcopy
 Source: "{#ManifestFile}"; DestDir: "{tmp}"; DestName: "{#ManifestFileName}"; Flags: dontcopy
+#ifdef ModelPackManifestFile
+Source: "{#ModelPackManifestFile}"; DestDir: "{tmp}"; DestName: "{#ModelPackManifestFileName}"; Flags: dontcopy
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a Desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
@@ -106,8 +113,18 @@ begin
     ' --work-dir ' + Quote(ExpandConstant('{tmp}\v3dfy-payload-work')) +
     ' --log ' + Quote(LogPath);
 
+#ifdef ModelPackManifestFile
+  Result := Result +
+    ' --model-packs-manifest ' + Quote(ExpandConstant('{tmp}\{#ModelPackManifestFileName}'));
+#endif
+
   if '{#InstallerMode}' = 'offline' then
+  begin
     Result := Result + ' --parts-dir ' + Quote(ExpandConstant('{src}'));
+#ifdef ModelPackManifestFile
+    Result := Result + ' --model-packs-source-dir ' + Quote(ExpandConstant('{src}'));
+#endif
+  end;
 end;
 
 function RunPayloadHelper(LogPath: String): String;
@@ -143,6 +160,9 @@ var
 begin
   ExtractTemporaryFile('{#HelperExeName}');
   ExtractTemporaryFile('{#ManifestFileName}');
+#ifdef ModelPackManifestFile
+  ExtractTemporaryFile('{#ModelPackManifestFileName}');
+#endif
 
   LogPath := ExpandConstant('{tmp}\v3dfy-setup-helper.log');
   if FileExists(LogPath) then

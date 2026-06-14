@@ -4,6 +4,7 @@ param(
     [string]$ReleaseBaseUrl = 'https://github.com/Henrriegel/v3dfy/releases/download/v0.1.0-preview.1',
     [string]$PayloadPartsDir = 'artifacts\release\split',
     [string]$OutputDir = 'artifacts\installer',
+    [string]$ModelPackManifestPath,
     [switch]$SkipCompile
 )
 
@@ -102,6 +103,49 @@ function Get-RequiredDirectory {
     }
 
     return Get-Item -LiteralPath $Path
+}
+
+function Get-OptionalInstallerModelPackManifest {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $null
+    }
+
+    $resolvedPath = Resolve-RepositoryPath $Path
+    $file = Get-RequiredFile $resolvedPath 'Installer model-pack manifest'
+
+    try {
+        $json = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw "Installer model-pack manifest must be valid JSON: $($file.FullName). $($_.Exception.Message)"
+    }
+
+    if ($json.schemaVersion -ne 1) {
+        throw "Installer model-pack manifest schemaVersion must be 1: $($file.FullName)"
+    }
+
+    if (-not $json.packs -or $json.packs.Count -lt 1) {
+        throw "Installer model-pack manifest must include at least one pack: $($file.FullName)"
+    }
+
+    foreach ($pack in @($json.packs)) {
+        if ([string]::IsNullOrWhiteSpace([string]$pack.assetFileName)) {
+            throw 'Installer model-pack manifest pack is missing assetFileName.'
+        }
+
+        if ([string]::IsNullOrWhiteSpace([string]$pack.zipSha256)) {
+            throw "Installer model-pack manifest pack is missing zipSha256: $($pack.assetFileName)"
+        }
+
+        if (-not ($pack.zipSizeBytes -is [long] -or $pack.zipSizeBytes -is [int]) -or $pack.zipSizeBytes -le 0) {
+            throw "Installer model-pack manifest pack has invalid zipSizeBytes: $($pack.assetFileName)"
+        }
+    }
+
+    Write-InstallerMessage OK "Installer model-pack manifest validated: $($file.FullName)"
+    return $file
 }
 
 function Get-PayloadPartFiles {
@@ -276,6 +320,12 @@ During installation, a classic installer-style v3dfy setup progress window
 shows live download progress, SHA256 verification, ZIP rebuild/extraction
 status, percent/bytes progress, and a large scrolling setup log.
 
+Optional model packs can be selected during setup when the installer includes
+a model-pack catalog. Selected optional packs are downloaded from the release
+assets, verified, and imported automatically. You may select none because
+v3dfy includes a base model, and model packs can also be imported later from
+the app.
+
 After installation, v3dfy works offline. The installed app includes the
 self-contained .NET runtime, FFmpeg/FFprobe, embedded Python, local iw3 engine,
 models, configuration, and licenses from the release payload.
@@ -301,6 +351,11 @@ shortcut, and removes its temporary rebuilt ZIP after a successful install.
 During installation, a classic installer-style v3dfy setup progress window
 shows live verification, ZIP rebuild/extraction status, install status,
 percent/bytes progress, and a large scrolling setup log.
+
+Optional model-pack ZIPs can be placed beside the offline setup EXE. Only
+matching official model-pack ZIPs found in that folder will appear during
+setup. If none are found, v3dfy still installs with its base model. You may
+select none, and model packs can also be imported later from the app.
 
 After installation, v3dfy works offline. The installed app includes the
 self-contained .NET runtime, FFmpeg/FFprobe, embedded Python, local iw3 engine,
@@ -350,6 +405,7 @@ function Invoke-InnoCompiler {
         [string]$InstallerOutputDirectory,
         [string]$HelperExe,
         [string]$ManifestPath,
+        [string]$ModelPackManifestFile,
         [string]$Flavor,
         [string]$OutputBaseFilename
     )
@@ -361,6 +417,10 @@ function Invoke-InnoCompiler {
         "/DHelperExe=$HelperExe",
         "/DManifestFile=$ManifestPath"
     )
+
+    if (-not [string]::IsNullOrWhiteSpace($ModelPackManifestFile)) {
+        $defines += "/DModelPackManifestFile=$ModelPackManifestFile"
+    }
 
     if ($Flavor -eq 'offline') {
         $defines += '/DOfflineInstaller=1'
@@ -431,11 +491,21 @@ $partsDirectory = Resolve-RepositoryPath $PayloadPartsDir
 $installerOutputDirectory = Resolve-RepositoryPath $OutputDir
 Assert-RepositoryChildPath $installerOutputDirectory 'Installer output directory'
 New-Item -ItemType Directory -Force -Path $installerOutputDirectory | Out-Null
+$installerModelPackManifestFile = Get-OptionalInstallerModelPackManifest $ModelPackManifestPath
+$installerModelPackManifestFullName = if ($installerModelPackManifestFile) {
+    $installerModelPackManifestFile.FullName
+}
+else {
+    $null
+}
 
 Write-InstallerMessage INFO "Version: $Version"
 Write-InstallerMessage INFO "Release base URL: $($ReleaseBaseUrl.TrimEnd('/'))"
 Write-InstallerMessage INFO "Payload parts directory: $partsDirectory"
 Write-InstallerMessage INFO "Installer output directory: $installerOutputDirectory"
+if ($installerModelPackManifestFile) {
+    Write-InstallerMessage INFO "Installer model-pack manifest: $($installerModelPackManifestFile.FullName)"
+}
 
 if (-not $SkipCompile.IsPresent) {
     $compilerPath = Get-InnoCompiler
@@ -467,6 +537,7 @@ Invoke-InnoCompiler `
     -InstallerOutputDirectory $installerOutputDirectory `
     -HelperExe $helperExe `
     -ManifestPath $manifestPath `
+    -ModelPackManifestFile $installerModelPackManifestFullName `
     -Flavor 'web' `
     -OutputBaseFilename ($webInstallerName -replace '\.exe$', '')
 
@@ -475,6 +546,7 @@ Invoke-InnoCompiler `
     -InstallerOutputDirectory $installerOutputDirectory `
     -HelperExe $helperExe `
     -ManifestPath $manifestPath `
+    -ModelPackManifestFile $installerModelPackManifestFullName `
     -Flavor 'offline' `
     -OutputBaseFilename ($offlineInstallerName -replace '\.exe$', '')
 

@@ -181,6 +181,39 @@ public sealed class InstallerModelPackSelectionTests : IDisposable
     }
 
     [Fact]
+    public void SelectionPageModel_AllowsContinueWithZeroSelectedAndUpdatesSummary()
+    {
+        var page = new InstallerModelPackSelectionPageModel(new InstallerModelPackDiscoveryResult(
+        [
+            CreateRow("first", 1024),
+            CreateRow("second", 2048),
+        ], NoPacksMessage: null));
+
+        Assert.True(page.HasRows);
+        Assert.Equal("Selected: 0 model packs - 0 B", page.SelectedSummaryText);
+
+        page.SelectionState.SetSelected("first", true);
+
+        Assert.Equal("Selected: 1 model pack - 1 KB", page.SelectedSummaryText);
+
+        page.SelectionState.ApplyTopCheckboxAction();
+
+        Assert.Equal("Selected: 2 model packs - 3 KB", page.SelectedSummaryText);
+    }
+
+    [Fact]
+    public void SelectionPageModel_NoPackStateUsesOfflineInstallerMessage()
+    {
+        var page = new InstallerModelPackSelectionPageModel(new InstallerModelPackDiscoveryResult(
+            [],
+            "No optional model packs were found beside this installer."));
+
+        Assert.False(page.HasRows);
+        Assert.Equal(InstallerModelPackSelectionPageModel.OfflineNoPacksText, page.NoPacksMessage);
+        Assert.Equal("Selected: 0 model packs - 0 B", page.SelectedSummaryText);
+    }
+
+    [Fact]
     public void PayloadArgumentParser_PreservesExistingArgumentsWithoutModelPacks()
     {
         var result = PayloadInstallArgumentParser.Parse(

@@ -51,12 +51,45 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("README_WEB_INSTALLER.txt", script);
         Assert.Contains("README_OFFLINE_INSTALLER.txt", script);
         Assert.Contains("SHA256SUMS.installers.txt", script);
+        Assert.Contains("[string]$ModelPackManifestPath", script);
+        Assert.Contains("Get-OptionalInstallerModelPackManifest $ModelPackManifestPath", script);
+        Assert.Contains("/DModelPackManifestFile=$ModelPackManifestFile", script);
         Assert.Contains("artifacts\\release\\split", script);
         Assert.Contains("artifacts\\installer", script);
         Assert.Contains("https://github.com/Henrriegel/v3dfy/releases/download/v0.1.0-preview.1", script);
         Assert.Contains("live download", script);
         Assert.Contains("large scrolling setup log", script);
         Assert.Contains("--framework net10.0-windows", script);
+    }
+
+    [Fact]
+    public void InstallerPackagingScript_ConsumesOptionalModelPackManifestWithoutBuildingPacks()
+    {
+        var script = ReadRepoFile("scripts", "package-release-installers.ps1");
+        var validationFunction = ExtractSourceRange(
+            script,
+            "function Get-OptionalInstallerModelPackManifest",
+            "function Get-PayloadPartFiles");
+        var innoFunction = ExtractSourceRange(
+            script,
+            "function Invoke-InnoCompiler",
+            "function Write-InstallerChecksums");
+
+        Assert.Contains("[string]$ModelPackManifestPath", script);
+        Assert.Contains("Get-RequiredFile $resolvedPath 'Installer model-pack manifest'", validationFunction);
+        Assert.Contains("ConvertFrom-Json -ErrorAction Stop", validationFunction);
+        Assert.Contains("$json.schemaVersion -ne 1", validationFunction);
+        Assert.Contains("$json.packs", validationFunction);
+        Assert.Contains("assetFileName", validationFunction);
+        Assert.Contains("zipSha256", validationFunction);
+        Assert.Contains("zipSizeBytes", validationFunction);
+        Assert.Contains("[string]$ModelPackManifestFile", innoFunction);
+        Assert.Contains("/DModelPackManifestFile=$ModelPackManifestFile", innoFunction);
+        Assert.Contains("-ModelPackManifestFile $installerModelPackManifestFullName", script);
+        Assert.DoesNotContain("build-model-packs.ps1", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Invoke-WebRequest", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Start-BitsTransfer", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Compress-Archive", script, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -76,6 +109,9 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("'{0}.part{1:D2}' -f $ZipFileName, $index", script);
         Assert.Contains("SHA256SUMS.txt", script);
         Assert.Contains("Release payload split count must remain 3", script);
+        Assert.Contains("$basePayloadModelValidatorScript = Join-Path $PSScriptRoot 'validate-base-payload-models.ps1'", script);
+        Assert.Contains("Invoke-BasePayloadModelValidation $publishDirectory", script);
+        Assert.Contains("[Math]::Min([int64]$buffer.Length, $remainingForPart)", script);
     }
 
     [Fact]
@@ -130,6 +166,111 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("Join-Path $setupHelperPublishDirectory 'V3dfy.SetupHelper.exe'", helperPublishFunction);
         Assert.Contains("Copy-Item -Destination $publishDirectory -Recurse -Force", helperPublishFunction);
         Assert.Contains("Publish-SetupHelperForApp", script);
+    }
+
+    [Fact]
+    public void PublishScript_CleansPublishOutputAndValidatesBasePayloadModels()
+    {
+        var script = ReadRepoFile("scripts", "publish-win-x64.ps1");
+        var copyRepositoryDirectoryFunction = ExtractSourceRange(
+            script,
+            "function Copy-RepositoryDirectory",
+            "function Get-Iw3BundleSource");
+
+        Assert.Contains("Reset-Directory $publishDirectory 'Windows x64 publish output directory'", script);
+        Assert.Contains("Remove-Item -LiteralPath $Path -Recurse -Force", script);
+        Assert.Contains("Test-SameOrNestedPath $sourceBundleRoot $publishDirectory", script);
+        Assert.Contains("Iw3BundleRoot must not be the publish output", script);
+        Assert.Contains("$basePayloadModelValidatorScript = Join-Path $PSScriptRoot 'validate-base-payload-models.ps1'", script);
+        Assert.Contains("Invoke-BasePayloadModelValidation", script);
+        Assert.Contains("Remove-Item -LiteralPath $target -Recurse -Force", copyRepositoryDirectoryFunction);
+        Assert.Contains("Copy-Item -LiteralPath $source -Destination $publishDirectory -Recurse -Force", copyRepositoryDirectoryFunction);
+        Assert.DoesNotContain("artifacts\\model-packs", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("artifacts/model-packs", script, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BasePayloadModelGuardScript_AllowsBaseRuntimeAndDeniesOptionalCheckpoints()
+    {
+        var script = ReadRepoFile("scripts", "validate-base-payload-models.ps1");
+
+        Assert.Contains("depth_anything_metric_depth_indoor.pt", script);
+        Assert.Contains("iw3_row_flow_v3_20250627.pth", script);
+        Assert.Contains("iw3_depth_aa_20250530.pth", script);
+        Assert.Contains("depth_anything_v2_vits.pth", script);
+        Assert.Contains("depth_anything_metric_depth_outdoor.pt", script);
+        Assert.Contains("distill_any_depth_vits.safetensors", script);
+        Assert.Contains("da3mono-large.safetensors", script);
+        Assert.Contains("Optional model-pack checkpoint found in base payload", script);
+        Assert.Contains("Rebuild publish output from a clean source bundle or import it through model packs", script);
+    }
+
+    [Fact]
+    public void BasePayloadModelGuard_AllowsSyntheticBaseAndRuntimeFiles()
+    {
+        var root = TestPaths.TempRoot("base-payload-model-guard", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var checkpointRoot = Path.Combine(
+                root,
+                "engine",
+                "iw3",
+                "nunif",
+                "iw3",
+                "pretrained_models",
+                "hub",
+                "checkpoints");
+            Directory.CreateDirectory(checkpointRoot);
+            File.WriteAllText(Path.Combine(checkpointRoot, "depth_anything_metric_depth_indoor.pt"), "base model placeholder");
+            File.WriteAllText(Path.Combine(checkpointRoot, "iw3_row_flow_v3_20250627.pth"), "runtime placeholder");
+            File.WriteAllText(Path.Combine(checkpointRoot, "iw3_depth_aa_20250530.pth"), "depth aa placeholder");
+
+            var result = RunBasePayloadModelGuard(root);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("Base payload model-file guard passed", result.Output);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void BasePayloadModelGuard_FailsForSyntheticOptionalCheckpoint()
+    {
+        var root = TestPaths.TempRoot("base-payload-model-guard", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var checkpointRoot = Path.Combine(
+                root,
+                "engine",
+                "iw3",
+                "nunif",
+                "iw3",
+                "pretrained_models",
+                "hub",
+                "checkpoints");
+            Directory.CreateDirectory(checkpointRoot);
+            File.WriteAllText(Path.Combine(checkpointRoot, "depth_anything_metric_depth_indoor.pt"), "base model placeholder");
+            File.WriteAllText(Path.Combine(checkpointRoot, "depth_anything_v2_vits.pth"), "optional model placeholder");
+
+            var result = RunBasePayloadModelGuard(root);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("Optional model-pack checkpoint found in base payload", result.Output);
+            Assert.Contains("depth_anything_v2_vits.pth", result.Output);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -223,6 +364,60 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("filesandordirs", installerScript);
         Assert.Contains("--ui", installerScript);
         Assert.Contains("SW_SHOW", installerScript);
+    }
+
+    [Fact]
+    public void InnoBootstrap_WiresOptionalModelPackManifestToSetupHelper()
+    {
+        var installerScript = ReadRepoFile("packaging", "inno", "v3dfy-payload-bootstrap.iss");
+        var filesSection = ExtractSourceRange(installerScript, "[Files]", "[Tasks]");
+        var helperArguments = ExtractSourceRange(
+            installerScript,
+            "function BuildHelperArguments(LogPath: String): String;",
+            "function RunPayloadHelper");
+        var prepareToInstall = ExtractSourceRange(
+            installerScript,
+            "function PrepareToInstall(var NeedsRestart: Boolean): String;",
+            "procedure InitializeWizard()");
+
+        Assert.Contains("#ifdef ModelPackManifestFile", installerScript);
+        Assert.Contains("#define ModelPackManifestFileName ExtractFileName(ModelPackManifestFile)", installerScript);
+        Assert.Contains("Source: \"{#ModelPackManifestFile}\"", filesSection);
+        Assert.Contains("DestName: \"{#ModelPackManifestFileName}\"", filesSection);
+        Assert.Contains("--model-packs-manifest", helperArguments);
+        Assert.Contains("ExpandConstant('{tmp}\\{#ModelPackManifestFileName}')", helperArguments);
+        Assert.Contains("if '{#InstallerMode}' = 'offline' then", helperArguments);
+        Assert.Contains("--model-packs-source-dir", helperArguments);
+        Assert.Contains("ExpandConstant('{src}')", helperArguments);
+        Assert.Contains("ExtractTemporaryFile('{#ModelPackManifestFileName}')", prepareToInstall);
+        Assert.Contains("--manifest", helperArguments);
+        Assert.Contains("--mode {#InstallerMode}", helperArguments);
+        Assert.Contains("--parts-dir", helperArguments);
+
+        var sourceDirIndex = helperArguments.IndexOf("--model-packs-source-dir", StringComparison.Ordinal);
+        var offlineModeIndex = helperArguments.IndexOf("if '{#InstallerMode}' = 'offline' then", StringComparison.Ordinal);
+        Assert.True(sourceDirIndex > offlineModeIndex);
+        Assert.DoesNotContain("C:\\", filesSection, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InstallerReadmes_ExplainOptionalModelPacksWithoutListingFutureModels()
+    {
+        var script = ReadRepoFile("scripts", "package-release-installers.ps1");
+
+        Assert.Contains("Optional model packs can be selected during setup", script);
+        Assert.Contains("Selected optional packs are downloaded from the release", script);
+        Assert.Contains("You may select none because", script);
+        Assert.Contains("v3dfy includes a base model", script);
+        Assert.Contains("model packs can also be imported later from", script);
+        Assert.Contains("Optional model-pack ZIPs can be placed beside the offline setup EXE", script);
+        Assert.Contains("matching official model-pack ZIPs found", script);
+        Assert.Contains("will appear during", script);
+        Assert.Contains("If none are found, v3dfy still installs with its base model", script);
+        Assert.DoesNotContain("DepthPro", script);
+        Assert.DoesNotContain("Video Depth Anything", script);
+        Assert.DoesNotContain("non-commercial", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("future model", script, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -334,4 +529,32 @@ public sealed class ReleaseInstallerPackagingTests
 
         return source[start..end];
     }
+
+    private static ScriptResult RunBasePayloadModelGuard(string publishDirectory)
+    {
+        var scriptPath = Path.Combine(RepositoryRoot(), "scripts", "validate-base-payload-models.ps1");
+        var startInfo = new System.Diagnostics.ProcessStartInfo("powershell")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-ExecutionPolicy");
+        startInfo.ArgumentList.Add("Bypass");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(scriptPath);
+        startInfo.ArgumentList.Add("-PublishDir");
+        startInfo.ArgumentList.Add(publishDirectory);
+
+        using var process = System.Diagnostics.Process.Start(startInfo);
+        Assert.NotNull(process);
+        var output = process.StandardOutput.ReadToEnd() + process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        return new ScriptResult(process.ExitCode, output);
+    }
+
+    private sealed record ScriptResult(int ExitCode, string Output);
 }

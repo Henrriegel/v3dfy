@@ -10,6 +10,10 @@ public enum SetupProgressPhase
     VerifyingZip,
     ExtractingPayload,
     InstallingPayload,
+    DownloadingModelPack,
+    VerifyingModelPack,
+    ValidatingModelPack,
+    InstallingModelPack,
     CleaningUp,
     Completed,
 }

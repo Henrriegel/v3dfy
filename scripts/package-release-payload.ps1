@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $portableZipFileName = "v3dfy-v$Version-win-x64-portable.zip"
+$basePayloadModelValidatorScript = Join-Path $PSScriptRoot 'validate-base-payload-models.ps1'
 
 function Write-PayloadMessage {
     param(
@@ -83,6 +84,25 @@ function Get-RequiredFile {
     return Get-Item -LiteralPath $Path
 }
 
+function Invoke-BasePayloadModelValidation {
+    param([string]$PublishDirectory)
+
+    Get-RequiredFile $basePayloadModelValidatorScript 'Base payload model validator' | Out-Null
+
+    $validationOutput = & powershell `
+        -NoProfile `
+        -ExecutionPolicy Bypass `
+        -File $basePayloadModelValidatorScript `
+        -PublishDir $PublishDirectory 2>&1
+    foreach ($line in $validationOutput) {
+        Write-Host $line
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Base payload model validation failed with exit code $LASTEXITCODE."
+    }
+}
+
 function Split-PortableZip {
     param(
         [string]$ZipPath,
@@ -127,7 +147,7 @@ function Split-PortableZip {
             $destination = [System.IO.File]::Create($partPath)
             try {
                 while ($remainingForPart -gt 0) {
-                    $readLength = [int][Math]::Min($buffer.Length, $remainingForPart)
+                    $readLength = [int][Math]::Min([int64]$buffer.Length, $remainingForPart)
                     $bytesRead = $source.Read($buffer, 0, $readLength)
                     if ($bytesRead -le 0) {
                         throw "Unexpected end of ZIP while writing $partName."
@@ -182,6 +202,7 @@ Assert-RepositoryChildPath $splitDirectory 'Release payload split directory'
 Get-RequiredDirectory $publishDirectory 'Windows x64 publish output' | Out-Null
 Get-RequiredFile (Join-Path $publishDirectory 'V3dfy.App.exe') 'Published app executable' | Out-Null
 Get-RequiredFile (Join-Path $publishDirectory 'V3dfy.SetupHelper.exe') 'Published setup helper executable' | Out-Null
+Invoke-BasePayloadModelValidation $publishDirectory
 
 New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
 $zipPath = Join-Path $releaseDirectory $portableZipFileName
