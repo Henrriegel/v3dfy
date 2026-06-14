@@ -12,17 +12,22 @@ public sealed class Iw3CommandBuilderTests
         Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
         LocalModelPlanSource.UnmanagedLocalFile);
 
-    public static TheoryData<string, string> KnownDepthModelData => new()
+    public static TheoryData<string, string, string> KnownDepthModelData
     {
-        { Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDAnyNDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
-    };
+        get
+        {
+            var data = new TheoryData<string, string, string>();
+            foreach (var entry in Iw3DepthModelMapper.RegistryEntries.Where(static entry => entry.IsReadySelectable))
+            {
+                data.Add(
+                    entry.Key,
+                    Assert.Single(entry.ExpectedRelativePaths),
+                    entry.DepthModelName);
+            }
+
+            return data;
+        }
+    }
 
     [Fact]
     public void Build_UsesConfirmedBaseStructuredArguments()
@@ -71,13 +76,16 @@ public sealed class Iw3CommandBuilderTests
     [Theory]
     [MemberData(nameof(KnownDepthModelData))]
     public void Build_RecognizedDepthModelsUseMappedIw3DepthModelArgument(
+        string key,
         string relativePath,
         string depthModelName)
     {
         var command = Build(selectedLocalModel: new(
             Path.GetFileName(relativePath),
             relativePath,
-            LocalModelPlanSource.UnmanagedLocalFile));
+            LocalModelPlanSource.UnmanagedLocalFile,
+            Iw3DepthModelName: depthModelName,
+            MappingKey: key));
 
         AssertContainsAdjacentArguments(
             command.Arguments,
@@ -87,6 +95,20 @@ public sealed class Iw3CommandBuilderTests
         Assert.DoesNotContain(
             command.Arguments,
             argument => argument.Contains(relativePath, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_GatedSafeProviderDoesNotAddDepthModelArgument()
+    {
+        var command = Build(selectedLocalModel: new(
+            Iw3DepthModelMapper.DepthProEnglishName,
+            Iw3DepthModelMapper.DepthProRelativePath,
+            LocalModelPlanSource.UnmanagedLocalFile,
+            Iw3DepthModelName: Iw3DepthModelMapper.DepthProDepthModelName,
+            MappingKey: Iw3DepthModelMapper.DepthProKey));
+
+        Assert.DoesNotContain(Iw3CliContract.DepthModelSwitch, command.Arguments);
+        Assert.DoesNotContain(Iw3DepthModelMapper.DepthProDepthModelName, command.Arguments);
     }
 
     [Fact]

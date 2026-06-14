@@ -33,9 +33,73 @@ public sealed class MainWindowModelPackImportSourceTests
             "private ModelPackAppImportRequest CreateModelPackAppImportRequest");
 
         Assert.Contains("IsModelPackImportRunning = true;", method);
+        Assert.Contains("ShowGlobalBusyOverlay(", method);
         Assert.Contains("catch (Exception exception)", method);
         Assert.Contains("finally", method);
         Assert.Contains("IsModelPackImportRunning = false;", method);
+        Assert.Contains("HideGlobalBusyOverlay();", method);
+    }
+
+    [Fact]
+    public void GlobalBusyOverlay_BlocksAppDuringShortModelPackAndRefreshOperations()
+    {
+        var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var overlay = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"GlobalBusyOverlay\"",
+            "</Window>");
+        var importMethod = ExtractSourceRange(
+            source,
+            "private async Task ImportModelPackAsync",
+            "private ModelPackAppImportRequest CreateModelPackAppImportRequest");
+        var requestFactory = ExtractSourceRange(
+            source,
+            "private ModelPackAppImportRequest CreateModelPackAppImportRequest",
+            "private async Task<bool> ConfirmModelPackImportAsync");
+        var confirmMethod = ExtractSourceRange(
+            source,
+            "private void ConfirmModelPackImport",
+            "private void CancelModelPackImport");
+
+        Assert.Contains("Visibility=\"{Binding GlobalBusyOverlayVisibility}\"", overlay);
+        Assert.Contains("Background=\"#80000000\"", overlay);
+        Assert.Contains("Text=\"{Binding GlobalBusyText}\"", overlay);
+        Assert.Contains("IsIndeterminate=\"True\"", overlay);
+        Assert.Contains("Panel.ZIndex=\"30\"", xaml);
+        Assert.Contains("public bool IsGlobalBusyOverlayVisible", source);
+        Assert.Contains("public Visibility GlobalBusyOverlayVisibility", source);
+        Assert.Contains("public string GlobalBusyText", source);
+        Assert.Contains("\"Loading...\"", source);
+        Assert.Contains("\"Cargando...\"", source);
+        Assert.Contains("\"Validating model pack...\"", importMethod);
+        Assert.Contains("\"Validando paquete de modelos...\"", importMethod);
+        Assert.Contains("HideGlobalBusyOverlay();", requestFactory);
+        Assert.Contains("\"Refreshing model inventory...\"", requestFactory);
+        Assert.Contains("\"Actualizando inventario de modelos...\"", requestFactory);
+        Assert.Contains("\"Importing model pack...\"", confirmMethod);
+        Assert.Contains("\"Importando paquete de modelos...\"", confirmMethod);
+    }
+
+    [Fact]
+    public void GlobalBusyOverlay_IsNotUsedAsPreviewOrConversionProgressUi()
+    {
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var previewMethod = ExtractSourceRange(
+            source,
+            "private async Task GeneratePreviewCoreAsync",
+            "private void ApplyPreviewProgressUpdate");
+        var conversionMethod = ExtractSourceRange(
+            source,
+            "private async Task StartConversionAsync",
+            "private void ApplyConversionProgressUpdate");
+
+        Assert.DoesNotContain("ShowGlobalBusyOverlay", previewMethod);
+        Assert.DoesNotContain("GlobalBusy", previewMethod);
+        Assert.DoesNotContain("ShowGlobalBusyOverlay", conversionMethod);
+        Assert.DoesNotContain("GlobalBusy", conversionMethod);
+        Assert.Contains("IsPreviewGeneratingModalOpen = true;", previewMethod);
+        Assert.Contains("ConversionExecutionStatus.Running", conversionMethod);
     }
 
     [Fact]
@@ -292,7 +356,7 @@ public sealed class MainWindowModelPackImportSourceTests
         Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", xaml);
         Assert.Contains("Style=\"{StaticResource V3dfyModalCardStyle}\"", xaml);
         Assert.Contains("Width=\"{Binding ActiveModalWidth}\"", xaml);
-        Assert.Contains("ActiveModalWidth => IsModelInventoryModalOpen ? 1000d : 760d", source);
+        Assert.Contains("ActiveModalWidth => IsModelInventoryModalOpen || IsModelHelpModalOpen ? 1000d : 760d", source);
         Assert.Contains("Text=\"{Binding ModelInventoryIntroText}\"", modalBody);
         Assert.Contains("Text=\"{Binding ModelInventoryFolderPathText}\"", modalBody);
         Assert.Contains("Text=\"{Binding SelectableModelsSectionTitleText}\"", modalBody);

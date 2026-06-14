@@ -26,11 +26,13 @@ public sealed class VideoConversionPlanService
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(healthStatus);
 
+        var selectedLocalModelPlan = CreateLocalModelPlanSelection(selectedLocalModel);
         var outputPath = string.IsNullOrWhiteSpace(options.CustomOutputPath)
             ? CreateSuggestedOutputPath(
                 analysis.InputPath,
                 options.OutputContainer,
-                options.ThreeDOutputFormat)
+                options.ThreeDOutputFormat,
+                selectedLocalModelPlan)
             : options.CustomOutputPath;
         var request = new ConversionRequest(
             InputPath: analysis.InputPath,
@@ -39,7 +41,6 @@ public sealed class VideoConversionPlanService
             ThreeDOutputFormat: options.ThreeDOutputFormat,
             AiQualityPreset: options.QualityPreset,
             ThreeDIntensity: options.Intensity);
-        var selectedLocalModelPlan = CreateLocalModelPlanSelection(selectedLocalModel);
         var audioCodec = GetAudioCodecForContainer(
             options.OutputContainer,
             recommendation.AudioCodec);
@@ -161,18 +162,91 @@ public sealed class VideoConversionPlanService
     public static string CreateSuggestedOutputPath(
         string inputPath,
         OutputContainer outputContainer,
-        ThreeDOutputFormat threeDOutputFormat)
+        ThreeDOutputFormat threeDOutputFormat,
+        LocalModelSelectionCandidate? selectedLocalModel = null)
+    {
+        var selectedModel = selectedLocalModel is null
+            ? null
+            : LocalModelPlanSelection.FromCandidate(selectedLocalModel);
+        return CreateSuggestedOutputPath(
+            inputPath,
+            outputContainer,
+            threeDOutputFormat,
+            selectedModel);
+    }
+
+    private static string CreateSuggestedOutputPath(
+        string inputPath,
+        OutputContainer outputContainer,
+        ThreeDOutputFormat threeDOutputFormat,
+        LocalModelPlanSelection? selectedLocalModel)
     {
         var directory = Path.GetDirectoryName(inputPath);
         var fileName = Path.GetFileNameWithoutExtension(inputPath);
         var extension = outputContainer.ToString().ToLowerInvariant();
         var layoutSuffix = GetLayoutSuffix(threeDOutputFormat);
-        var outputName = $"{fileName}.v3dfy.3d.{layoutSuffix}.{extension}";
+        var modelSlug = CreateModelSlug(selectedLocalModel);
+        var modelSegment = string.IsNullOrWhiteSpace(modelSlug) ||
+            fileName.Contains(modelSlug, StringComparison.OrdinalIgnoreCase)
+                ? string.Empty
+                : $".{modelSlug}";
+        var outputName = $"{fileName}{modelSegment}.v3dfy.3d.{layoutSuffix}.{extension}";
 
         return string.IsNullOrWhiteSpace(directory)
             ? outputName
             : Path.Combine(directory, outputName);
     }
+
+    private static string CreateModelSlug(LocalModelPlanSelection? selectedLocalModel)
+    {
+        if (selectedLocalModel is null)
+        {
+            return string.Empty;
+        }
+
+        var source = FirstNonEmpty(
+            selectedLocalModel.MappingKey,
+            selectedLocalModel.DisplayName,
+            selectedLocalModel.FileName,
+            selectedLocalModel.Id);
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return string.Empty;
+        }
+
+        var slug = new List<char>(source.Length);
+        var previousWasSeparator = false;
+        foreach (var rawCharacter in source.Trim().ToLowerInvariant())
+        {
+            var character = rawCharacter is >= 'a' and <= 'z' or >= '0' and <= '9'
+                ? rawCharacter
+                : '-';
+            if (character == '-')
+            {
+                if (previousWasSeparator || slug.Count == 0)
+                {
+                    continue;
+                }
+
+                previousWasSeparator = true;
+                slug.Add(character);
+                continue;
+            }
+
+            previousWasSeparator = false;
+            slug.Add(character);
+        }
+
+        while (slug.Count > 0 && slug[^1] == '-')
+        {
+            slug.RemoveAt(slug.Count - 1);
+        }
+
+        return new string(slug.ToArray());
+    }
+
+    private static string FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 
     private static string GetLayoutSuffix(ThreeDOutputFormat format) => format switch
     {

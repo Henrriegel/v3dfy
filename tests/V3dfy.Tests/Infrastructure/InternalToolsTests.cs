@@ -852,7 +852,7 @@ public sealed class InternalToolsTests
     }
 
     [Fact]
-    public void DetailedHealthCheck_WithAllKnownModelFiles_AllEightAreSelectable()
+    public void DetailedHealthCheck_WithAllKnownModelFiles_AllReadyEntriesAreSelectable()
     {
         var paths = CreateToolLayout();
         foreach (var relativePath in KnownIw3DepthModelRelativePaths())
@@ -865,10 +865,46 @@ public sealed class InternalToolsTests
         var selectable = Iw3DepthModelMapper.CreateSelectableCandidates(
             health.ModelInventory.SelectionCandidates,
             useSpanish: false);
-        Assert.Equal(8, selectable.Count);
+        Assert.Equal(16, selectable.Count);
         Assert.Equal(
-            Iw3DepthModelMapper.RegistryEntries.Select(entry => entry.Key).Order(StringComparer.OrdinalIgnoreCase),
+            Iw3DepthModelMapper.RegistryEntries
+                .Where(entry => entry.IsReadySelectable)
+                .Select(entry => entry.Key)
+                .Order(StringComparer.OrdinalIgnoreCase),
             selectable.Select(candidate => candidate.MappingKey).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(Iw3DepthModelMapper.GetUnmappedCandidates(
+            health.ModelInventory.SelectionCandidates));
+    }
+
+    [Fact]
+    public void DetailedHealthCheck_WithAllSafeWithNoticeModelFiles_ReadySafeEntriesAreSelectable()
+    {
+        var paths = CreateToolLayout();
+        var safeEntries = Iw3DepthModelMapper.RegistryEntries
+            .Where(entry => entry.RedistributionDecision ==
+                Iw3DepthModelRedistributionDecision.SafeWithNotice)
+            .ToArray();
+        foreach (var relativePath in safeEntries
+            .SelectMany(entry => entry.ExpectedRelativePaths)
+            .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            WriteModelFile(paths, relativePath);
+        }
+
+        var health = new InternalToolsHealthChecker().CheckDetailed(paths);
+
+        var selectable = Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false);
+        Assert.Equal(13, selectable.Count);
+        Assert.Equal(
+            safeEntries
+                .Where(entry => entry.IsReadySelectable)
+                .Select(entry => entry.Key)
+                .Order(StringComparer.OrdinalIgnoreCase),
+            selectable.Select(candidate => candidate.MappingKey).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(Iw3DepthModelMapper.GetUnmappedCandidates(
+            health.ModelInventory.SelectionCandidates));
     }
 
     [Fact]
@@ -997,6 +1033,7 @@ public sealed class InternalToolsTests
     private static IReadOnlyList<string> KnownIw3DepthModelRelativePaths() =>
         Iw3DepthModelMapper.RegistryEntries
             .SelectMany(entry => entry.ExpectedRelativePaths)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
     private static void CreateReadyIw3Engine(InternalToolPaths paths)

@@ -19,17 +19,22 @@ public sealed class LocalIw3ProcessRequestBuilderTests
 
     private readonly LocalIw3ProcessRequestBuilder _builder = new();
 
-    public static TheoryData<string, string> KnownDepthModelData => new()
+    public static TheoryData<string, string, string> KnownDepthModelData
     {
-        { Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDAnyNDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
-    };
+        get
+        {
+            var data = new TheoryData<string, string, string>();
+            foreach (var entry in Iw3DepthModelMapper.RegistryEntries.Where(static entry => entry.IsReadySelectable))
+            {
+                data.Add(
+                    entry.Key,
+                    entry.ExpectedRelativePaths[0],
+                    entry.DepthModelName);
+            }
+
+            return data;
+        }
+    }
 
     [Fact]
     public void Build_UsesEmbeddedPythonExecutableFromRequest()
@@ -135,13 +140,16 @@ public sealed class LocalIw3ProcessRequestBuilderTests
     [Theory]
     [MemberData(nameof(KnownDepthModelData))]
     public void Build_RecognizedSelectedLocalModelsAddMatchingVerifiedDepthModelArgument(
+        string key,
         string relativePath,
         string depthModelName)
     {
         var processRequest = _builder.Build(CreateRequest(selectedModel: new(
             FileName(relativePath),
             relativePath,
-            LocalModelPlanSource.UnmanagedLocalFile)));
+            LocalModelPlanSource.UnmanagedLocalFile,
+            Iw3DepthModelName: depthModelName,
+            MappingKey: key)));
 
         AssertContainsAdjacentArguments(
             processRequest.Arguments,

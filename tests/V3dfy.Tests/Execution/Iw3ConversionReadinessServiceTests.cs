@@ -9,16 +9,43 @@ public sealed class Iw3ConversionReadinessServiceTests
 {
     private readonly Iw3ConversionReadinessService _service = new();
 
-    public static TheoryData<string, string> KnownOptionalDepthModelData => new()
+    public static TheoryData<string, string, string> KnownOptionalDepthModelData
     {
-        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
-    };
+        get
+        {
+            var data = new TheoryData<string, string, string>();
+            foreach (var entry in Iw3DepthModelMapper.RegistryEntries.Where(static entry =>
+                entry.Availability == Iw3DepthModelAvailability.OptionalImportable &&
+                entry.IsReadySelectable))
+            {
+                data.Add(
+                    entry.Key,
+                    entry.ExpectedRelativePaths[0],
+                    entry.DepthModelName);
+            }
+
+            return data;
+        }
+    }
+
+    public static TheoryData<string, string, string> GatedSafeDepthModelData
+    {
+        get
+        {
+            var data = new TheoryData<string, string, string>();
+            foreach (var entry in Iw3DepthModelMapper.RegistryEntries.Where(static entry =>
+                entry.IsPublicPackEligible &&
+                !entry.IsReadySelectable))
+            {
+                data.Add(
+                    entry.Key,
+                    entry.ExpectedRelativePaths[0],
+                    entry.DepthModelName);
+            }
+
+            return data;
+        }
+    }
 
     [Fact]
     public void ApplyIw3ExecutionRequirements_MappedModelKeepsReadinessReady()
@@ -37,6 +64,7 @@ public sealed class Iw3ConversionReadinessServiceTests
     [Theory]
     [MemberData(nameof(KnownOptionalDepthModelData))]
     public void ApplyIw3ExecutionRequirements_MappedOptionalModelKeepsReadinessReady(
+        string key,
         string relativePath,
         string depthModelName)
     {
@@ -46,10 +74,34 @@ public sealed class Iw3ConversionReadinessServiceTests
                 FileName(relativePath),
                 relativePath,
                 LocalModelPlanSource.UnmanagedLocalFile,
-                Iw3DepthModelName: depthModelName));
+                Iw3DepthModelName: depthModelName,
+                MappingKey: key));
 
         Assert.True(readiness.CanConvert);
         Assert.Empty(readiness.Issues);
+    }
+
+    [Theory]
+    [MemberData(nameof(GatedSafeDepthModelData))]
+    public void ApplyIw3ExecutionRequirements_GatedSafeProviderBlocksReadiness(
+        string key,
+        string relativePath,
+        string depthModelName)
+    {
+        var readiness = _service.ApplyIw3ExecutionRequirements(
+            ReadyReadiness(),
+            new(
+                FileName(relativePath),
+                relativePath,
+                LocalModelPlanSource.UnmanagedLocalFile,
+                Iw3DepthModelName: depthModelName,
+                MappingKey: key));
+
+        Assert.False(readiness.CanConvert);
+        Assert.Contains(
+            readiness.Issues,
+            issue => issue.EnglishMessage ==
+                "Selected local model is not mapped to a verified iw3 depth model yet.");
     }
 
     [Fact]

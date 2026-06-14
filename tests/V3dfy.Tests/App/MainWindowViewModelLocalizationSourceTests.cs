@@ -255,6 +255,18 @@ public sealed class MainWindowViewModelLocalizationSourceTests
             source,
             "public string ConversionReadinessMissingComponentsSummaryText",
             "public string ConversionReadinessRequiredComponentsText");
+        var missingVisibilityProperty = ExtractSourceRange(
+            source,
+            "public Visibility ConversionMissingRequirementsVisibility",
+            "public string ConversionReadinessStatusText");
+        var readySummaryProperty = ExtractSourceRange(
+            source,
+            "public Visibility ConversionReadySummaryVisibility",
+            "public Visibility CancelConversionPrimaryActionVisibility");
+        var runningStatusProperty = ExtractSourceRange(
+            source,
+            "public Visibility ConversionRunningStatusVisibility",
+            "public double ConversionProgressBarValue");
         var blockedReasonProperty = ExtractSourceRange(
             source,
             "public string ConversionBlockedReasonText",
@@ -263,6 +275,10 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.Contains("IsConversionRunning || IsPreviewGenerating || IsCurrentPreviewAccepted", previewRequirementProperty);
         Assert.Contains("!IsConversionRunning && !IsPreviewGenerating && !IsCurrentPreviewAccepted", previewRequirementProperty);
         Assert.Contains("IsCurrentPreviewAccepted && !IsConversionRunning && !IsPreviewGenerating", previewRequirementProperty);
+        Assert.Contains("CanStartConversion ? Visibility.Visible : Visibility.Collapsed", readySummaryProperty);
+        Assert.Contains("IsConversionRunning ? Visibility.Visible : Visibility.Collapsed", runningStatusProperty);
+        Assert.Contains("ShouldShowConversionMissingRequirements()", missingVisibilityProperty);
+        Assert.Contains("startGate.Blocker != ConversionExecutionBlocker.PreviewRequired", source);
         Assert.Contains("if (IsConversionRunning)", readinessStatusProperty);
         Assert.Contains("Text(\"Converting\", \"Convirtiendo\")", readinessStatusProperty);
         Assert.Contains("if (IsPreviewGenerating)", readinessStatusProperty);
@@ -620,6 +636,131 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.DoesNotContain("SetDefaultPreviewTimeRangeFromAnalysis", resetOutputPathMethod);
         Assert.DoesNotContain("MarkPreviewOutdated", openAfterFinishProperty);
         Assert.DoesNotContain("RegenerateConversionPlan", openAfterFinishProperty);
+    }
+
+    [Fact]
+    public void FinalConversionSuccess_ShowsCompletionModalInsteadOfOpeningImmediately()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var startMethod = ExtractSourceRange(
+            source,
+            "private async Task StartConversionAsync",
+            "private void BlockConversionStart");
+
+        Assert.Contains("if (result.Success && !result.WasCanceled)", startMethod);
+        Assert.Contains("ShowConversionCompletedModal(result, request.OutputPath);", startMethod);
+        Assert.DoesNotContain("HandleOpenOutputWhenFinished(result, request.OutputPath);", startMethod);
+        Assert.DoesNotContain("MessageBox", source);
+    }
+
+    [Fact]
+    public void ConversionProgress_UpdatesTimingEstimatesFromNormalizedProgress()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var progressMethod = ExtractSourceRange(
+            source,
+            "private void ApplyConversionProgressUpdate",
+            "private void AddConversionOutputLine");
+        var timingMethod = ExtractSourceRange(
+            source,
+            "private int UpdateConversionTimingEstimate",
+            "private void AddConversionOutputLine");
+        var startMethod = ExtractSourceRange(
+            source,
+            "private async Task StartConversionAsync",
+            "private void BlockConversionStart");
+        var resetMethod = ExtractSourceRange(
+            source,
+            "private void ResetWorkflowAfterSuccessfulConversion",
+            "private static ConversionExecutionState CreateFinishedConversionState");
+
+        Assert.Contains("var progressPercent = UpdateConversionTimingEstimate(normalizedUpdate);", progressMethod);
+        Assert.Contains("ProgressPercent = progressPercent", progressMethod);
+        Assert.Contains("ConversionProgressTimingEstimator.Estimate", timingMethod);
+        Assert.Contains("progressUpdate.OutputLine?.Text", timingMethod);
+        Assert.Contains("estimate?.ProgressPercent", timingMethod);
+        Assert.Contains("_conversionTimingEstimate = _conversionTimingSmoother.Smooth(estimate);", timingMethod);
+        Assert.Contains("private readonly ConversionProgressTimingSmoother _conversionTimingSmoother = new();", source);
+        Assert.Contains("private void ResetConversionTimingEstimate()", source);
+        Assert.Contains("ResetConversionTimingEstimate();", startMethod);
+        Assert.Contains("ResetConversionTimingEstimate();", resetMethod);
+    }
+
+    [Fact]
+    public void PreviewProgress_ExposesDeterminateAndIndeterminateState()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var previewProgressMethod = ExtractSourceRange(
+            source,
+            "private void ApplyPreviewProgressUpdateOnUiThread",
+            "private void StartOrCancelConversion");
+
+        Assert.Contains("public int PreviewProgressPercent", source);
+        Assert.Contains("public string PreviewProgressText", source);
+        Assert.Contains("public bool PreviewProgressIsIndeterminate", source);
+        Assert.Contains("_previewProgressPercent = PreviewProgressResolver.Resolve(", previewProgressMethod);
+        Assert.DoesNotContain("MapPreviewProgressToGlobal", source);
+        Assert.DoesNotContain("ScalePreviewStageProgress", source);
+        Assert.Contains("_previewProgressPercent = 100;", source);
+        Assert.Contains("_previewProgressPercent = 0;", source);
+        Assert.Contains("OnPropertyChanged(nameof(PreviewProgressPercent));", source);
+        Assert.Contains("OnPropertyChanged(nameof(PreviewProgressText));", source);
+        Assert.Contains("OnPropertyChanged(nameof(PreviewProgressIsIndeterminate));", source);
+    }
+
+    [Fact]
+    public void ConversionCompletedAccept_OpensOutputThenResetsWorkflow()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var acceptMethod = ExtractSourceRange(
+            source,
+            "private void AcceptConversionCompleted",
+            "private void ResetWorkflowAfterSuccessfulConversion");
+
+        Assert.Contains("public RelayCommand AcceptConversionCompletedCommand", source);
+        Assert.Contains("HandleOpenOutputWhenFinished(result, finalOutputPath);", acceptMethod);
+        Assert.Contains("ResetWorkflowAfterSuccessfulConversion();", acceptMethod);
+        Assert.Contains("IsConversionCompletedModalOpen = false;", acceptMethod);
+        Assert.Contains("_completedConversionResult = null;", acceptMethod);
+    }
+
+    [Fact]
+    public void ResetWorkflowAfterSuccessfulConversion_ClearsOnlyVideoSpecificState()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var resetMethod = ExtractSourceRange(
+            source,
+            "private void ResetWorkflowAfterSuccessfulConversion",
+            "private static ConversionExecutionState CreateFinishedConversionState");
+
+        Assert.Contains("SelectedVideoPath = null;", resetMethod);
+        Assert.Contains("HasCompletedAnalysis = false;", resetMethod);
+        Assert.Contains("_analysis = null;", resetMethod);
+        Assert.Contains("_conversionRecommendation = null;", resetMethod);
+        Assert.Contains("_conversionPlan = null;", resetMethod);
+        Assert.Contains("_conversionReadiness = null;", resetMethod);
+        Assert.Contains("_outputPathState.ClearCustomOutputPath();", resetMethod);
+        Assert.Contains("SetOutputPathText(string.Empty);", resetMethod);
+        Assert.Contains("PreviewWorkflowState.NotGenerated", resetMethod);
+        Assert.Contains("_conversionExecutionState = ConversionExecutionState.NotStarted();", resetMethod);
+        Assert.Contains("UpdateConversionReadiness();", resetMethod);
+        Assert.DoesNotContain("Logs.Clear", resetMethod);
+        Assert.DoesNotContain("ToolStatuses.Clear", resetMethod);
+        Assert.DoesNotContain("LocalModelCandidates.Clear", resetMethod);
+        Assert.DoesNotContain("DeletePreview", resetMethod);
+    }
+
+    [Fact]
+    public void ConversionCompletedModal_IsPartOfActiveModalState()
+    {
+        var source = ReadMainWindowViewModelSource();
+
+        Assert.Contains("public bool IsConversionCompletedModalOpen", source);
+        Assert.Contains("public Visibility ConversionCompletedModalContentVisibility", source);
+        Assert.Contains("if (IsConversionCompletedModalOpen)", source);
+        Assert.Contains("return ConversionCompletedTitleText;", source);
+        Assert.Contains("IsConversionCompletedModalOpen ||", source);
+        Assert.Contains("OnPropertyChanged(nameof(ConversionCompletedModalContentVisibility));", source);
     }
 
     [Fact]

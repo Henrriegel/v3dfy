@@ -30,6 +30,21 @@ using V3dfy.Infrastructure.Processes;
 
 namespace V3dfy.App.ViewModels;
 
+public sealed record ModelHelpRow(
+    string Model,
+    string Purpose,
+    string Use,
+    string Scene,
+    string Depth,
+    string SizePerformance);
+
+public sealed record SelectableModelInventoryRow(
+    string Model,
+    string Iw3DepthModel,
+    string Checkpoint,
+    string Type,
+    string Source);
+
 public sealed class MainWindowViewModel : ObservableObject
 {
     private const string SetupHelperExecutableName = "V3dfy.SetupHelper.exe";
@@ -76,6 +91,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
     private readonly ConversionWorkflowState _workflowState = new();
+    private readonly ConversionProgressTimingSmoother _conversionTimingSmoother = new();
     private readonly StringBuilder _previewGenerationLogTextBuilder = new();
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
@@ -114,6 +130,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _modelPackImportStatusSpanishText = "Aun no se ha importado ningun paquete de modelos.";
     private string _lastModelPackImportSummaryEnglishText = string.Empty;
     private string _lastModelPackImportSummarySpanishText = string.Empty;
+    private string _globalBusyEnglishText = "Loading...";
+    private string _globalBusySpanishText = "Cargando...";
+    private string _completedConversionOutputPath = string.Empty;
+    private ConversionExecutionResult? _completedConversionResult;
+    private ConversionProgressTimingEstimate? _conversionTimingEstimate;
     private ProcessMetricSample? _lastProcessMetricSample;
     private ProcessMetricSample? _lastPreviewMetricSample;
     private PreviewCachePaths? _lastPreviewCachePaths;
@@ -128,12 +149,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _isAnalyzing;
     private bool _isTechnicalDetailsModalOpen;
     private bool _isProfileDetailsModalOpen;
+    private bool _isModelHelpModalOpen;
     private bool _isReplaceVideoConfirmationModalOpen;
     private bool _isModelPackImportConfirmationModalOpen;
     private bool _isModelInventoryModalOpen;
     private bool _isActivityLogModalOpen;
     private bool _isPreviewGeneratingModalOpen;
     private bool _isPreviewReadyModalOpen;
+    private bool _isConversionCompletedModalOpen;
     private bool _isLogCopyNotificationVisible;
     private bool _hasLiveConversionOutput;
     private bool _openOutputWhenFinished;
@@ -144,6 +167,8 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _hasLoggedPreviewCancellationSummary;
     private bool _isApplyingUiOnlyRefresh;
     private bool _isModelPackImportRunning;
+    private bool _isGlobalBusyOverlayVisible;
+    private int _previewProgressPercent;
 
     public MainWindowViewModel()
     {
@@ -191,7 +216,7 @@ public sealed class MainWindowViewModel : ObservableObject
             AnalyzeAsync,
             () => !IsAnalyzing && !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning);
         RefreshEngineStatusCommand = new AsyncRelayCommand(
-            () => RefreshEngineStatusAsync(logRefresh: true),
+            () => RefreshEngineStatusWithGlobalBusyAsync(logRefresh: true),
             () => CanUseSystemStatusActions);
         OpenEngineFolderCommand = new RelayCommand(OpenEngineFolder);
         OpenModelsFolderCommand = new RelayCommand(OpenModelsFolder);
@@ -199,6 +224,10 @@ public sealed class MainWindowViewModel : ObservableObject
             ShowModelInventory,
             () => CanUseSystemStatusActions);
         CloseModelInventoryCommand = new RelayCommand(CloseModelInventory);
+        ShowModelHelpCommand = new RelayCommand(
+            ShowModelHelp,
+            () => CanShowModelHelp);
+        CloseModelHelpCommand = new RelayCommand(CloseModelHelp);
         ClearLogsCommand = new RelayCommand(ClearLogs);
         BrowseOutputFolderCommand = new RelayCommand(
             BrowseOutputFolder,
@@ -236,6 +265,7 @@ public sealed class MainWindowViewModel : ObservableObject
         CancelModelPackImportCommand = new RelayCommand(CancelModelPackImport);
         ConfirmReplaceVideoCommand = new RelayCommand(ConfirmReplaceVideo);
         CancelReplaceVideoCommand = new RelayCommand(CancelReplaceVideo);
+        AcceptConversionCompletedCommand = new RelayCommand(AcceptConversionCompleted);
 
         _themeService.Apply(_selectedTheme);
         _ = CleanStalePreviewFilesAsync();
@@ -612,6 +642,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 BrowseOutputFolderCommand.RaiseCanExecuteChanged();
                 ResetOutputPathCommand.RaiseCanExecuteChanged();
                 ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+                ShowModelHelpCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -642,6 +673,25 @@ public sealed class MainWindowViewModel : ObservableObject
         string.IsNullOrWhiteSpace(LastModelPackImportSummary)
             ? Visibility.Collapsed
             : Visibility.Visible;
+
+    public bool IsGlobalBusyOverlayVisible
+    {
+        get => _isGlobalBusyOverlayVisible;
+        private set
+        {
+            if (SetProperty(ref _isGlobalBusyOverlayVisible, value))
+            {
+                OnPropertyChanged(nameof(GlobalBusyOverlayVisibility));
+            }
+        }
+    }
+
+    public Visibility GlobalBusyOverlayVisibility =>
+        IsGlobalBusyOverlayVisible ? Visibility.Visible : Visibility.Collapsed;
+
+    public string GlobalBusyText => Text(
+        string.IsNullOrWhiteSpace(_globalBusyEnglishText) ? "Loading..." : _globalBusyEnglishText,
+        string.IsNullOrWhiteSpace(_globalBusySpanishText) ? "Cargando..." : _globalBusySpanishText);
 
     public string AnalysisStatusText => IsAnalyzing
         ? Text("Analyzing video...", "Analizando video...")
@@ -794,6 +844,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool HasLocalModelSelectionCandidates => LocalModelCandidates.Count > 0;
 
+    public bool CanShowModelHelp =>
+        HasLocalModelSelectionCandidates &&
+        !IsConversionRunning &&
+        !IsPreviewGenerating &&
+        !IsModelPackImportRunning;
+
     public LocalModelSelectionCandidate? SelectedLocalModelCandidate
     {
         get => _selectedLocalModelCandidate;
@@ -822,8 +878,38 @@ public sealed class MainWindowViewModel : ObservableObject
             $"Modelo local seleccionado: {SelectedLocalModelCandidate.DisplayName}. Modelo de profundidad iw3: {SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"}");
 
     public bool HasUnmappedLocalModelCandidates =>
-        (_dependencyHealth?.ModelInventory.SelectionCandidates.Count ?? 0) >
-        LocalModelCandidates.Count;
+        Iw3DepthModelMapper.GetUnmappedCandidates(
+            _dependencyHealth?.ModelInventory.SelectionCandidates ?? []).Count > 0;
+
+    public string ModelHelpButtonText => "?";
+
+    public string ModelHelpButtonToolTipText => Text(
+        "Explain the installed models currently available in this selector.",
+        "Explicar los modelos instalados disponibles actualmente en este selector.");
+
+    public string ModelHelpTitleText => Text(
+        "Selectable model help",
+        "Ayuda de modelos seleccionables");
+
+    public string ModelHelpIntroText => Text(
+        "Only installed models that are ready for this conversion flow are shown here.",
+        "Aqui solo se muestran modelos instalados que estan listos para este flujo de conversion.");
+
+    public string ModelHelpModelHeaderText => Text("Model", "Modelo");
+
+    public string ModelHelpPurposeHeaderText => Text("Purpose", "Propósito");
+
+    public string ModelHelpUseHeaderText => Text("Use", "Uso");
+
+    public string ModelHelpSceneHeaderText => Text("Scene", "Escena");
+
+    public string ModelHelpDepthHeaderText => Text("Depth", "Profundidad");
+
+    public string ModelHelpSizePerformanceHeaderText => Text(
+        "Size/performance",
+        "Tamaño/rendimiento");
+
+    public IReadOnlyList<ModelHelpRow> ModelHelpRows => CreateModelHelpRows();
 
     public string ViewModelsText => Text("View models", "Ver modelos");
 
@@ -846,6 +932,19 @@ public sealed class MainWindowViewModel : ObservableObject
         "Modelos seleccionables");
 
     public string SelectableModelsInventoryText => CreateSelectableModelsInventoryText();
+
+    public string SelectableModelNameHeaderText => Text("Model", "Modelo");
+
+    public string SelectableModelIw3HeaderText => Text("iw3 depth model", "Modelo iw3");
+
+    public string SelectableModelCheckpointHeaderText => Text("Checkpoint", "Checkpoint");
+
+    public string SelectableModelTypeHeaderText => Text("Type", "Tipo");
+
+    public string SelectableModelSourceHeaderText => Text("Source", "Origen");
+
+    public IReadOnlyList<SelectableModelInventoryRow> SelectableModelInventoryRows =>
+        CreateSelectableModelInventoryRows();
 
     public string DiagnosticModelsSectionTitleText => Text(
         "Detected but not selectable",
@@ -1038,6 +1137,30 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Visibility.Visible
             : Visibility.Collapsed;
 
+    public Visibility ConversionReadySummaryVisibility =>
+        CanStartConversion ? Visibility.Visible : Visibility.Collapsed;
+
+    public string ConversionReadyTitleText => Text("Conversion ready", "Conversi\u00f3n lista");
+
+    public string ConversionReadyBodyText => Text(
+        "Preview accepted. The final video is ready to be generated.",
+        "Vista previa aceptada. El video final est\u00e1 listo para generarse.");
+
+    public string ConversionReadySelectedModelText => ConversionPlanLabelValue(
+        "Selected model",
+        "Modelo seleccionado",
+        FormatConversionReadySelectedModel());
+
+    public string ConversionReadyOutputText => ConversionPlanLabelValue(
+        "Output",
+        "Salida",
+        FormatConversionReadyOutput());
+
+    public string ConversionReadyDestinationText => ConversionPlanLabelValue(
+        "Destination",
+        "Destino",
+        _conversionPlan?.SuggestedOutputPath);
+
     public Visibility CancelConversionPrimaryActionVisibility =>
         IsConversionRunning
             ? Visibility.Visible
@@ -1058,6 +1181,16 @@ public sealed class MainWindowViewModel : ObservableObject
     public string PreviewGeneratingMessageText => Text(
         "Please wait while v3dfy creates a short 3D preview.",
         "Espera mientras v3dfy crea una vista previa 3D corta.");
+
+    public int PreviewProgressPercent => Math.Clamp(_previewProgressPercent, 0, 100);
+
+    public string PreviewProgressText =>
+        PreviewProgressPercent > 0
+            ? $"{PreviewProgressPercent}%"
+            : Text("Estimating...", "Calculando...");
+
+    public bool PreviewProgressIsIndeterminate =>
+        IsPreviewGenerating && PreviewProgressPercent <= 0;
 
     public string PreviewReadyTitleText => Text("Preview ready", "Vista previa lista");
 
@@ -1305,12 +1438,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool IsPreviewRangeEditingBlockedByModal =>
         IsTechnicalDetailsModalOpen ||
         IsProfileDetailsModalOpen ||
+        IsModelHelpModalOpen ||
         IsReplaceVideoConfirmationModalOpen ||
         IsModelInventoryModalOpen ||
         IsModelPackImportConfirmationModalOpen ||
         IsActivityLogModalOpen ||
         IsPreviewGeneratingModalOpen ||
-        IsPreviewReadyModalOpen;
+        IsPreviewReadyModalOpen ||
+        IsConversionCompletedModalOpen;
 
     private string PreviewStatusValueText => _previewState.Status switch
     {
@@ -1355,9 +1490,44 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ConversionExecutionProgressText => $"{ConversionExecutionProgressPercent}%";
 
+    public Visibility ConversionProgressBarVisibility =>
+        IsConversionRunning ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ConversionRunningStatusVisibility =>
+        IsConversionRunning ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ConversionTimingEstimatesVisibility =>
+        IsConversionRunning ? Visibility.Visible : Visibility.Collapsed;
+
+    public double ConversionProgressBarValue => ConversionExecutionProgressPercent;
+
+    public string ConversionProgressBarText => ConversionExecutionProgressText;
+
     public string ConversionExecutionDetailText => Text(
         _conversionExecutionState.DetailEnglish,
         _conversionExecutionState.DetailSpanish);
+
+    public string ConversionElapsedLabelText => Text("Elapsed", "Transcurrido");
+
+    public string ConversionRemainingLabelText => Text("Remaining", "Restante");
+
+    public string ConversionEstimatedTotalLabelText => Text("Estimated total", "Total estimado");
+
+    public string ConversionElapsedValueText => IsConversionRunning
+        ? FormatDuration(GetCurrentConversionElapsed())
+        : "-";
+
+    public string ConversionRemainingValueText => IsConversionRunning
+        ? _conversionTimingEstimate?.Remaining is { } remaining
+            ? FormatDuration(remaining)
+            : Text("Estimating...", "Calculando...")
+        : "-";
+
+    public string ConversionEstimatedTotalValueText => IsConversionRunning
+        ? _conversionTimingEstimate?.EstimatedTotal is { } total
+            ? FormatDuration(total)
+            : Text("Estimating...", "Calculando...")
+        : "-";
 
     public bool CanCancelConversion => _conversionExecutionState.CanCancel;
 
@@ -1494,6 +1664,23 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ModelPackImportConfirmationContinueText => Text("Continue", "Continuar");
 
+    public string ConversionCompletedTitleText => Text(
+        "Conversion complete",
+        "Conversi\u00f3n finalizada");
+
+    public string ConversionCompletedBodyText => Text(
+        "The 3D video was created successfully.",
+        "El video 3D se cre\u00f3 correctamente.");
+
+    public string ConversionCompletedOutputPathText => ConversionPlanLabelValue(
+        "Output path",
+        "Ruta de salida",
+        CompletedConversionOutputPath);
+
+    public string AcceptConversionCompletedText => Text("OK", "Aceptar");
+
+    public string CompletedConversionOutputPath => _completedConversionOutputPath;
+
     public string ProfileDetailsTitleText => Text(
         "Profile details",
         "Detalles del perfil");
@@ -1557,9 +1744,19 @@ public sealed class MainWindowViewModel : ObservableObject
                 return ModelPackImportConfirmationTitleText;
             }
 
+            if (IsConversionCompletedModalOpen)
+            {
+                return ConversionCompletedTitleText;
+            }
+
             if (IsModelInventoryModalOpen)
             {
                 return ModelInventoryTitleText;
+            }
+
+            if (IsModelHelpModalOpen)
+            {
+                return ModelHelpTitleText;
             }
 
             return IsProfileDetailsModalOpen
@@ -1571,9 +1768,11 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool IsAnyModalOpen =>
         IsTechnicalDetailsModalOpen ||
         IsProfileDetailsModalOpen ||
+        IsModelHelpModalOpen ||
         IsReplaceVideoConfirmationModalOpen ||
         IsModelInventoryModalOpen ||
         IsModelPackImportConfirmationModalOpen ||
+        IsConversionCompletedModalOpen ||
         IsActivityLogModalOpen ||
         IsPreviewGeneratingModalOpen ||
         IsPreviewReadyModalOpen;
@@ -1581,7 +1780,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility ModalOverlayVisibility =>
         IsAnyModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
-    public double ActiveModalWidth => IsModelInventoryModalOpen ? 1000d : 760d;
+    public double ActiveModalWidth => IsModelInventoryModalOpen || IsModelHelpModalOpen ? 1000d : 760d;
 
     public bool IsTechnicalDetailsModalOpen
     {
@@ -1601,6 +1800,18 @@ public sealed class MainWindowViewModel : ObservableObject
         private set
         {
             if (SetProperty(ref _isProfileDetailsModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsModelHelpModalOpen
+    {
+        get => _isModelHelpModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isModelHelpModalOpen, value))
             {
                 RaiseModalStatePropertiesChanged();
             }
@@ -1679,11 +1890,26 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    public bool IsConversionCompletedModalOpen
+    {
+        get => _isConversionCompletedModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isConversionCompletedModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
     public Visibility TechnicalDetailsModalContentVisibility =>
         IsTechnicalDetailsModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility ProfileDetailsModalContentVisibility =>
         IsProfileDetailsModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ModelHelpModalContentVisibility =>
+        IsModelHelpModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility ReplaceVideoConfirmationModalContentVisibility =>
         IsReplaceVideoConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -1702,6 +1928,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public Visibility PreviewReadyModalContentVisibility =>
         IsPreviewReadyModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ConversionCompletedModalContentVisibility =>
+        IsConversionCompletedModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
     public string TechnicalDetailsBodyText
     {
@@ -1751,6 +1980,11 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ConversionReadinessMissingRequirementsTitle => Text(
         "Missing requirements",
         "Requisitos faltantes");
+
+    public Visibility ConversionMissingRequirementsVisibility =>
+        ShouldShowConversionMissingRequirements()
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     public string ConversionReadinessStatusText
     {
@@ -1824,6 +2058,39 @@ public sealed class MainWindowViewModel : ObservableObject
                 : Text(startGate.EnglishDetail, startGate.SpanishDetail);
         }
     }
+
+    private bool ShouldShowConversionMissingRequirements()
+    {
+        if (IsConversionRunning || IsPreviewGenerating)
+        {
+            return false;
+        }
+
+        var startGate = EvaluateConversionStartGate();
+        return !startGate.CanStart &&
+            startGate.Blocker != ConversionExecutionBlocker.PreviewRequired;
+    }
+
+    private string? FormatConversionReadySelectedModel()
+    {
+        var selectedModel = _conversionPlan?.SelectedLocalModel;
+        if (selectedModel is null)
+        {
+            return null;
+        }
+
+        var displayName = IsSpanish
+            ? GetSpanishModelDisplayName(selectedModel)
+            : selectedModel.DisplayName;
+        return string.IsNullOrWhiteSpace(selectedModel.Iw3DepthModelName)
+            ? displayName
+            : $"{displayName} / {selectedModel.Iw3DepthModelName}";
+    }
+
+    private string? FormatConversionReadyOutput() =>
+        _conversionPlan is null
+            ? null
+            : $"{_conversionPlan.OutputContainer} \u00b7 {ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat, IsSpanish)} \u00b7 {_conversionPlan.Width}x{_conversionPlan.Height}";
 
     public bool CanStartConversion =>
         _conversionExecutionState.Status is not ConversionExecutionStatus.Running and
@@ -1934,6 +2201,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand CloseModelInventoryCommand { get; }
 
+    public RelayCommand ShowModelHelpCommand { get; }
+
+    public RelayCommand CloseModelHelpCommand { get; }
+
     public RelayCommand ClearLogsCommand { get; }
 
     public RelayCommand BrowseOutputFolderCommand { get; }
@@ -1979,6 +2250,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand ConfirmReplaceVideoCommand { get; }
 
     public RelayCommand CancelReplaceVideoCommand { get; }
+
+    public RelayCommand AcceptConversionCompletedCommand { get; }
 
     public async void SelectDroppedVideo(string path)
     {
@@ -2176,6 +2449,43 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private async Task RefreshEngineStatusWithGlobalBusyAsync(bool logRefresh)
+    {
+        if (IsConversionRunning || IsPreviewGenerating)
+        {
+            return;
+        }
+
+        ShowGlobalBusyOverlay(
+            "Refreshing model inventory...",
+            "Actualizando inventario de modelos...");
+        try
+        {
+            await RefreshEngineStatusAsync(logRefresh);
+        }
+        finally
+        {
+            HideGlobalBusyOverlay();
+        }
+    }
+
+    private void ShowGlobalBusyOverlay(string englishText, string spanishText)
+    {
+        _globalBusyEnglishText = string.IsNullOrWhiteSpace(englishText)
+            ? "Loading..."
+            : englishText;
+        _globalBusySpanishText = string.IsNullOrWhiteSpace(spanishText)
+            ? "Cargando..."
+            : spanishText;
+        OnPropertyChanged(nameof(GlobalBusyText));
+        IsGlobalBusyOverlayVisible = true;
+    }
+
+    private void HideGlobalBusyOverlay()
+    {
+        IsGlobalBusyOverlayVisible = false;
+    }
+
     private async Task ImportModelPackAsync()
     {
         if (!CanImportModelPack)
@@ -2188,6 +2498,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _reopenModelInventoryAfterImport = IsModelInventoryModalOpen;
         IsModelPackImportRunning = true;
+        ShowGlobalBusyOverlay(
+            "Validating model pack...",
+            "Validando paquete de modelos...");
         try
         {
             var result = await _modelPackImportCoordinator.ImportAsync(
@@ -2221,6 +2534,7 @@ public sealed class MainWindowViewModel : ObservableObject
         finally
         {
             IsModelPackImportRunning = false;
+            HideGlobalBusyOverlay();
             if (_reopenModelInventoryAfterImport && !IsAnyModalOpen)
             {
                 IsModelInventoryModalOpen = true;
@@ -2239,10 +2553,16 @@ public sealed class MainWindowViewModel : ObservableObject
         BeforeExecutionAsync = (preparation, _) =>
         {
             RecordValidModelPackPreparation(preparation);
+            HideGlobalBusyOverlay();
             return Task.CompletedTask;
         },
         RefreshAfterSuccessfulImportAsync = async _ =>
-            await RefreshEngineStatusAsync(logRefresh: true),
+        {
+            ShowGlobalBusyOverlay(
+                "Refreshing model inventory...",
+                "Actualizando inventario de modelos...");
+            await RefreshEngineStatusAsync(logRefresh: true);
+        },
     };
 
     private async Task<bool> ConfirmModelPackImportAsync(
@@ -2530,6 +2850,31 @@ public sealed class MainWindowViewModel : ObservableObject
         _dependencyHealth?.ModelInventory ??
         LocalModelInventory.Empty(_toolPaths.ModelsDirectory);
 
+    private IReadOnlyList<SelectableModelInventoryRow> CreateSelectableModelInventoryRows()
+    {
+        var candidates = Iw3DepthModelMapper.CreateSelectableCandidates(
+            GetCurrentModelInventory().SelectionCandidates,
+            IsSpanish);
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = new List<SelectableModelInventoryRow>();
+        foreach (var candidate in candidates)
+        {
+            var entry = FindRegistryEntry(candidate);
+            rows.Add(new SelectableModelInventoryRow(
+                Model: GetCandidateDisplayName(candidate),
+                Iw3DepthModel: candidate.Iw3DepthModelName ?? "-",
+                Checkpoint: candidate.RelativePath,
+                Type: GetDepthTypeText(entry, IsSpanish),
+                Source: GetModelSourceText(candidate, entry, IsSpanish)));
+        }
+
+        return rows;
+    }
+
     private string CreateSelectableModelsInventoryText()
     {
         var candidates = Iw3DepthModelMapper.CreateSelectableCandidates(
@@ -2580,6 +2925,291 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private IReadOnlyList<ModelHelpRow> CreateModelHelpRows()
+    {
+        if (LocalModelCandidates.Count == 0)
+        {
+            return [];
+        }
+
+        var rows = new List<ModelHelpRow>();
+        foreach (var candidate in LocalModelCandidates)
+        {
+            var entry = FindRegistryEntry(candidate);
+            rows.Add(new ModelHelpRow(
+                Model: GetCandidateDisplayName(candidate),
+                Purpose: GetModelPurpose(candidate, entry, IsSpanish),
+                Use: GetModelUseExample(candidate, entry, IsSpanish),
+                Scene: GetSceneScopeText(entry, IsSpanish),
+                Depth: GetDepthTypeText(entry, IsSpanish),
+                SizePerformance: GetSizeClassText(entry, IsSpanish)));
+        }
+
+        return rows;
+    }
+
+    private static Iw3DepthModelRegistryEntry? FindRegistryEntry(
+        LocalModelSelectionCandidate candidate) =>
+        Iw3DepthModelMapper.RegistryEntries.FirstOrDefault(entry =>
+            string.Equals(entry.Key, candidate.MappingKey, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(entry.DepthModelName, candidate.Iw3DepthModelName, StringComparison.OrdinalIgnoreCase));
+
+    private static string GetModelPurpose(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        bool useSpanish)
+    {
+        var key = entry?.Key ?? candidate.MappingKey ?? string.Empty;
+        return key switch
+        {
+            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => useSpanish
+                ? "Modelo metrico para interiores."
+                : "Metric indoor model.",
+            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => useSpanish
+                ? "Modelo metrico para exteriores."
+                : "Metric outdoor model.",
+            Iw3DepthModelMapper.DepthAnythingV2SmallKey => useSpanish
+                ? "Modelo general ligero."
+                : "General-purpose lightweight model.",
+            Iw3DepthModelMapper.DepthAnythingSmallKey => useSpanish
+                ? "Modelo general relativo pequeno."
+                : "Small general relative-depth model.",
+            Iw3DepthModelMapper.DepthAnythingBaseKey => useSpanish
+                ? "Modelo general relativo balanceado."
+                : "Balanced general relative-depth model.",
+            Iw3DepthModelMapper.DepthAnythingLargeKey => useSpanish
+                ? "Modelo general relativo grande."
+                : "Large general relative-depth model.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => useSpanish
+                ? "Modelo metrico ligero entrenado para escenas tipo interior."
+                : "Lightweight metric model tuned for indoor-like scenes.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => useSpanish
+                ? "Modelo metrico base entrenado para escenas tipo interior."
+                : "Base metric model tuned for indoor-like scenes.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => useSpanish
+                ? "Modelo metrico ligero entrenado para escenas tipo exterior."
+                : "Lightweight metric model tuned for outdoor-like scenes.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => useSpanish
+                ? "Modelo metrico base entrenado para escenas tipo exterior."
+                : "Base metric model tuned for outdoor-like scenes.",
+            Iw3DepthModelMapper.DistillAnyDepthSmallKey => useSpanish
+                ? "Modelo destilado general para profundidad."
+                : "General distilled depth model.",
+            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => useSpanish
+                ? "Modelo monocular grande de Depth Anything 3."
+                : "Large Depth Anything 3 monocular model.",
+            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => useSpanish
+                ? "Variante de Depth Anything 3 ajustada para TV 3D."
+                : "Depth Anything 3 variant tuned for 3D TV output.",
+            _ when entry?.RedistributionDecision ==
+                Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => useSpanish
+                    ? "Checkpoint proporcionado por el usuario."
+                    : "User-provided checkpoint.",
+            _ => useSpanish
+                ? "Modelo de profundidad instalado y mapeado."
+                : "Installed mapped depth model.",
+        };
+    }
+
+    private static string GetModelUseExample(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        bool useSpanish)
+    {
+        var key = entry?.Key ?? candidate.MappingKey ?? string.Empty;
+        return key switch
+        {
+            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => useSpanish
+                ? "Habitaciones, personas en interiores e interiores de peliculas. Ejemplos: dramas, animacion interior, escenas de dialogo, recamaras, oficinas."
+                : "Rooms, people indoors, movie interiors. Examples: dramas, animation interiors, dialogue scenes, bedrooms, offices.",
+            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => useSpanish
+                ? "Carreteras, paisajes y exteriores. Ejemplos: calles, montanas, playas, mar, barcos, planos exteriores amplios."
+                : "Road, landscape, and outdoor scenes. Examples: streets, mountains, beaches, sea, boats, wide exterior shots.",
+            Iw3DepthModelMapper.DepthAnythingV2SmallKey => useSpanish
+                ? "Buen primer modelo opcional para conversiones rapidas. Ejemplos: peliculas generales, anime, escenas mixtas, pruebas rapidas."
+                : "Good first optional model for faster conversions. Examples: general movies, anime, mixed scenes, quick tests.",
+            Iw3DepthModelMapper.DepthAnythingSmallKey => useSpanish
+                ? "Conversiones ligeras cuando importa el tamano. Ejemplos: pruebas rapidas, poco almacenamiento, equipos antiguos."
+                : "Lightweight conversions when size matters. Examples: quick tests, low storage, older machines.",
+            Iw3DepthModelMapper.DepthAnythingBaseKey => useSpanish
+                ? "Calidad y tamano balanceados para Depth Anything v1. Ejemplos: peliculas generales, animacion, escenas mixtas interior/exterior."
+                : "Balanced quality and size for Depth Anything v1. Examples: general movies, animation, mixed indoor/outdoor scenes.",
+            Iw3DepthModelMapper.DepthAnythingLargeKey => useSpanish
+                ? "Conversiones enfocadas en calidad cuando la velocidad importa menos. Ejemplos: peliculas detalladas, close-ups, escenas complejas."
+                : "Quality-focused conversions when speed matters less. Examples: detailed movies, close-ups, complex scenes.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => useSpanish
+                ? "Escenas metricas interiores o parecidas a interiores. Ejemplos: habitaciones, pasillos, oficinas, interiores CG."
+                : "Indoor or indoor-like metric scenes. Examples: rooms, corridors, offices, CG interiors.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => useSpanish
+                ? "Modelo base metrico para interiores. Ejemplos: interiores detallados, habitaciones, pasillos, interiores CG/animados."
+                : "Indoor metric base model. Examples: detailed interiors, rooms, hallways, CG/animated interiors.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => useSpanish
+                ? "Escenas metricas exteriores. Ejemplos: carreteras, autos, calles de ciudad, paisajes, mar, barcos."
+                : "Outdoor metric scenes. Examples: roads, cars, city streets, landscapes, sea, boats.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => useSpanish
+                ? "Modelo base metrico para exteriores. Ejemplos: escenas de carretera, paisajes, accion exterior, mar/barcos."
+                : "Outdoor metric base model. Examples: road scenes, landscapes, outdoor action, sea/boats.",
+            Iw3DepthModelMapper.DistillAnyDepthSmallKey => useSpanish
+                ? "Modelo de profundidad destilado pequeno. Ejemplos: comparaciones rapidas, pruebas experimentales, escenas generales."
+                : "Small distilled depth model. Examples: quick comparisons, experimental tests, general scenes.",
+            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => useSpanish
+                ? "Escenas generales al probar Depth Anything 3. Ejemplos: peliculas, animacion, escenas mixtas detalladas."
+                : "General scenes when trying Depth Anything 3. Examples: movies, animation, detailed mixed scenes.",
+            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => useSpanish
+                ? "Variante de Depth Anything 3 orientada a TV 3D/anaglifo. Ejemplos: pruebas en TV 3D, pruebas anaglifo, experimentos de TV 3D."
+                : "3D TV/anaglyph-oriented Depth Anything 3 variant. Examples: TV playback tests, anaglyph tests, 3D TV experiments.",
+            _ => GetModelBestUse(candidate, entry, useSpanish),
+        };
+    }
+
+    private static string GetModelBestUse(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        bool useSpanish)
+    {
+        var key = entry?.Key ?? candidate.MappingKey ?? string.Empty;
+        return key switch
+        {
+            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => useSpanish
+                ? "Habitaciones, personas en interiores e interiores de peliculas."
+                : "Rooms, people indoors, and movie interiors.",
+            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => useSpanish
+                ? "Carreteras, paisajes y escenas exteriores."
+                : "Road, landscape, and outdoor scenes.",
+            Iw3DepthModelMapper.DepthAnythingV2SmallKey => useSpanish
+                ? "Primera opcion opcional para conversiones mas rapidas."
+                : "Good first optional model for faster conversions.",
+            Iw3DepthModelMapper.DepthAnythingSmallKey => useSpanish
+                ? "Conversiones ligeras cuando el tamano importa."
+                : "Lightweight conversions when size matters.",
+            Iw3DepthModelMapper.DepthAnythingBaseKey => useSpanish
+                ? "Equilibrio entre calidad y tamano en Depth Anything v1."
+                : "Balanced quality and size for Depth Anything v1.",
+            Iw3DepthModelMapper.DepthAnythingLargeKey => useSpanish
+                ? "Conversiones enfocadas en calidad cuando la velocidad importa menos."
+                : "Quality-focused conversions when speed matters less.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => useSpanish
+                ? "Escenas interiores o similares a interiores con salida metrica."
+                : "Indoor or indoor-like scenes when metric output is useful.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => useSpanish
+                ? "Interiores cuando se prefiere el modelo base metrico."
+                : "Indoor scenes when the metric base model is preferred.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => useSpanish
+                ? "Exteriores, carreteras y paisajes con salida metrica."
+                : "Outdoor, road, and landscape scenes when metric output is useful.",
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => useSpanish
+                ? "Exteriores cuando se prefiere el modelo base metrico."
+                : "Outdoor scenes when the metric base model is preferred.",
+            Iw3DepthModelMapper.DistillAnyDepthSmallKey => useSpanish
+                ? "Opcion pequena cuando se quiera probar un modelo destilado."
+                : "Small option when trying a distilled model.",
+            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => useSpanish
+                ? "Escenas generales cuando se quiere probar Depth Anything 3."
+                : "General scenes when trying Depth Anything 3.",
+            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => useSpanish
+                ? "Salida anaglifo o TV 3D con el escalador alternativo de iw3."
+                : "Anaglyph or 3D TV output with iw3's alternate scaler.",
+            _ when entry?.RedistributionDecision ==
+                Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => useSpanish
+                    ? "Solo si tu proporcionaste este checkpoint; no es un paquete oficial de v3dfy."
+                    : "Only when you supplied this checkpoint yourself; it is not an official v3dfy pack.",
+            _ => useSpanish
+                ? "Conversiones locales cuando este modelo este instalado."
+                : "Local conversions when this model is installed.",
+        };
+    }
+
+    private static string GetSceneScopeText(
+        Iw3DepthModelRegistryEntry? entry,
+        bool useSpanish)
+    {
+        var category = entry?.Category ?? string.Empty;
+        if (category.Contains("indoor/outdoor", StringComparison.OrdinalIgnoreCase))
+        {
+            return useSpanish ? "interior/exterior" : "indoor/outdoor";
+        }
+
+        if (category.Contains("indoor", StringComparison.OrdinalIgnoreCase) ||
+            category.Contains("Hypersim", StringComparison.OrdinalIgnoreCase))
+        {
+            return useSpanish ? "interior" : "indoor";
+        }
+
+        if (category.Contains("outdoor", StringComparison.OrdinalIgnoreCase) ||
+            category.Contains("VKITTI", StringComparison.OrdinalIgnoreCase))
+        {
+            return useSpanish ? "exterior" : "outdoor";
+        }
+
+        return useSpanish ? "general" : "general";
+    }
+
+    private static string GetDepthTypeText(
+        Iw3DepthModelRegistryEntry? entry,
+        bool useSpanish) =>
+        entry?.DepthType switch
+        {
+            Iw3DepthModelDepthType.Metric => useSpanish ? "metrica" : "metric",
+            Iw3DepthModelDepthType.Relative => useSpanish ? "relativa" : "relative",
+            Iw3DepthModelDepthType.ForcedDisparity => useSpanish
+                ? "disparidad forzada"
+                : "forced disparity",
+            _ => useSpanish ? "segun el modelo" : "model-defined",
+        };
+
+    private static string GetModelSourceText(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        bool useSpanish)
+    {
+        if (entry?.RedistributionDecision ==
+            Iw3DepthModelRedistributionDecision.BlockedUnclearLicense)
+        {
+            return useSpanish ? "proporcionado por el usuario" : "user-provided";
+        }
+
+        if (entry?.Availability == Iw3DepthModelAvailability.EmbeddedBase)
+        {
+            return useSpanish ? "incluido" : "bundled";
+        }
+
+        if (entry?.IsPublicPackEligible == true)
+        {
+            return useSpanish ? "paquete de modelos" : "model pack";
+        }
+
+        return candidate.IsCatalogManaged
+            ? useSpanish ? "catalogo local" : "local catalog"
+            : useSpanish ? "archivo local" : "local file";
+    }
+
+    private static string GetSizeClassText(
+        Iw3DepthModelRegistryEntry? entry,
+        bool useSpanish)
+    {
+        var name = entry?.DepthModelName ?? string.Empty;
+        var key = entry?.Key ?? string.Empty;
+        if (name.EndsWith("_S", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("small", StringComparison.OrdinalIgnoreCase))
+        {
+            return useSpanish ? "pequeno / mas rapido" : "small / faster";
+        }
+
+        if (name.EndsWith("_B", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("base", StringComparison.OrdinalIgnoreCase))
+        {
+            return useSpanish ? "base / equilibrado" : "base / balanced";
+        }
+
+        if (name.EndsWith("_L", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("large", StringComparison.OrdinalIgnoreCase))
+        {
+            return useSpanish ? "grande / mas pesado" : "large / heavier";
+        }
+
+        return useSpanish ? "estandar" : "standard";
     }
 
     private string CreateRuntimeDependenciesInventoryText()
@@ -2663,10 +3293,12 @@ public sealed class MainWindowViewModel : ObservableObject
             IsPreviewGenerating ||
             IsTechnicalDetailsModalOpen ||
             IsProfileDetailsModalOpen ||
+            IsModelHelpModalOpen ||
             IsReplaceVideoConfirmationModalOpen ||
             IsModelPackImportConfirmationModalOpen ||
             IsActivityLogModalOpen ||
-            IsPreviewReadyModalOpen)
+            IsPreviewReadyModalOpen ||
+            IsConversionCompletedModalOpen)
         {
             return;
         }
@@ -2680,16 +3312,43 @@ public sealed class MainWindowViewModel : ObservableObject
         IsModelInventoryModalOpen = false;
     }
 
+    private void ShowModelHelp()
+    {
+        if (!CanShowModelHelp ||
+            IsTechnicalDetailsModalOpen ||
+            IsProfileDetailsModalOpen ||
+            IsModelHelpModalOpen ||
+            IsReplaceVideoConfirmationModalOpen ||
+            IsModelInventoryModalOpen ||
+            IsModelPackImportConfirmationModalOpen ||
+            IsActivityLogModalOpen ||
+            IsPreviewReadyModalOpen ||
+            IsConversionCompletedModalOpen)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(ModelHelpRows));
+        IsModelHelpModalOpen = true;
+    }
+
+    private void CloseModelHelp()
+    {
+        IsModelHelpModalOpen = false;
+    }
+
     private void ShowTechnicalDetails()
     {
         if (IsConversionRunning ||
             IsPreviewGenerating ||
             IsProfileDetailsModalOpen ||
+            IsModelHelpModalOpen ||
             IsReplaceVideoConfirmationModalOpen ||
             IsModelInventoryModalOpen ||
             IsModelPackImportConfirmationModalOpen ||
             IsActivityLogModalOpen ||
-            IsPreviewReadyModalOpen)
+            IsPreviewReadyModalOpen ||
+            IsConversionCompletedModalOpen)
         {
             return;
         }
@@ -2708,11 +3367,13 @@ public sealed class MainWindowViewModel : ObservableObject
         if (IsConversionRunning ||
             IsPreviewGenerating ||
             IsTechnicalDetailsModalOpen ||
+            IsModelHelpModalOpen ||
             IsReplaceVideoConfirmationModalOpen ||
             IsModelInventoryModalOpen ||
             IsModelPackImportConfirmationModalOpen ||
             IsActivityLogModalOpen ||
-            IsPreviewReadyModalOpen)
+            IsPreviewReadyModalOpen ||
+            IsConversionCompletedModalOpen)
         {
             return;
         }
@@ -2804,6 +3465,9 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ConfirmModelPackImport()
     {
         CompleteModelPackImportConfirmation(confirmImport: true);
+        ShowGlobalBusyOverlay(
+            "Importing model pack...",
+            "Importando paquete de modelos...");
     }
 
     private void CancelModelPackImport()
@@ -2854,6 +3518,8 @@ public sealed class MainWindowViewModel : ObservableObject
     private void UpdateLocalModelSelectionCandidates(bool regenerateCurrentPlan = true)
     {
         var previouslySelectedPath = SelectedLocalModelCandidate?.RelativePath;
+        var previouslySelectedMappingKey = SelectedLocalModelCandidate?.MappingKey;
+        var previouslySelectedDepthModelName = SelectedLocalModelCandidate?.Iw3DepthModelName;
         var candidates = Iw3DepthModelMapper.CreateSelectableCandidates(
             _dependencyHealth?.ModelInventory.SelectionCandidates ?? [],
             IsSpanish);
@@ -2865,11 +3531,29 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         var selectedCandidate = !string.IsNullOrWhiteSpace(previouslySelectedPath)
-            ? LocalModelCandidates.FirstOrDefault(candidate => string.Equals(
-                candidate.RelativePath,
-                previouslySelectedPath,
-                StringComparison.OrdinalIgnoreCase))
+            ? LocalModelCandidates.FirstOrDefault(candidate =>
+                string.Equals(
+                    candidate.RelativePath,
+                    previouslySelectedPath,
+                    StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    candidate.MappingKey,
+                    previouslySelectedMappingKey,
+                    StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(
+                    candidate.Iw3DepthModelName,
+                    previouslySelectedDepthModelName,
+                    StringComparison.OrdinalIgnoreCase))
             : null;
+        selectedCandidate ??= LocalModelCandidates.FirstOrDefault(candidate =>
+            string.Equals(
+                candidate.MappingKey,
+                Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey,
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                candidate.Iw3DepthModelName,
+                Iw3DepthModelMapper.ZoeDAnyNDepthModelName,
+                StringComparison.OrdinalIgnoreCase));
 
         SetSelectedLocalModelCandidate(
             selectedCandidate ?? LocalModelCandidates.FirstOrDefault(),
@@ -2881,13 +3565,14 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasLocalModelSelectionCandidates));
         OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+        RaiseModelHelpPropertiesChanged();
     }
 
     private void SetSelectedLocalModelCandidate(
         LocalModelSelectionCandidate? candidate,
         bool regeneratePlan = false)
     {
-        if (EqualityComparer<LocalModelSelectionCandidate?>.Default.Equals(
+        if (ReferenceEquals(
             _selectedLocalModelCandidate,
             candidate))
         {
@@ -3240,20 +3925,7 @@ public sealed class MainWindowViewModel : ObservableObject
             Text(
                 $"Unmanaged compatible model files: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}",
                 $"Modelos compatibles no listados en el catalogo: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}"),
-            Text(
-                "Known iw3 depth model mappings:",
-                "Mapeos conocidos de modelos de profundidad iw3:"),
         };
-
-        foreach (var entry in Iw3DepthModelMapper.RegistryEntries)
-        {
-            var expectedFiles = entry.ExpectedRelativePaths.Count == 0
-                ? "-"
-                : string.Join(", ", entry.ExpectedRelativePaths);
-            lines.Add(Text(
-                $"- {entry.EnglishName}: --depth-model {entry.DepthModelName}; expected local file: {expectedFiles}; status: {(entry.IsReadySelectable ? "selectable when local file is present" : "not selectable yet")}",
-                $"- {entry.SpanishName}: --depth-model {entry.DepthModelName}; archivo local esperado: {expectedFiles}; estado: {(entry.IsReadySelectable ? "seleccionable cuando el archivo local existe" : "aun no seleccionable")}"));
-        }
 
         AddModelCatalogStatusDetailLines(lines, inventory.Catalog);
 
@@ -3458,6 +4130,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _previewState = _previewState.Deleted(TimeSpan.Zero, PreviewTimeRangeService.DefaultDuration);
         _lastPreviewCachePaths = null;
         _hasUserEditedPreviewRange = false;
+        _previewProgressPercent = 0;
         RaisePreviewPropertiesChanged();
         SelectedVideoPath = path;
         ResetAnalysisState(clearOutputPath: true);
@@ -3640,6 +4313,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _previewCancellationTokenSource = new CancellationTokenSource();
         _isPreviewCancellationRequested = false;
         _hasLoggedPreviewCancellationSummary = false;
+        _previewProgressPercent = 0;
         _previewState = _previewState.Generating(configuration, startedAt);
         _hasLoggedPreviewOfflineDependencyWarning = false;
         ResetPreviewMetricText();
@@ -3687,6 +4361,16 @@ public sealed class MainWindowViewModel : ObservableObject
             }
 
             _previewState = _previewState.Complete(result, configuration);
+            if (result.Success &&
+                _previewState.Status == PreviewGenerationStatus.Ready)
+            {
+                _previewProgressPercent = 100;
+            }
+            else if (_previewState.Status is PreviewGenerationStatus.Canceled or PreviewGenerationStatus.Failed)
+            {
+                _previewProgressPercent = 0;
+            }
+
             MarkPreviewOutdatedIfNeeded(logChange: false);
             AddLog(result.EnglishSummary, result.SpanishSummary);
             if (_previewState.Status == PreviewGenerationStatus.Ready &&
@@ -3727,6 +4411,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void RecordPreviewCanceled()
     {
+        _previewProgressPercent = 0;
         _previewState = _previewState with
         {
             Status = PreviewGenerationStatus.Canceled,
@@ -3754,6 +4439,7 @@ public sealed class MainWindowViewModel : ObservableObject
         var errorLogPath = AppErrorLogService.LogRecoverableException(
             "Generate preview",
             exception);
+        _previewProgressPercent = 0;
         _previewState = _previewState with
         {
             Status = PreviewGenerationStatus.Failed,
@@ -3838,6 +4524,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void DeletePreview()
     {
         DeleteCurrentPreviewFiles(logDeletion: true);
+        _previewProgressPercent = 0;
         _previewState = _previewState.Deleted(CurrentPreviewStartTime, CurrentPreviewDuration);
         IsPreviewReadyModalOpen = false;
         _lastPreviewCachePaths = null;
@@ -4138,6 +4825,9 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         var normalizedUpdate = progressUpdate.NormalizeProgress();
+        _previewProgressPercent = PreviewProgressResolver.Resolve(
+            normalizedUpdate.ProgressPercent,
+            normalizedUpdate.OutputLine?.Text);
         _previewState = _previewState with
         {
             EnglishDetail = normalizedUpdate.DetailEnglish,
@@ -4200,6 +4890,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _conversionCancellationTokenSource?.Dispose();
         _conversionCancellationTokenSource = new CancellationTokenSource();
+        _completedConversionResult = null;
+        _completedConversionOutputPath = string.Empty;
+        ResetConversionTimingEstimate();
+        IsConversionCompletedModalOpen = false;
+        OnPropertyChanged(nameof(CompletedConversionOutputPath));
+        OnPropertyChanged(nameof(ConversionCompletedOutputPathText));
         ConversionLogs.Clear();
         _lastConversionOutputLine = string.Empty;
         _hasLiveConversionOutput = false;
@@ -4244,8 +4940,12 @@ public sealed class MainWindowViewModel : ObservableObject
             }
 
             AddConversionResultActivityLogs(result);
-            HandleOpenOutputWhenFinished(result, request.OutputPath);
             _conversionExecutionState = CreateFinishedConversionState(result);
+            ResetConversionTimingEstimate();
+            if (result.Success && !result.WasCanceled)
+            {
+                ShowConversionCompletedModal(result, request.OutputPath);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -4294,6 +4994,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ConversionExecutionProgressUpdate progressUpdate)
     {
         var normalizedUpdate = progressUpdate.NormalizeProgress();
+        var progressPercent = UpdateConversionTimingEstimate(normalizedUpdate);
         if (normalizedUpdate.OutputLine is not null)
         {
             AddConversionOutputLine(normalizedUpdate.OutputLine);
@@ -4308,12 +5009,37 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _conversionExecutionState = _conversionExecutionState with
         {
-            ProgressPercent = normalizedUpdate.ProgressPercent,
+            ProgressPercent = progressPercent,
             CurrentStep = normalizedUpdate.CurrentStep,
             DetailEnglish = normalizedUpdate.DetailEnglish,
             DetailSpanish = normalizedUpdate.DetailSpanish,
         };
         RaiseConversionExecutionPropertiesChanged();
+    }
+
+    private int UpdateConversionTimingEstimate(
+        ConversionExecutionProgressUpdate progressUpdate)
+    {
+        var now = progressUpdate.OutputLine?.CapturedAt ?? DateTimeOffset.UtcNow;
+        var estimate = ConversionProgressTimingEstimator.Estimate(
+            progressUpdate.OutputLine?.Text,
+            progressUpdate.ProgressPercent,
+            _conversionExecutionState.StartedAt,
+            now);
+        if (estimate is not null)
+        {
+            _conversionTimingEstimate = _conversionTimingSmoother.Smooth(estimate);
+        }
+
+        return progressUpdate.ProgressPercent > 0
+            ? progressUpdate.ProgressPercent
+            : estimate?.ProgressPercent ?? _conversionExecutionState.ProgressPercent;
+    }
+
+    private void ResetConversionTimingEstimate()
+    {
+        _conversionTimingSmoother.Reset();
+        _conversionTimingEstimate = null;
     }
 
     private void AddConversionOutputLine(ProcessOutputLine outputLine)
@@ -4677,6 +5403,31 @@ public sealed class MainWindowViewModel : ObservableObject
             : $"{bytes / mebibyte:0.0} MB";
     }
 
+    private TimeSpan GetCurrentConversionElapsed()
+    {
+        if (_conversionTimingEstimate is not null)
+        {
+            return _conversionTimingEstimate.Elapsed;
+        }
+
+        return _conversionExecutionState.StartedAt is { } startedAt
+            ? DateTimeOffset.UtcNow - startedAt
+            : TimeSpan.Zero;
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration < TimeSpan.Zero)
+        {
+            duration = TimeSpan.Zero;
+        }
+
+        var rounded = TimeSpan.FromSeconds(Math.Round(duration.TotalSeconds));
+        return rounded.TotalHours >= 1
+            ? $"{(int)rounded.TotalHours}:{rounded.Minutes:00}:{rounded.Seconds:00}"
+            : $"{(int)rounded.TotalMinutes:00}:{rounded.Seconds:00}";
+    }
+
     private void HandleOpenOutputWhenFinished(
         ConversionExecutionResult result,
         string finalOutputPath)
@@ -4692,6 +5443,72 @@ public sealed class MainWindowViewModel : ObservableObject
             AddLog(openResult.EnglishWarning, openResult.SpanishWarning);
             AddConversionLog(openResult.EnglishWarning, openResult.SpanishWarning);
         }
+    }
+
+    private void ShowConversionCompletedModal(
+        ConversionExecutionResult result,
+        string finalOutputPath)
+    {
+        _completedConversionResult = result;
+        _completedConversionOutputPath =
+            result.PreferredOpenOutputPath ??
+            result.PrimaryOutputPath ??
+            finalOutputPath;
+        OnPropertyChanged(nameof(CompletedConversionOutputPath));
+        OnPropertyChanged(nameof(ConversionCompletedOutputPathText));
+        IsConversionCompletedModalOpen = true;
+    }
+
+    private void AcceptConversionCompleted()
+    {
+        var result = _completedConversionResult;
+        var finalOutputPath = CompletedConversionOutputPath;
+        IsConversionCompletedModalOpen = false;
+        _completedConversionResult = null;
+        _completedConversionOutputPath = string.Empty;
+        OnPropertyChanged(nameof(CompletedConversionOutputPath));
+        OnPropertyChanged(nameof(ConversionCompletedOutputPathText));
+
+        if (result is not null)
+        {
+            HandleOpenOutputWhenFinished(result, finalOutputPath);
+        }
+
+        ResetWorkflowAfterSuccessfulConversion();
+    }
+
+    private void ResetWorkflowAfterSuccessfulConversion()
+    {
+        SelectedVideoPath = null;
+        HasCompletedAnalysis = false;
+        _analysis = null;
+        _conversionRecommendation = null;
+        _conversionPlan = null;
+        _conversionReadiness = null;
+        _outputPathState.ClearCustomOutputPath();
+        OnPropertyChanged(nameof(HasCustomOutputPath));
+        SetOutputPathText(string.Empty);
+        SetPreviewTimeRangeText(PreviewTimeRangeService.CreateDefaultRange(null));
+        _previewState = PreviewWorkflowState.NotGenerated(
+            TimeSpan.Zero,
+            PreviewTimeRangeService.DefaultDuration);
+        _lastPreviewCachePaths = null;
+        _hasUserEditedPreviewRange = false;
+        _previewProgressPercent = 0;
+        _hasLiveConversionOutput = false;
+        _lastConversionOutputLine = string.Empty;
+        ResetConversionTimingEstimate();
+        _conversionExecutionState = ConversionExecutionState.NotStarted();
+        SelectedWorkflowTabIndex = 0;
+        SelectedSystemStatusTabIndex = 0;
+        UpdateConversionReadiness();
+        RaiseAnalysisPropertiesChanged();
+        RaiseRecommendationPropertiesChanged();
+        RaiseConversionPlanPropertiesChanged();
+        RaisePreviewPropertiesChanged();
+        RaiseConversionExecutionPropertiesChanged();
+        RaiseConversionRunningModePropertiesChanged();
+        RaiseConversionReadinessPropertiesChanged();
     }
 
     private static ConversionExecutionState CreateFinishedConversionState(
@@ -4907,7 +5724,8 @@ public sealed class MainWindowViewModel : ObservableObject
             : VideoConversionPlanService.CreateSuggestedOutputPath(
                 inputPath,
                 SelectedOutputContainer,
-                SelectedThreeDOutputFormat);
+                SelectedThreeDOutputFormat,
+                SelectedLocalModelCandidate);
     }
 
     private string? GetLgCompatibilityCopyPath()
@@ -5318,6 +6136,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(OpenModelsFolderText));
         OnPropertyChanged(nameof(ViewModelsText));
         OnPropertyChanged(nameof(ViewModelsToolTipText));
+        RaiseModelHelpPropertiesChanged();
         OnPropertyChanged(nameof(ActivityLogTitle));
         OnPropertyChanged(nameof(ViewLogText));
         OnPropertyChanged(nameof(CopyFullLogText));
@@ -5325,6 +6144,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LogCopiedText));
         OnPropertyChanged(nameof(CouldNotCopyLogText));
         OnPropertyChanged(nameof(LogCopyNotificationText));
+        OnPropertyChanged(nameof(GlobalBusyText));
         OnPropertyChanged(nameof(ClearText));
         RaisePresetPropertiesChanged();
     }
@@ -5439,6 +6259,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+        RaiseModelHelpPropertiesChanged();
         OnPropertyChanged(nameof(OutputLocationTitle));
         OnPropertyChanged(nameof(OutputPathLabel));
         OnPropertyChanged(nameof(BrowseOutputFolderText));
@@ -5483,9 +6304,27 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionExecutionProgressLabel));
         OnPropertyChanged(nameof(ConversionExecutionProgressPercent));
         OnPropertyChanged(nameof(ConversionExecutionProgressText));
+        OnPropertyChanged(nameof(ConversionProgressBarVisibility));
+        OnPropertyChanged(nameof(ConversionRunningStatusVisibility));
+        OnPropertyChanged(nameof(ConversionTimingEstimatesVisibility));
+        OnPropertyChanged(nameof(ConversionProgressBarValue));
+        OnPropertyChanged(nameof(ConversionProgressBarText));
         OnPropertyChanged(nameof(ConversionExecutionDetailText));
+        OnPropertyChanged(nameof(ConversionElapsedLabelText));
+        OnPropertyChanged(nameof(ConversionRemainingLabelText));
+        OnPropertyChanged(nameof(ConversionEstimatedTotalLabelText));
+        OnPropertyChanged(nameof(ConversionElapsedValueText));
+        OnPropertyChanged(nameof(ConversionRemainingValueText));
+        OnPropertyChanged(nameof(ConversionEstimatedTotalValueText));
         OnPropertyChanged(nameof(ConversionReadinessStatusText));
         OnPropertyChanged(nameof(ConversionBlockedReasonText));
+        OnPropertyChanged(nameof(ConversionReadySummaryVisibility));
+        OnPropertyChanged(nameof(ConversionReadyTitleText));
+        OnPropertyChanged(nameof(ConversionReadyBodyText));
+        OnPropertyChanged(nameof(ConversionReadySelectedModelText));
+        OnPropertyChanged(nameof(ConversionReadyOutputText));
+        OnPropertyChanged(nameof(ConversionReadyDestinationText));
+        OnPropertyChanged(nameof(ConversionMissingRequirementsVisibility));
         OnPropertyChanged(nameof(CanCancelConversion));
         OnPropertyChanged(nameof(CancelConversionText));
         OnPropertyChanged(nameof(ConvertPrimaryActionVisibility));
@@ -5511,6 +6350,8 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(GeneratePreviewText));
         OnPropertyChanged(nameof(PreviewRequiredInstructionText));
         OnPropertyChanged(nameof(PreviewRequirementVisibility));
+        OnPropertyChanged(nameof(ConversionReadySummaryVisibility));
+        OnPropertyChanged(nameof(ConversionMissingRequirementsVisibility));
         OnPropertyChanged(nameof(GeneratePreviewPrimaryActionVisibility));
         OnPropertyChanged(nameof(ConvertPrimaryActionVisibility));
         OnPropertyChanged(nameof(CancelConversionPrimaryActionVisibility));
@@ -5567,6 +6408,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanOpenPreview));
         OnPropertyChanged(nameof(CanDeletePreview));
         OnPropertyChanged(nameof(CanContinuePreview));
+        OnPropertyChanged(nameof(PreviewProgressPercent));
+        OnPropertyChanged(nameof(PreviewProgressText));
+        OnPropertyChanged(nameof(PreviewProgressIsIndeterminate));
         OnPropertyChanged(nameof(PreviewModalDetailText));
         OnPropertyChanged(nameof(PreviewGenerationLogText));
         OnPropertyChanged(nameof(CopyPreviewLogText));
@@ -5585,6 +6429,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ResetOutputPathCommand.RaiseCanExecuteChanged();
         RefreshEngineStatusCommand.RaiseCanExecuteChanged();
         ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+        ShowModelHelpCommand.RaiseCanExecuteChanged();
         ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();
         ShowModelInventoryCommand.RaiseCanExecuteChanged();
         RaiseModelPackImportAvailabilityPropertiesChanged();
@@ -5630,6 +6475,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RefreshEngineStatusCommand.RaiseCanExecuteChanged();
         ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();
         ShowProfileDetailsCommand.RaiseCanExecuteChanged();
+        ShowModelHelpCommand.RaiseCanExecuteChanged();
         ShowModelInventoryCommand.RaiseCanExecuteChanged();
         StartConversionCommand.RaiseCanExecuteChanged();
         RaiseSystemStatusPropertiesChanged();
@@ -5658,6 +6504,10 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ReplaceSelectedVideoTitleText));
         OnPropertyChanged(nameof(ReplaceSelectedVideoBodyText));
         OnPropertyChanged(nameof(ReplaceVideoConfirmText));
+        OnPropertyChanged(nameof(ConversionCompletedTitleText));
+        OnPropertyChanged(nameof(ConversionCompletedBodyText));
+        OnPropertyChanged(nameof(ConversionCompletedOutputPathText));
+        OnPropertyChanged(nameof(AcceptConversionCompletedText));
         RaiseModelPackImportConfirmationPropertiesChanged();
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsBodyText));
@@ -5689,6 +6539,24 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanImportModelPack));
         OnPropertyChanged(nameof(ImportModelPackText));
         ImportModelPackCommand.RaiseCanExecuteChanged();
+        RaiseModelHelpPropertiesChanged();
+    }
+
+    private void RaiseModelHelpPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(CanShowModelHelp));
+        OnPropertyChanged(nameof(ModelHelpButtonText));
+        OnPropertyChanged(nameof(ModelHelpButtonToolTipText));
+        OnPropertyChanged(nameof(ModelHelpTitleText));
+        OnPropertyChanged(nameof(ModelHelpIntroText));
+        OnPropertyChanged(nameof(ModelHelpModelHeaderText));
+        OnPropertyChanged(nameof(ModelHelpPurposeHeaderText));
+        OnPropertyChanged(nameof(ModelHelpUseHeaderText));
+        OnPropertyChanged(nameof(ModelHelpSceneHeaderText));
+        OnPropertyChanged(nameof(ModelHelpDepthHeaderText));
+        OnPropertyChanged(nameof(ModelHelpSizePerformanceHeaderText));
+        OnPropertyChanged(nameof(ModelHelpRows));
+        ShowModelHelpCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseModalStatePropertiesChanged()
@@ -5699,8 +6567,10 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ProfileDetailsModalContentVisibility));
+        OnPropertyChanged(nameof(ModelHelpModalContentVisibility));
         OnPropertyChanged(nameof(ReplaceVideoConfirmationModalContentVisibility));
         OnPropertyChanged(nameof(ModelPackImportConfirmationModalContentVisibility));
+        OnPropertyChanged(nameof(ConversionCompletedModalContentVisibility));
         OnPropertyChanged(nameof(ModelInventoryModalContentVisibility));
         OnPropertyChanged(nameof(ActivityLogModalContentVisibility));
         OnPropertyChanged(nameof(PreviewGeneratingModalContentVisibility));
@@ -5718,6 +6588,12 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ModelInventoryFolderPathText));
         OnPropertyChanged(nameof(SelectableModelsSectionTitleText));
         OnPropertyChanged(nameof(SelectableModelsInventoryText));
+        OnPropertyChanged(nameof(SelectableModelNameHeaderText));
+        OnPropertyChanged(nameof(SelectableModelIw3HeaderText));
+        OnPropertyChanged(nameof(SelectableModelCheckpointHeaderText));
+        OnPropertyChanged(nameof(SelectableModelTypeHeaderText));
+        OnPropertyChanged(nameof(SelectableModelSourceHeaderText));
+        OnPropertyChanged(nameof(SelectableModelInventoryRows));
         OnPropertyChanged(nameof(DiagnosticModelsSectionTitleText));
         OnPropertyChanged(nameof(DiagnosticModelsInventoryText));
         OnPropertyChanged(nameof(RuntimeDependenciesSectionTitleText));
@@ -5743,6 +6619,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionReadinessVisibility));
         OnPropertyChanged(nameof(ConversionReadinessStatusLabel));
         OnPropertyChanged(nameof(ConversionReadinessMissingRequirementsTitle));
+        OnPropertyChanged(nameof(ConversionMissingRequirementsVisibility));
         OnPropertyChanged(nameof(ConversionReadinessStatusText));
         OnPropertyChanged(nameof(ConversionReadinessIssuesText));
         OnPropertyChanged(nameof(ConversionReadinessMissingComponentsSummaryText));

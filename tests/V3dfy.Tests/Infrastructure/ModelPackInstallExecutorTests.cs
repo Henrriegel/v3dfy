@@ -65,6 +65,55 @@ public sealed class ModelPackInstallExecutorTests : IDisposable
     }
 
     [Fact]
+    public async Task ValidModelPack_InstalledSharedSafeCheckpointExposesExpectedVariantsAfterInventoryRefresh()
+    {
+        var manifest = CreateValidManifest(
+            checkpointPath: Iw3DepthModelMapper.DepthAnything3MonoLargeRelativePath,
+            mappingKey: Iw3DepthModelMapper.DepthAnything3MonoLargeKey,
+            iw3DepthModelName: Iw3DepthModelMapper.AnyV3MonoDepthModelName,
+            displayName: Iw3DepthModelMapper.DepthAnything3MonoLargeEnglishName);
+        var zipPath = CreateModelPackZip(manifest);
+        var targetRoot = TargetRoot();
+
+        var result = await InstallAsync(zipPath, targetRoot);
+        var health = new InternalToolsHealthChecker().CheckDetailed(PathsForTargetRoot(targetRoot));
+
+        Assert.True(result.Success);
+        var selectable = Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false);
+        Assert.Equal(2, selectable.Count);
+        Assert.Contains(selectable, candidate =>
+            candidate.MappingKey == Iw3DepthModelMapper.DepthAnything3MonoLargeKey &&
+            candidate.Iw3DepthModelName == Iw3DepthModelMapper.AnyV3MonoDepthModelName);
+        Assert.Contains(selectable, candidate =>
+            candidate.MappingKey == Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey &&
+            candidate.Iw3DepthModelName == Iw3DepthModelMapper.AnyV3Mono01DepthModelName);
+    }
+
+    [Fact]
+    public async Task ValidModelPack_InstalledGatedSafeCheckpointIsKnownButNotSelectableAfterInventoryRefresh()
+    {
+        var manifest = CreateValidManifest(
+            checkpointPath: Iw3DepthModelMapper.DepthProRelativePath,
+            mappingKey: Iw3DepthModelMapper.DepthProKey,
+            iw3DepthModelName: Iw3DepthModelMapper.DepthProDepthModelName,
+            displayName: Iw3DepthModelMapper.DepthProEnglishName);
+        var zipPath = CreateModelPackZip(manifest);
+        var targetRoot = TargetRoot();
+
+        var result = await InstallAsync(zipPath, targetRoot);
+        var health = new InternalToolsHealthChecker().CheckDetailed(PathsForTargetRoot(targetRoot));
+
+        Assert.True(result.Success);
+        Assert.Empty(Iw3DepthModelMapper.CreateSelectableCandidates(
+            health.ModelInventory.SelectionCandidates,
+            useSpanish: false));
+        Assert.Empty(Iw3DepthModelMapper.GetUnmappedCandidates(
+            health.ModelInventory.SelectionCandidates));
+    }
+
+    [Fact]
     public async Task ValidModelPack_InstalledUnmappedCompatibleCheckpointRemainsDiagnosticOnlyAfterInventoryRefresh()
     {
         var manifest = CreateValidManifest(
@@ -463,15 +512,18 @@ public sealed class ModelPackInstallExecutorTests : IDisposable
 
     private static MutableModelPackManifest CreateValidManifest(
         string checkpointPath = "hub/checkpoints/depth_anything_metric_depth_outdoor.pt",
-        byte[]? checkpointBytes = null)
+        byte[]? checkpointBytes = null,
+        string mappingKey = "depth-anything-metric-outdoor",
+        string iw3DepthModelName = "ZoeD_Any_K",
+        string displayName = "Depth Anything Metric Outdoor")
     {
         checkpointBytes ??= OutdoorCheckpointBytes;
         return new MutableModelPackManifest
         {
             SchemaVersion = 1,
-            PackId = "depth-anything-metric-outdoor",
+            PackId = mappingKey,
             PackVersion = "1.0.0",
-            DisplayName = "Depth Anything Metric Outdoor",
+            DisplayName = displayName,
             TargetRoot = ModelPackManifest.ExpectedTargetRoot,
             CompatibleIw3Versions = ["nunif-d23721f1"],
             MinV3dfyVersion = "0.1.0-preview.1",
@@ -479,8 +531,8 @@ public sealed class ModelPackInstallExecutorTests : IDisposable
             [
                 new()
                 {
-                    MappingKey = "depth-anything-metric-outdoor",
-                    Iw3DepthModelName = "ZoeD_Any_K",
+                    MappingKey = mappingKey,
+                    Iw3DepthModelName = iw3DepthModelName,
                     File = checkpointPath,
                     Sha256 = Sha256(checkpointBytes),
                     SizeBytes = checkpointBytes.Length,

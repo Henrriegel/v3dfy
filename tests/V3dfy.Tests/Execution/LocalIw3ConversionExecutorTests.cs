@@ -178,6 +178,23 @@ public sealed class LocalIw3ConversionExecutorTests
     }
 
     [Fact]
+    public void CreatePartialOutputPath_UsesSluggedFinalOutputBase()
+    {
+        var finalOutputPath = TestPaths.OutputRoot(
+            "converted",
+            "Movie.depth-anything-v2-small.v3dfy.3d.htab.mp4");
+
+        var partialOutputPath = ConversionOutputFinalizer.CreatePartialOutputPath(
+            finalOutputPath);
+
+        Assert.Equal(
+            TestPaths.OutputRoot(
+                "converted",
+                "_tmp_Movie.depth-anything-v2-small.v3dfy.3d.htab.v3dfy-partial.mp4"),
+            partialOutputPath);
+    }
+
+    [Fact]
     public void GetCurrentAttemptPartialCleanupCandidates_IncludesTrackedDoubleTempAndLegacyOnly()
     {
         var finalOutputPath = TestPaths.OutputRoot(

@@ -13,17 +13,22 @@ public sealed class VideoConversionPlanServiceTests
 
     private readonly VideoConversionPlanService _service = new();
 
-    public static TheoryData<string, string> KnownDepthModelData => new()
+    public static TheoryData<string, string, string> KnownDepthModelData
     {
-        { Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDAnyNDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDAnyKDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthOutdoorRelativePath, Iw3DepthModelMapper.ZoeDOutdoorDepthModelName },
-        { Iw3DepthModelMapper.ZoeDepthIndoorOutdoorRelativePath, Iw3DepthModelMapper.ZoeDIndoorOutdoorDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingSmallRelativePath, Iw3DepthModelMapper.AnySDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingBaseRelativePath, Iw3DepthModelMapper.AnyBDepthModelName },
-        { Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath, Iw3DepthModelMapper.AnyV2SDepthModelName },
-    };
+        get
+        {
+            var data = new TheoryData<string, string, string>();
+            foreach (var entry in Iw3DepthModelMapper.RegistryEntries.Where(static entry => entry.IsReadySelectable))
+            {
+                data.Add(
+                    entry.Key,
+                    entry.ExpectedRelativePaths[0],
+                    entry.DepthModelName);
+            }
+
+            return data;
+        }
+    }
 
     [Fact]
     public void Create_Mp4Input_SuggestsTvCompatibleOutputPath()
@@ -296,12 +301,16 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
-    public void Create_SelectedModel_DoesNotChangeCommandPreviewWithoutSafeModelArgument()
+    public void Create_SelectedModelWithoutSafeDepthArgument_AddsOutputSlugOnly()
     {
         var planWithoutModel = CreatePlan();
         var planWithModel = CreatePlan(selectedLocalModel: CatalogManagedModel());
 
-        Assert.Equal(planWithoutModel.CommandPreview, planWithModel.CommandPreview);
+        Assert.DoesNotContain("--depth-model", planWithModel.CommandPreview);
+        Assert.NotEqual(planWithoutModel.CommandPreview, planWithModel.CommandPreview);
+        Assert.EndsWith(
+            "Movie.default-depth-model.v3dfy.3d.htab.mp4",
+            planWithModel.SuggestedOutputPath);
     }
 
     [Fact]
@@ -324,15 +333,74 @@ public sealed class VideoConversionPlanServiceTests
         Assert.DoesNotContain(
             Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath,
             plan.CommandPreview);
+        Assert.EndsWith(
+            "Movie.depth-anything-metric-indoor.v3dfy.3d.htab.mp4",
+            plan.SuggestedOutputPath);
+    }
+
+    [Fact]
+    public void Create_RecognizedDepthAnythingV2Small_AddsMappingKeySlugToAutomaticOutputPath()
+    {
+        var plan = CreatePlan(
+            inputPath: TestPaths.SourceRoot("sample_video.mp4"),
+            selectedLocalModel: RecognizedDepthModel(
+                Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath,
+                Iw3DepthModelMapper.AnyV2SDepthModelName,
+                Iw3DepthModelMapper.DepthAnythingV2SmallKey));
+
+        Assert.Equal(
+            TestPaths.SourceRoot("sample_video.depth-anything-v2-small.v3dfy.3d.htab.mp4"),
+            plan.SuggestedOutputPath);
+        Assert.Contains(plan.SuggestedOutputPath, plan.CommandPreview);
+    }
+
+    [Fact]
+    public void Create_SelectedModel_CustomOutputPathRemainsExact()
+    {
+        var customOutputPath = TestPaths.OutputRoot("ManualName.custom");
+
+        var plan = CreatePlan(
+            options: DefaultOptions() with
+            {
+                CustomOutputPath = customOutputPath,
+            },
+            selectedLocalModel: RecognizedDepthModel(
+                Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath,
+                Iw3DepthModelMapper.AnyV2SDepthModelName,
+                Iw3DepthModelMapper.DepthAnythingV2SmallKey));
+
+        Assert.Equal(customOutputPath, plan.SuggestedOutputPath);
+        Assert.DoesNotContain("depth-anything-v2-small.v3dfy", plan.SuggestedOutputPath);
+    }
+
+    [Fact]
+    public void CreateSuggestedOutputPath_SelectedModelSlugIsNotDuplicated()
+    {
+        var outputPath = VideoConversionPlanService.CreateSuggestedOutputPath(
+            TestPaths.SourceRoot("sample_video.depth-anything-v2-small.mp4"),
+            OutputContainer.MP4,
+            ThreeDOutputFormat.HalfTopBottom,
+            RecognizedDepthModel(
+                Iw3DepthModelMapper.DepthAnythingV2SmallRelativePath,
+                Iw3DepthModelMapper.AnyV2SDepthModelName,
+                Iw3DepthModelMapper.DepthAnythingV2SmallKey));
+
+        Assert.Equal(
+            TestPaths.SourceRoot("sample_video.depth-anything-v2-small.v3dfy.3d.htab.mp4"),
+            outputPath);
     }
 
     [Theory]
     [MemberData(nameof(KnownDepthModelData))]
     public void Create_RecognizedDepthModels_AddMatchingDepthModelToCommandPreview(
+        string key,
         string relativePath,
         string depthModelName)
     {
-        var plan = CreatePlan(selectedLocalModel: RecognizedDepthModel(relativePath));
+        var plan = CreatePlan(selectedLocalModel: RecognizedDepthModel(
+            relativePath,
+            depthModelName,
+            key));
 
         Assert.NotNull(plan.SelectedLocalModel);
         Assert.Equal(depthModelName, plan.SelectedLocalModel.Iw3DepthModelName);
@@ -405,7 +473,9 @@ public sealed class VideoConversionPlanServiceTests
         IsCatalogManaged: false);
 
     private static LocalModelSelectionCandidate RecognizedDepthModel(
-        string? relativePath = null)
+        string? relativePath = null,
+        string? depthModelName = null,
+        string? mappingKey = null)
     {
         relativePath ??= Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorRelativePath;
         var fileName = relativePath
@@ -421,7 +491,9 @@ public sealed class VideoConversionPlanServiceTests
         Extension: ".pt",
         ModelType: string.Empty,
         Purpose: string.Empty,
-        IsCatalogManaged: false);
+        IsCatalogManaged: false,
+        Iw3DepthModelName: depthModelName,
+        MappingKey: mappingKey);
     }
 
     private static VideoConversionPlanOptions DefaultOptions() => new(

@@ -299,6 +299,8 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("Style=\"{StaticResource DestructiveButtonStyle}\"", cancelConversionBlock);
         Assert.Contains("MinHeight=\"44\"", cancelConversionBlock);
         Assert.Contains("Padding=\"16,11\"", cancelConversionBlock);
+        Assert.Contains("FontSize=\"15\"", cancelConversionBlock);
+        Assert.Contains("FontWeight=\"Bold\"", cancelConversionBlock);
         Assert.Contains("CancelConversionCommand", cancelConversionBlock);
         Assert.Contains("x:Key=\"DestructiveButtonStyle\"", appResources);
         Assert.Contains("DestructiveHoverBrush", appResources);
@@ -315,6 +317,146 @@ public sealed class MainWindowXamlStructureTests
         Assert.DoesNotContain("AccentHoverBrush", destructiveStyle);
         Assert.DoesNotContain("AccentPressedBrush", destructiveStyle);
         Assert.DoesNotContain("DataTrigger Binding=\"{Binding IsConversionRunning}\"", startConversionBlock);
+    }
+
+    [Fact]
+    public void ConversionCompletedModal_UsesStyledModalAndAcceptCommand()
+    {
+        var xaml = ReadMainWindowXaml();
+        var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var modal = ExtractSourceRange(
+            xaml,
+            "Visibility=\"{Binding ConversionCompletedModalContentVisibility}\"",
+            "<StackPanel Grid.Row=\"3\"");
+        var footer = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"AcceptConversionCompletedButton\"",
+            "AutomationProperties.AutomationId=\"CopyFullLogButton\"");
+
+        Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", xaml);
+        Assert.Contains("Style=\"{StaticResource V3dfyModalCardStyle}\"", xaml);
+        Assert.Contains("ConversionCompletedTitleText", viewModel);
+        Assert.Contains("\"Conversion complete\"", viewModel);
+        Assert.Contains("\"Conversi\\u00f3n finalizada\"", viewModel);
+        Assert.Contains("Text=\"{Binding ConversionCompletedBodyText}\"", modal);
+        Assert.Contains("Text=\"{Binding ConversionCompletedOutputPathText}\"", modal);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConversionCompletedOutputPath\"", modal);
+        Assert.Contains("Command=\"{Binding AcceptConversionCompletedCommand}\"", footer);
+        Assert.Contains("Content=\"{Binding AcceptConversionCompletedText}\"", footer);
+        Assert.DoesNotContain("MessageBox", xaml);
+        Assert.DoesNotContain("MessageBox", viewModel);
+    }
+
+    [Fact]
+    public void SystemStatusConversionTab_SeparatesPreviewReadyRunningAndMissingRequirementStates()
+    {
+        var xaml = ReadMainWindowXaml();
+        var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var conversionTab = ExtractSourceRange(
+            xaml,
+            "Header=\"{Binding SystemStatusConversionTabTitle}\"",
+            "AutomationProperties.AutomationId=\"GeneratePreviewPrimaryActionButton\"");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"ConversionReadySummary\"", conversionTab);
+        Assert.Contains("Visibility=\"{Binding ConversionReadySummaryVisibility}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionReadyTitleText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionReadyBodyText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionReadySelectedModelText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionReadyOutputText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionReadyDestinationText}\"", conversionTab);
+        Assert.Contains("Visibility=\"{Binding ConversionRunningStatusVisibility}\"", conversionTab);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConversionTimingEstimates\"", conversionTab);
+        Assert.Contains("Visibility=\"{Binding ConversionTimingEstimatesVisibility}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionElapsedLabelText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionElapsedValueText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionRemainingLabelText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionRemainingValueText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionEstimatedTotalLabelText}\"", conversionTab);
+        Assert.Contains("Text=\"{Binding ConversionEstimatedTotalValueText}\"", conversionTab);
+        Assert.Contains("Visibility=\"{Binding ConversionMissingRequirementsVisibility}\"", conversionTab);
+        Assert.Contains("public string ConversionReadyTitleText => Text(\"Conversion ready\", \"Conversi\\u00f3n lista\")", viewModel);
+        Assert.Contains("\"Preview accepted. The final video is ready to be generated.\"", viewModel);
+        Assert.Contains("\"Vista previa aceptada. El video final est\\u00e1 listo para generarse.\"", viewModel);
+        Assert.Contains("\"Selected model\"", viewModel);
+        Assert.Contains("\"Modelo seleccionado\"", viewModel);
+        Assert.Contains("\"Destination\"", viewModel);
+        Assert.Contains("\"Destino\"", viewModel);
+        Assert.Contains("public string ConversionElapsedLabelText => Text(\"Elapsed\", \"Transcurrido\")", viewModel);
+        Assert.Contains("public string ConversionRemainingLabelText => Text(\"Remaining\", \"Restante\")", viewModel);
+        Assert.Contains("public string ConversionEstimatedTotalLabelText => Text(\"Estimated total\", \"Total estimado\")", viewModel);
+    }
+
+    [Fact]
+    public void LiveConversionHeader_ContainsStyledProgressBarWithoutReplacingCancel()
+    {
+        var xaml = ReadMainWindowXaml();
+        var liveConversion = ExtractSourceRange(
+            xaml,
+            "Visibility=\"{Binding ConversionRunningVisibility}\"",
+            "x:Name=\"ConversionLiveLogList\"");
+
+        Assert.Contains("Visibility=\"{Binding ConversionProgressBarVisibility}\"", liveConversion);
+        Assert.Contains("Value=\"{Binding ConversionProgressBarValue, Mode=OneWay}\"", liveConversion);
+        Assert.DoesNotContain("Value=\"{Binding ConversionProgressBarValue}\"", liveConversion);
+        Assert.Contains("Text=\"{Binding ConversionProgressBarText}\"", liveConversion);
+        Assert.Contains("Style=\"{StaticResource V3dfyProgressBarStyle}\"", liveConversion);
+        Assert.Contains("<StackPanel Grid.Row=\"1\"", liveConversion);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"220\" />", liveConversion);
+        Assert.Contains("AutomationProperties.AutomationId=\"CancelConversionPrimaryActionButton\"", xaml);
+        Assert.Contains("Command=\"{Binding CancelConversionCommand}\"", xaml);
+    }
+
+    [Fact]
+    public void PreviewGeneratingModal_ContainsStyledProgressBarOnlyInGeneratingContent()
+    {
+        var xaml = ReadMainWindowXaml();
+        var generating = ExtractSourceRange(
+            xaml,
+            "Visibility=\"{Binding PreviewGeneratingModalContentVisibility}\"",
+            "x:Name=\"PreviewGenerationLogList\"");
+        var ready = ExtractSourceRange(
+            xaml,
+            "Visibility=\"{Binding PreviewReadyModalContentVisibility}\"",
+            "Visibility=\"{Binding ModelHelpModalContentVisibility}\"");
+
+        Assert.Contains("Value=\"{Binding PreviewProgressPercent, Mode=OneWay}\"", generating);
+        Assert.DoesNotContain("Value=\"{Binding PreviewProgressPercent}\"", generating);
+        Assert.Contains("IsIndeterminate=\"{Binding PreviewProgressIsIndeterminate}\"", generating);
+        Assert.Contains("Text=\"{Binding PreviewProgressText}\"", generating);
+        Assert.Contains("Style=\"{StaticResource V3dfyProgressBarStyle}\"", generating);
+        Assert.Contains("<StackPanel Grid.Row=\"4\"", generating);
+        Assert.Contains("Margin=\"0,8,0,10\"", generating);
+        Assert.Contains("VerticalAlignment=\"Top\"", generating);
+        Assert.DoesNotContain("PreviewProgressPercent", ready);
+        Assert.DoesNotContain("V3dfyProgressBarStyle", ready);
+
+        var appResources = ReadAppXaml();
+        Assert.Contains("x:Key=\"V3dfyProgressBarStyle\"", appResources);
+        Assert.Contains("<Setter Property=\"Height\" Value=\"10\" />", appResources);
+    }
+
+    [Fact]
+    public void LogContextMenus_UseV3dfyStylesAndKeepCopySelectAll()
+    {
+        var xaml = ReadMainWindowXaml();
+        var appResources = ReadAppXaml();
+
+        Assert.Contains("x:Key=\"V3dfyContextMenuStyle\"", appResources);
+        Assert.Contains("TargetType=\"MenuItem\"", appResources);
+        Assert.Contains("ComboBoxHoverBrush", appResources);
+        Assert.Contains("CardBackgroundBrush", appResources);
+        Assert.Contains("CardBorderBrush", appResources);
+        Assert.Contains("V3dfyContextMenuStyle", xaml);
+        Assert.Contains("Header=\"Copy\"", xaml);
+        Assert.Contains("Command=\"ApplicationCommands.Copy\"", xaml);
+        Assert.Contains("Header=\"Select all\"", xaml);
+        Assert.Contains("Command=\"ApplicationCommands.SelectAll\"", xaml);
+        Assert.Contains("ActivityLogPanelText", xaml);
+        Assert.Contains("ActivityLogModalText", xaml);
+        Assert.Contains("TechnicalDetailsBodyText", xaml);
+        Assert.Contains("PreviewGenerationLogList", xaml);
+        Assert.Contains("ConversionLiveLogList", xaml);
+        Assert.DoesNotContain("MessageBox", xaml);
     }
 
     [Fact]
