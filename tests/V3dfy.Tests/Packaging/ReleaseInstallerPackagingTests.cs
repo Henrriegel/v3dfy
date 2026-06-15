@@ -296,16 +296,21 @@ public sealed class ReleaseInstallerPackagingTests
         var progressSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupProgress.cs");
         var installerSource = ReadRepoFile("src", "V3dfy.SetupHelper", "PayloadInstaller.cs");
 
-        Assert.Contains("Text = \"v3dfy Setup\"", uiSource);
-        Assert.Contains("Text = \"Installing v3dfy\"", uiSource);
+        Assert.Contains("Text = uiText.WindowTitle", uiSource);
+        Assert.Contains("Text = uiText.InstallingTitle", uiSource);
         Assert.Contains("statusLabel", uiSource);
         Assert.Contains("overallProgressTextLabel", uiSource);
         Assert.Contains("overallProgressBar", uiSource);
-        Assert.Contains("Text = \"Overall progress\"", uiSource);
+        Assert.Contains("Text = uiText.OverallProgress", uiSource);
+        Assert.Contains("languageComboBox", uiSource);
+        Assert.Contains("themeComboBox", uiSource);
+        Assert.Contains("SetupUiText.For", uiSource);
+        Assert.Contains("SetupUiThemeDefinition.For", uiSource);
         Assert.Contains("progressPanel.Controls.Add(overallProgressTextLabel, 0, 0)", uiSource);
         Assert.Contains("progressPanel.Controls.Add(overallProgressBar, 0, 1)", uiSource);
-        Assert.Contains("progressPanel.Controls.Add(statusLabel, 0, 2)", uiSource);
-        Assert.Contains("progressPanel.Controls.Add(progressBar, 0, 3)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(currentProgressHeaderLabel, 0, 2)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(statusLabel, 0, 3)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(progressBar, 0, 4)", uiSource);
         Assert.Contains("ProgressBar", uiSource);
         Assert.Contains("progressTextLabel", uiSource);
         Assert.Contains("ListBox", uiSource);

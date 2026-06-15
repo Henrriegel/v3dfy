@@ -39,7 +39,11 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
         Assert.Contains("InstallerModelPackDiscovery.DiscoverOffline", prepareMethod);
         Assert.Contains("options.ModelPacksSourceDirectory ?? options.PartsDirectory", prepareMethod);
         Assert.Contains("InstallerModelPackDiscovery.DiscoverWeb", prepareMethod);
-        Assert.Contains("new InstallerModelPackSelectionPageModel(discovery)", prepareMethod);
+        Assert.Contains("var useSpanish = selectedLanguage == SetupUiLanguage.Spanish;", prepareMethod);
+        Assert.Contains("DiscoverOffline(", prepareMethod);
+        Assert.Contains("useSpanish)", prepareMethod);
+        Assert.Contains("DiscoverWeb(manifest, useSpanish)", prepareMethod);
+        Assert.Contains("new InstallerModelPackSelectionPageModel(discovery, uiText)", prepareMethod);
     }
 
     [Fact]
@@ -55,9 +59,7 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
             "private async Task BeginSetupFlowAsync()",
             "private async Task<InstallerModelPackSelectionPageModel?> PrepareModelPackSelectionPageAsync()");
 
-        Assert.Contains(
-            "Optional model-pack catalog could not be loaded. v3dfy will continue installing with its base model.",
-            prepareMethod);
+        Assert.Contains("uiText.OptionalModelPackCatalogLoadFailed", prepareMethod);
         Assert.Contains("pendingSetupWarningMessages.Add(warning);", prepareMethod);
         Assert.Contains("return null;", prepareMethod);
         Assert.Contains("StartPayloadInstall();", beginFlow);
@@ -73,21 +75,21 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
             "private TableLayoutPanel CreateModelPackSelectionPanel()",
             "protected override void OnShown");
 
-        Assert.Contains("InstallerModelPackSelectionPageModel.TitleText", source);
-        Assert.Contains("InstallerModelPackSelectionPageModel.BodyText", source);
-        Assert.Contains("InstallerModelPackSelectionPageModel.OfflineNoPacksText", source);
+        Assert.Contains("uiText.OptionalModelPacksTitle", source);
+        Assert.Contains("uiText.OptionalModelPacksBody", source);
+        Assert.Contains("uiText.OfflineNoPacksText", source);
         Assert.Contains(InstallerModelPackSelectionPageModel.TitleText, pageModelSource);
         Assert.Contains(InstallerModelPackSelectionPageModel.BodyText, pageModelSource);
         Assert.Contains(InstallerModelPackSelectionPageModel.OfflineNoPacksText, pageModelSource);
         Assert.Contains("DataGridView", createPanel);
         Assert.Contains("DataGridViewCheckBoxColumn", createPanel);
-        Assert.Contains("HeaderText = \"Model\"", createPanel);
-        Assert.Contains("HeaderText = \"Best use\"", createPanel);
-        Assert.Contains("HeaderText = \"Size\"", createPanel);
-        Assert.Contains("HeaderText = \"Source / Status\"", createPanel);
+        Assert.Contains("HeaderText = uiText.ModelColumn", createPanel);
+        Assert.Contains("HeaderText = uiText.BestUseColumn", createPanel);
+        Assert.Contains("HeaderText = uiText.SizeColumn", createPanel);
+        Assert.Contains("HeaderText = uiText.SourceStatusColumn", createPanel);
         Assert.Contains("AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells", createPanel);
         Assert.Contains("WrapMode = DataGridViewTriState.True", createPanel);
-        Assert.Contains("Text = \"Continue\"", createPanel + source);
+        Assert.Contains("Text = uiText.ContinueButton", createPanel + source);
         Assert.DoesNotContain("Text = \"Select all\"", source);
         Assert.DoesNotContain("Text = \"Deselect all\"", source);
     }
@@ -108,6 +110,69 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
     }
 
     [Fact]
+    public void UiRunner_HasLanguageAndThemeSelectors()
+    {
+        var source = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
+        var textSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupUiText.cs");
+        var themeSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupUiThemeDefinition.cs");
+
+        Assert.Contains("languageComboBox", source);
+        Assert.Contains("themeComboBox", source);
+        Assert.Contains("SetupUiLanguage.English", source);
+        Assert.Contains("SetupUiLanguage.Spanish", source);
+        Assert.Contains("SetupUiThemeKind.Light", source);
+        Assert.Contains("SetupUiThemeKind.Dark", source);
+        Assert.Contains("OnLanguageSelectionChanged", source);
+        Assert.Contains("OnThemeSelectionChanged", source);
+        Assert.Contains("ApplyLocalizedText", source);
+        Assert.Contains("ApplyTheme", source);
+        Assert.Contains("English", textSource);
+        Assert.Contains("Español", textSource);
+        Assert.Contains("Light", themeSource);
+        Assert.Contains("Dark", themeSource);
+    }
+
+    [Fact]
+    public void UiRunner_AppliesThemeToVisibleInstallerSurfaces()
+    {
+        var source = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
+        var applyTheme = ExtractSourceRange(
+            source,
+            "private void ApplyTheme()",
+            "private static void ApplyThemeToControl");
+
+        Assert.Contains("BackColor = windowBackground", applyTheme);
+        Assert.Contains("ApplyThemeToControl(root", applyTheme);
+        Assert.Contains("ApplyThemeToControl(progressPanel", applyTheme);
+        Assert.Contains("ApplyThemeToControl(modelPackSelectionPanel", applyTheme);
+        Assert.Contains("overallProgressBar.BackColor", applyTheme);
+        Assert.Contains("progressBar.BackColor", applyTheme);
+        Assert.Contains("StyleButton(continueButton", applyTheme);
+        Assert.Contains("StyleButton(actionButton", applyTheme);
+        Assert.Contains("logListBox.BackColor", applyTheme);
+        Assert.Contains("modelPackGrid.BackgroundColor", applyTheme);
+        Assert.Contains("modelPackGrid.ColumnHeadersDefaultCellStyle", applyTheme);
+    }
+
+    [Fact]
+    public void UiRunner_CurrentPackageProgressBarLogicRemainsByteBased()
+    {
+        var source = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
+        var reportProgress = ExtractSourceRange(
+            source,
+            "public void ReportProgress(SetupProgressEvent progress)",
+            "public void AppendLogLine(string message)");
+
+        Assert.Contains("if (progress.Percent is { } percent)", reportProgress);
+        Assert.Contains("progressBar.Style = ProgressBarStyle.Continuous;", reportProgress);
+        Assert.Contains("progressBar.Value = Math.Clamp((int)Math.Round(percent * 10)", reportProgress);
+        Assert.Contains("progress.CurrentBytes", reportProgress);
+        Assert.Contains("progress.TotalBytes", reportProgress);
+        Assert.Contains("progressBar.Style = ProgressBarStyle.Marquee;", reportProgress);
+        Assert.Contains("UpdateOverallProgress(progress);", reportProgress);
+    }
+
+    [Fact]
     public void SelectionPage_StoresSelectedRowsAndImportsOnlyAfterVerifiedAcquisition()
     {
         var uiSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
@@ -119,15 +184,15 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
         Assert.Contains("AcquiredModelPackFiles", uiSource);
         Assert.Contains("ImportedModelPackFiles", uiSource);
         Assert.Contains("selectedModelPackRows = modelPackSelectionPageModel.SelectionState.SelectedRows;", uiSource);
-        Assert.Contains("No optional model packs selected.", uiSource);
-        Assert.Contains("Optional model packs selected for download, verification, and install after app payload", uiSource);
+        Assert.Contains("uiText.FormatNoOptionalModelPacksSelected()", uiSource);
+        Assert.Contains("uiText.FormatOptionalModelPacksSelected", uiSource);
         Assert.Contains("StartPayloadInstall();", uiSource);
         Assert.Contains("AcquireSelectedModelPacksAsync", uiSource);
         Assert.Contains("ImportAcquiredModelPacksAsync", uiSource);
         Assert.Contains("new InstallerModelPackAcquisitionService().AcquireAsync", uiSource);
         Assert.Contains("new InstallerModelPackImportService().ImportAsync", uiSource);
-        Assert.Contains("Downloading/verifying optional model packs", uiSource);
-        Assert.Contains("Optional model packs installed", uiSource);
+        Assert.Contains("uiText.FormatDownloadingVerifyingOptionalModelPacks", uiSource);
+        Assert.Contains("uiText.FormatOptionalModelPacksInstalled", uiSource);
 
         var installMethod = ExtractSourceRange(
             uiSource,
@@ -150,6 +215,40 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
         Assert.DoesNotContain("ModelPackInstallExecutor", payloadInstallerSource);
         Assert.DoesNotContain("SelectedModelPackRows", payloadInstallerSource);
         Assert.DoesNotContain("InstallerModelPackSelectionRow", payloadInstallerSource);
+    }
+
+    [Fact]
+    public void UiRunner_ReservesOverallProgressForSelectedModelPacks()
+    {
+        var uiSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
+        var trackerSource = ReadRepoFile(
+            "src",
+            "V3dfy.SetupHelper",
+            "SetupOptionalModelPackOverallProgressTracker.cs");
+        var installMethod = ExtractSourceRange(
+            uiSource,
+            "private async Task RunInstallAsync()",
+            "private async Task<InstallerModelPackAcquisitionResult?> AcquireSelectedModelPacksAsync(");
+
+        Assert.Contains("ISetupProgress progress = new UiSetupProgress(this);", installMethod);
+        Assert.Contains("var hasSelectedModelPacks = selectedModelPackRows.Count > 0;", installMethod);
+        Assert.Contains("new SetupOptionalModelPackOverallProgressTracker", installMethod);
+        Assert.Contains("new SetupOptionalModelPackProgressItem", installMethod);
+        Assert.Contains("PayloadInstaller().InstallAsync", installMethod);
+        Assert.Contains("AcquireSelectedModelPacksAsync", installMethod);
+        Assert.Contains("ImportAcquiredModelPacksAsync", installMethod);
+        Assert.Contains("if (hasSelectedModelPacks)", installMethod);
+        Assert.Contains("SetupProgressPhase.Completed", installMethod);
+        Assert.Contains("PayloadCompletedUnitsWhenModelPacksSelected = 8500", trackerSource);
+        Assert.Contains("DownloadingModelPack => new OverallPhaseRange(8500, 9000)", trackerSource);
+        Assert.Contains("OverallCompletedUnits = completedUnits", trackerSource);
+
+        var wrapperIndex = installMethod.IndexOf(
+            "new SetupOptionalModelPackOverallProgressTracker",
+            StringComparison.Ordinal);
+        var payloadIndex = installMethod.IndexOf("PayloadInstaller().InstallAsync", StringComparison.Ordinal);
+        Assert.True(wrapperIndex >= 0);
+        Assert.True(payloadIndex > wrapperIndex);
     }
 
     private static string ReadRepoFile(params string[] segments) =>

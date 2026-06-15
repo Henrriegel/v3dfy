@@ -8,16 +8,21 @@ public sealed class InstallerModelPackSelectionPageModel
         "v3dfy already includes a base model. Select optional model packs to install now, or leave everything unchecked and import models later from the app.";
 
     public const string OfflineNoPacksText =
-        "No optional model packs found beside this installer. v3dfy will still install with its base model. You can import model packs later from the app.";
+        "No optional model packs were found beside this installer. v3dfy will still install with its base model. You can import model packs later from the app.";
 
-    public InstallerModelPackSelectionPageModel(InstallerModelPackDiscoveryResult discovery)
+    public InstallerModelPackSelectionPageModel(
+        InstallerModelPackDiscoveryResult discovery,
+        SetupUiText? text = null)
     {
         ArgumentNullException.ThrowIfNull(discovery);
+        Text = text ?? SetupUiText.For(SetupUiLanguage.English);
         SelectionState = new InstallerModelPackSelectionState(discovery.Rows);
         NoPacksMessage = discovery.Rows.Count == 0
-            ? OfflineNoPacksText
+            ? Text.OfflineNoPacksText
             : discovery.NoPacksMessage;
     }
+
+    public SetupUiText Text { get; }
 
     public InstallerModelPackSelectionState SelectionState { get; }
 
@@ -32,8 +37,7 @@ public sealed class InstallerModelPackSelectionPageModel
         get
         {
             var count = SelectionState.SelectedCount;
-            var noun = count == 1 ? "model pack" : "model packs";
-            return $"Selected: {count} {noun} - {SelectionState.SelectedTotalSizeText}";
+            return Text.FormatSelectedSummary(count, SelectionState.SelectedTotalSizeText);
         }
     }
 }

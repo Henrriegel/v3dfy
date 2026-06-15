@@ -90,6 +90,10 @@ public static class InstallerModelPackDiscovery
     private const string OfflineStatusText = "Found beside installer";
     private const string OfflineNoPacksMessage =
         "No optional model packs were found beside this installer.";
+    private const string WebStatusTextSpanish = "Disponible para descargar";
+    private const string OfflineStatusTextSpanish = "Encontrado junto al instalador";
+    private const string OfflineNoPacksMessageSpanish =
+        "No se encontraron modelos opcionales junto a este instalador.";
 
     public static InstallerModelPackDiscoveryResult DiscoverWeb(
         InstallerModelPackManifest manifest,
@@ -102,7 +106,7 @@ public static class InstallerModelPackDiscovery
             .Select(pack => CreateRow(
                 pack,
                 sourcePath: null,
-                WebStatusText,
+                useSpanish ? WebStatusTextSpanish : WebStatusText,
                 InstallerModelPackSourceKind.WebReleaseAsset,
                 useSpanish))
             .ToArray();
@@ -121,7 +125,9 @@ public static class InstallerModelPackDiscovery
 
         if (string.IsNullOrWhiteSpace(sourceDirectory) || !Directory.Exists(sourceDirectory))
         {
-            return new InstallerModelPackDiscoveryResult([], OfflineNoPacksMessage);
+            return new InstallerModelPackDiscoveryResult(
+                [],
+                useSpanish ? OfflineNoPacksMessageSpanish : OfflineNoPacksMessage);
         }
 
         var localZips = Directory.EnumerateFiles(sourceDirectory, "*.zip", SearchOption.TopDirectoryOnly)
@@ -137,13 +143,13 @@ public static class InstallerModelPackDiscovery
             .Select(pack => CreateRow(
                 pack,
                 localZips[pack.AssetFileName],
-                OfflineStatusText,
+                useSpanish ? OfflineStatusTextSpanish : OfflineStatusText,
                 InstallerModelPackSourceKind.OfflineLocalZip,
                 useSpanish))
             .ToArray();
 
         return new InstallerModelPackDiscoveryResult(rows, rows.Length == 0
-            ? OfflineNoPacksMessage
+            ? useSpanish ? OfflineNoPacksMessageSpanish : OfflineNoPacksMessage
             : null);
     }
 

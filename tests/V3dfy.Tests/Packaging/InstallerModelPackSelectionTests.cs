@@ -136,6 +136,17 @@ public sealed class InstallerModelPackSelectionTests : IDisposable
     }
 
     [Fact]
+    public void Discovery_UsesSpanishBestUseAndStatusWhenRequested()
+    {
+        var manifest = InstallerModelPackManifest.Parse(CreateManifestJson());
+        var result = InstallerModelPackDiscovery.DiscoverWeb(manifest, useSpanish: true);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal("Peliculas generales y pruebas rapidas.", row.BestUse);
+        Assert.Equal("Disponible para descargar", row.StatusText);
+    }
+
+    [Fact]
     public void TopCheckboxState_TracksSelectionAndTotals()
     {
         var state = new InstallerModelPackSelectionState(

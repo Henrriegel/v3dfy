@@ -27,15 +27,23 @@ internal sealed class SetupProgressForm : Form
     private readonly CancellationTokenSource cancellationTokenSource;
     private readonly TableLayoutPanel root;
     private readonly Label headingLabel;
+    private readonly Label subtitleLabel;
+    private readonly FlowLayoutPanel setupOptionsPanel;
+    private readonly Label languageLabel;
+    private readonly ComboBox languageComboBox;
+    private readonly Label themeLabel;
+    private readonly ComboBox themeComboBox;
     private readonly TableLayoutPanel progressPanel;
     private readonly Label statusLabel;
     private readonly Label overallProgressTextLabel;
     private readonly ProgressBar overallProgressBar;
+    private readonly Label currentProgressHeaderLabel;
     private readonly Label progressTextLabel;
     private readonly ProgressBar progressBar;
     private readonly Label logLabel;
     private readonly ListBox logListBox;
     private readonly TableLayoutPanel modelPackSelectionPanel;
+    private Label modelPackBodyLabel = null!;
     private CheckBox modelPackTopCheckBox = null!;
     private DataGridView modelPackGrid = null!;
     private Label modelPackNoPacksLabel = null!;
@@ -54,6 +62,10 @@ internal sealed class SetupProgressForm : Form
     private bool updatingModelPackControls;
     private bool payloadInstallStarted;
     private bool running;
+    private SetupUiLanguage selectedLanguage = SetupUiLanguage.English;
+    private SetupUiThemeKind selectedThemeKind = SetupUiThemeKind.Dark;
+    private SetupUiText uiText = SetupUiText.For(SetupUiLanguage.English);
+    private SetupUiThemeDefinition uiTheme = SetupUiThemeDefinition.For(SetupUiThemeKind.Dark);
 
     public SetupProgressForm(
         PayloadInstallOptions options,
@@ -64,10 +76,10 @@ internal sealed class SetupProgressForm : Form
         this.logPath = logPath;
         cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
-        Text = "v3dfy Setup";
+        Text = uiText.WindowTitle;
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(760, 520);
-        Size = new Size(820, 580);
+        MinimumSize = new Size(800, 560);
+        Size = new Size(880, 640);
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         MinimizeBox = true;
@@ -76,9 +88,10 @@ internal sealed class SetupProgressForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
-            Padding = new Padding(16),
+            RowCount = 6,
+            Padding = new Padding(18),
         };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -88,15 +101,92 @@ internal sealed class SetupProgressForm : Form
         headingLabel = new Label
         {
             AutoSize = true,
-            Font = new Font(Font.FontFamily, 12, FontStyle.Bold),
-            Text = "Installing v3dfy",
-            Margin = new Padding(0, 0, 0, 12),
+            Font = new Font(Font.FontFamily, 14, FontStyle.Bold),
+            Text = uiText.InstallingTitle,
+            Margin = new Padding(0, 0, 0, 3),
         };
+
+        subtitleLabel = new Label
+        {
+            AutoSize = true,
+            Text = uiText.Subtitle,
+            Margin = new Padding(0, 0, 0, 10),
+        };
+
+        setupOptionsPanel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 0, 0, 12),
+            Padding = new Padding(0),
+        };
+
+        languageLabel = new Label
+        {
+            AutoSize = true,
+            Text = uiText.LanguageLabel,
+            Margin = new Padding(0, 6, 6, 0),
+        };
+        languageComboBox = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 130,
+            Margin = new Padding(0, 0, 18, 0),
+        };
+        languageComboBox.Items.Add(new SetupComboBoxItem<SetupUiLanguage>(
+            SetupUiLanguage.English,
+            uiText.EnglishLanguageName));
+        languageComboBox.Items.Add(new SetupComboBoxItem<SetupUiLanguage>(
+            SetupUiLanguage.Spanish,
+            uiText.SpanishLanguageName));
+        languageComboBox.SelectedIndex = 0;
+        languageComboBox.SelectedIndexChanged += OnLanguageSelectionChanged;
+
+        themeLabel = new Label
+        {
+            AutoSize = true,
+            Text = uiText.ThemeLabel,
+            Margin = new Padding(0, 6, 6, 0),
+        };
+        themeComboBox = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 110,
+            Margin = new Padding(0),
+        };
+        themeComboBox.Items.Add(new SetupComboBoxItem<SetupUiThemeKind>(
+            SetupUiThemeKind.Light,
+            uiText.LightThemeName));
+        themeComboBox.Items.Add(new SetupComboBoxItem<SetupUiThemeKind>(
+            SetupUiThemeKind.Dark,
+            uiText.DarkThemeName));
+        themeComboBox.SelectedIndex = 1;
+        themeComboBox.SelectedIndexChanged += OnThemeSelectionChanged;
+
+        setupOptionsPanel.Controls.Add(languageLabel);
+        setupOptionsPanel.Controls.Add(languageComboBox);
+        setupOptionsPanel.Controls.Add(themeLabel);
+        setupOptionsPanel.Controls.Add(themeComboBox);
+
+        var headingPanel = new TableLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 0, 0, 6),
+        };
+        headingPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headingPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headingPanel.Controls.Add(headingLabel, 0, 0);
+        headingPanel.Controls.Add(subtitleLabel, 0, 1);
 
         statusLabel = new Label
         {
             AutoSize = true,
-            Text = "Preparing setup",
+            Text = uiText.PreparingSetup,
             Margin = new Padding(0, 0, 0, 8),
         };
 
@@ -104,9 +194,11 @@ internal sealed class SetupProgressForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 6,
             Margin = new Padding(0, 0, 0, 12),
+            Padding = new Padding(14),
         };
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -116,7 +208,7 @@ internal sealed class SetupProgressForm : Form
         overallProgressTextLabel = new Label
         {
             AutoSize = true,
-            Text = "Overall progress",
+            Text = uiText.OverallProgress,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = new Padding(0, 0, 0, 4),
         };
@@ -133,6 +225,14 @@ internal sealed class SetupProgressForm : Form
 
         statusLabel.Margin = new Padding(0, 10, 0, 4);
 
+        currentProgressHeaderLabel = new Label
+        {
+            AutoSize = true,
+            Text = uiText.CurrentProgress,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 12, 0, 4),
+        };
+
         progressBar = new ProgressBar
         {
             Dock = DockStyle.Fill,
@@ -145,20 +245,21 @@ internal sealed class SetupProgressForm : Form
         progressTextLabel = new Label
         {
             AutoSize = true,
-            Text = "Working...",
+            Text = uiText.Working,
             TextAlign = ContentAlignment.MiddleLeft,
             Margin = new Padding(0, 6, 0, 0),
         };
         progressPanel.Controls.Add(overallProgressTextLabel, 0, 0);
         progressPanel.Controls.Add(overallProgressBar, 0, 1);
-        progressPanel.Controls.Add(statusLabel, 0, 2);
-        progressPanel.Controls.Add(progressBar, 0, 3);
-        progressPanel.Controls.Add(progressTextLabel, 0, 4);
+        progressPanel.Controls.Add(currentProgressHeaderLabel, 0, 2);
+        progressPanel.Controls.Add(statusLabel, 0, 3);
+        progressPanel.Controls.Add(progressBar, 0, 4);
+        progressPanel.Controls.Add(progressTextLabel, 0, 5);
 
         logLabel = new Label
         {
             AutoSize = true,
-            Text = "Details",
+            Text = uiText.Details,
             Margin = new Padding(0, 0, 0, 4),
         };
 
@@ -183,28 +284,33 @@ internal sealed class SetupProgressForm : Form
 
         actionButton = new Button
         {
-            Text = "Cancel",
+            Text = uiText.CancelButton,
             AutoSize = true,
+            MinimumSize = new Size(96, 32),
         };
         actionButton.Click += OnActionButtonClick;
         continueButton = new Button
         {
-            Text = "Continue",
+            Text = uiText.ContinueButton,
             AutoSize = true,
+            MinimumSize = new Size(104, 32),
             Visible = false,
         };
         continueButton.Click += OnContinueModelPackSelectionClick;
         buttonPanel.Controls.Add(continueButton);
         buttonPanel.Controls.Add(actionButton);
 
-        root.Controls.Add(headingLabel, 0, 0);
-        root.Controls.Add(progressPanel, 0, 1);
-        root.Controls.Add(modelPackSelectionPanel, 0, 1);
+        root.Controls.Add(headingPanel, 0, 0);
+        root.Controls.Add(setupOptionsPanel, 0, 1);
+        root.Controls.Add(progressPanel, 0, 2);
+        root.Controls.Add(modelPackSelectionPanel, 0, 2);
         root.SetRowSpan(modelPackSelectionPanel, 3);
-        root.Controls.Add(logLabel, 0, 2);
-        root.Controls.Add(logListBox, 0, 3);
-        root.Controls.Add(buttonPanel, 0, 4);
+        root.Controls.Add(logLabel, 0, 3);
+        root.Controls.Add(logListBox, 0, 4);
+        root.Controls.Add(buttonPanel, 0, 5);
         Controls.Add(root);
+        ApplyLocalizedText();
+        ApplyTheme();
     }
 
     public int ExitCode { get; private set; } = 1;
@@ -214,6 +320,10 @@ internal sealed class SetupProgressForm : Form
     public IReadOnlyList<InstallerModelPackAcquiredFile> AcquiredModelPackFiles => acquiredModelPackFiles;
 
     public IReadOnlyList<InstallerModelPackImportedPack> ImportedModelPackFiles => importedModelPackFiles;
+
+    public string WarningPrefix => uiText.WarningPrefix;
+
+    public string ErrorPrefix => uiText.ErrorPrefix;
 
     private TableLayoutPanel CreateModelPackSelectionPanel()
     {
@@ -230,11 +340,11 @@ internal sealed class SetupProgressForm : Form
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var bodyLabel = new Label
+        modelPackBodyLabel = new Label
         {
             AutoSize = true,
             MaximumSize = new Size(760, 0),
-            Text = InstallerModelPackSelectionPageModel.BodyText,
+            Text = uiText.OptionalModelPacksBody,
             Margin = new Padding(0, 0, 0, 12),
         };
 
@@ -242,7 +352,7 @@ internal sealed class SetupProgressForm : Form
         {
             AutoSize = true,
             ThreeState = true,
-            Text = "Select all visible optional model packs",
+            Text = uiText.SelectAllVisibleOptionalModelPacks,
             Margin = new Padding(0, 0, 0, 8),
         };
         modelPackTopCheckBox.Click += OnModelPackTopCheckBoxClick;
@@ -251,7 +361,7 @@ internal sealed class SetupProgressForm : Form
         {
             AutoSize = true,
             MaximumSize = new Size(760, 0),
-            Text = InstallerModelPackSelectionPageModel.OfflineNoPacksText,
+            Text = uiText.OfflineNoPacksText,
             Visible = false,
             Margin = new Padding(0, 0, 0, 12),
         };
@@ -267,6 +377,7 @@ internal sealed class SetupProgressForm : Form
             BackgroundColor = SystemColors.Window,
             BorderStyle = BorderStyle.FixedSingle,
             ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
+            EnableHeadersVisualStyles = false,
             EditMode = DataGridViewEditMode.EditOnEnter,
             MultiSelect = false,
             ReadOnly = false,
@@ -282,14 +393,14 @@ internal sealed class SetupProgressForm : Form
         modelPackGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Model",
-            HeaderText = "Model",
+            HeaderText = uiText.ModelColumn,
             ReadOnly = true,
             Width = 170,
         });
         modelPackGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "BestUse",
-            HeaderText = "Best use",
+            HeaderText = uiText.BestUseColumn,
             ReadOnly = true,
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
             DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True },
@@ -297,14 +408,14 @@ internal sealed class SetupProgressForm : Form
         modelPackGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "Size",
-            HeaderText = "Size",
+            HeaderText = uiText.SizeColumn,
             ReadOnly = true,
             Width = 86,
         });
         modelPackGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = "SourceStatus",
-            HeaderText = "Source / Status",
+            HeaderText = uiText.SourceStatusColumn,
             ReadOnly = true,
             Width = 140,
         });
@@ -314,11 +425,11 @@ internal sealed class SetupProgressForm : Form
         modelPackSelectedSummaryLabel = new Label
         {
             AutoSize = true,
-            Text = "Selected: 0 model packs - 0 B",
+            Text = uiText.FormatSelectedSummary(0, "0 B"),
             Margin = new Padding(0, 8, 0, 0),
         };
 
-        panel.Controls.Add(bodyLabel, 0, 0);
+        panel.Controls.Add(modelPackBodyLabel, 0, 0);
         panel.Controls.Add(modelPackTopCheckBox, 0, 1);
         panel.Controls.Add(modelPackNoPacksLabel, 0, 2);
         panel.Controls.Add(modelPackGrid, 0, 3);
@@ -326,11 +437,214 @@ internal sealed class SetupProgressForm : Form
         return panel;
     }
 
+    private void OnLanguageSelectionChanged(object? sender, EventArgs e)
+    {
+        if (languageComboBox.SelectedItem is not SetupComboBoxItem<SetupUiLanguage> item ||
+            item.Value == selectedLanguage)
+        {
+            return;
+        }
+
+        selectedLanguage = item.Value;
+        uiText = SetupUiText.For(selectedLanguage);
+        ApplyLocalizedText();
+    }
+
+    private void OnThemeSelectionChanged(object? sender, EventArgs e)
+    {
+        if (themeComboBox.SelectedItem is not SetupComboBoxItem<SetupUiThemeKind> item ||
+            item.Value == selectedThemeKind)
+        {
+            return;
+        }
+
+        selectedThemeKind = item.Value;
+        uiTheme = SetupUiThemeDefinition.For(selectedThemeKind);
+        ApplyTheme();
+    }
+
+    private void ApplyLocalizedText()
+    {
+        Text = uiText.WindowTitle;
+        subtitleLabel.Text = uiText.Subtitle;
+        languageLabel.Text = uiText.LanguageLabel;
+        themeLabel.Text = uiText.ThemeLabel;
+        RefreshThemeComboBoxItems();
+
+        if (modelPackSelectionPanel.Visible)
+        {
+            headingLabel.Text = uiText.OptionalModelPacksTitle;
+        }
+        else
+        {
+            headingLabel.Text = uiText.InstallingTitle;
+        }
+
+        modelPackBodyLabel.Text = uiText.OptionalModelPacksBody;
+        modelPackTopCheckBox.Text = uiText.SelectAllVisibleOptionalModelPacks;
+        modelPackNoPacksLabel.Text = uiText.OfflineNoPacksText;
+        UpdateModelPackGridHeaders();
+        UpdateModelPackSourceStatusCells();
+
+        continueButton.Text = uiText.ContinueButton;
+        actionButton.Text = running || !payloadInstallStarted
+            ? uiText.CancelButton
+            : uiText.CloseButton;
+        logLabel.Text = uiText.Details;
+        currentProgressHeaderLabel.Text = uiText.CurrentProgress;
+
+        if (!payloadInstallStarted)
+        {
+            overallProgressTextLabel.Text = uiText.OverallProgress;
+            statusLabel.Text = uiText.PreparingSetup;
+            progressTextLabel.Text = uiText.Working;
+        }
+
+        UpdateModelPackSelectionControls();
+    }
+
+    private void RefreshThemeComboBoxItems()
+    {
+        var selectedTheme = selectedThemeKind;
+        themeComboBox.SelectedIndexChanged -= OnThemeSelectionChanged;
+        try
+        {
+            themeComboBox.Items.Clear();
+            themeComboBox.Items.Add(new SetupComboBoxItem<SetupUiThemeKind>(
+                SetupUiThemeKind.Light,
+                uiText.LightThemeName));
+            themeComboBox.Items.Add(new SetupComboBoxItem<SetupUiThemeKind>(
+                SetupUiThemeKind.Dark,
+                uiText.DarkThemeName));
+            themeComboBox.SelectedIndex = selectedTheme == SetupUiThemeKind.Light ? 0 : 1;
+        }
+        finally
+        {
+            themeComboBox.SelectedIndexChanged += OnThemeSelectionChanged;
+        }
+    }
+
+    private void UpdateModelPackGridHeaders()
+    {
+        if (modelPackGrid.Columns["Model"] is { } modelColumn)
+        {
+            modelColumn.HeaderText = uiText.ModelColumn;
+        }
+
+        if (modelPackGrid.Columns["BestUse"] is { } bestUseColumn)
+        {
+            bestUseColumn.HeaderText = uiText.BestUseColumn;
+        }
+
+        if (modelPackGrid.Columns["Size"] is { } sizeColumn)
+        {
+            sizeColumn.HeaderText = uiText.SizeColumn;
+        }
+
+        if (modelPackGrid.Columns["SourceStatus"] is { } sourceStatusColumn)
+        {
+            sourceStatusColumn.HeaderText = uiText.SourceStatusColumn;
+        }
+    }
+
+    private void UpdateModelPackSourceStatusCells()
+    {
+        foreach (DataGridViewRow gridRow in modelPackGrid.Rows)
+        {
+            if (gridRow.Tag is not InstallerModelPackSelectionRow selectionRow)
+            {
+                continue;
+            }
+
+            gridRow.Cells["SourceStatus"].Value = selectionRow.SourceKind switch
+            {
+                InstallerModelPackSourceKind.OfflineLocalZip => uiText.OfflineLocalZipStatus,
+                _ => uiText.WebReleaseAssetStatus,
+            };
+        }
+    }
+
+    private void ApplyTheme()
+    {
+        if (SystemInformation.HighContrast)
+        {
+            return;
+        }
+
+        var windowBackground = FromThemeColor(uiTheme.WindowBackground);
+        var panelBackground = FromThemeColor(uiTheme.PanelBackground);
+        var elevatedBackground = FromThemeColor(uiTheme.ElevatedBackground);
+        var text = FromThemeColor(uiTheme.Text);
+        var mutedText = FromThemeColor(uiTheme.MutedText);
+        var accent = FromThemeColor(uiTheme.Accent);
+        var buttonBackground = FromThemeColor(uiTheme.ButtonBackground);
+        var buttonText = FromThemeColor(uiTheme.ButtonText);
+        var border = FromThemeColor(uiTheme.Border);
+        var gridBackground = FromThemeColor(uiTheme.GridBackground);
+        var gridAlternate = FromThemeColor(uiTheme.GridAlternateBackground);
+        var logBackground = FromThemeColor(uiTheme.LogBackground);
+
+        BackColor = windowBackground;
+        ForeColor = text;
+        ApplyThemeToControl(root, windowBackground, text);
+        ApplyThemeToControl(setupOptionsPanel, windowBackground, text);
+        ApplyThemeToControl(progressPanel, panelBackground, text);
+        ApplyThemeToControl(modelPackSelectionPanel, panelBackground, text);
+        ApplyThemeToControl(logLabel, windowBackground, mutedText);
+        ApplyThemeToControl(subtitleLabel, windowBackground, mutedText);
+
+        overallProgressBar.BackColor = elevatedBackground;
+        overallProgressBar.ForeColor = accent;
+        progressBar.BackColor = elevatedBackground;
+        progressBar.ForeColor = accent;
+
+        StyleButton(continueButton, buttonBackground, buttonText, accent);
+        StyleButton(actionButton, elevatedBackground, text, border);
+
+        logListBox.BackColor = logBackground;
+        logListBox.ForeColor = text;
+        modelPackGrid.BackgroundColor = gridBackground;
+        modelPackGrid.GridColor = border;
+        modelPackGrid.DefaultCellStyle.BackColor = gridBackground;
+        modelPackGrid.DefaultCellStyle.ForeColor = text;
+        modelPackGrid.DefaultCellStyle.SelectionBackColor = accent;
+        modelPackGrid.DefaultCellStyle.SelectionForeColor = buttonText;
+        modelPackGrid.AlternatingRowsDefaultCellStyle.BackColor = gridAlternate;
+        modelPackGrid.AlternatingRowsDefaultCellStyle.ForeColor = text;
+        modelPackGrid.ColumnHeadersDefaultCellStyle.BackColor = elevatedBackground;
+        modelPackGrid.ColumnHeadersDefaultCellStyle.ForeColor = text;
+        modelPackGrid.RowHeadersDefaultCellStyle.BackColor = elevatedBackground;
+        modelPackGrid.RowHeadersDefaultCellStyle.ForeColor = text;
+        modelPackGrid.BorderStyle = BorderStyle.FixedSingle;
+    }
+
+    private static void ApplyThemeToControl(Control control, Color background, Color foreground)
+    {
+        control.BackColor = background;
+        control.ForeColor = foreground;
+        foreach (Control child in control.Controls)
+        {
+            ApplyThemeToControl(child, background, foreground);
+        }
+    }
+
+    private static void StyleButton(Button button, Color background, Color foreground, Color border)
+    {
+        button.FlatStyle = FlatStyle.Flat;
+        button.BackColor = background;
+        button.ForeColor = foreground;
+        button.FlatAppearance.BorderColor = border;
+        button.FlatAppearance.BorderSize = 1;
+    }
+
+    private static Color FromThemeColor(string htmlColor) =>
+        ColorTranslator.FromHtml(htmlColor);
+
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
         running = true;
-        AppendLogLine("Prepare setup");
+        AppendLogLine(uiText.PreparingSetup);
 
         _ = BeginSetupFlowAsync();
     }
@@ -375,13 +689,15 @@ internal sealed class SetupProgressForm : Form
                 cancellationTokenSource.Token);
             modelPackCatalogCurrentIw3Version = manifest.CurrentIw3Version;
             modelPackCatalogV3dfyVersion = manifest.V3dfyVersion;
+            var useSpanish = selectedLanguage == SetupUiLanguage.Spanish;
             var discovery = options.Mode == PayloadInstallMode.Offline
                 ? InstallerModelPackDiscovery.DiscoverOffline(
                     manifest,
-                    options.ModelPacksSourceDirectory ?? options.PartsDirectory)
-                : InstallerModelPackDiscovery.DiscoverWeb(manifest);
+                    options.ModelPacksSourceDirectory ?? options.PartsDirectory,
+                    useSpanish)
+                : InstallerModelPackDiscovery.DiscoverWeb(manifest, useSpanish);
 
-            return new InstallerModelPackSelectionPageModel(discovery);
+            return new InstallerModelPackSelectionPageModel(discovery, uiText);
         }
         catch (OperationCanceledException)
         {
@@ -389,11 +705,10 @@ internal sealed class SetupProgressForm : Form
         }
         catch (Exception ex) when (ex is InstallerModelPackManifestException or IOException or UnauthorizedAccessException)
         {
-            const string warning =
-                "Optional model-pack catalog could not be loaded. v3dfy will continue installing with its base model.";
+            var warning = uiText.OptionalModelPackCatalogLoadFailed;
             pendingSetupWarningMessages.Add(warning);
-            AppendLogLine("WARNING: " + warning);
-            AppendLogLine("WARNING: " + ex.Message);
+            AppendLogLine($"{uiText.WarningPrefix}: {warning}");
+            AppendLogLine($"{uiText.WarningPrefix}: {ex.Message}");
             return null;
         }
     }
@@ -401,14 +716,14 @@ internal sealed class SetupProgressForm : Form
     private void ShowModelPackSelectionPage(InstallerModelPackSelectionPageModel pageModel)
     {
         modelPackSelectionPageModel = pageModel;
-        headingLabel.Text = InstallerModelPackSelectionPageModel.TitleText;
+        headingLabel.Text = uiText.OptionalModelPacksTitle;
         progressPanel.Visible = false;
         logLabel.Visible = false;
         logListBox.Visible = false;
         modelPackSelectionPanel.Visible = true;
         continueButton.Visible = true;
         continueButton.Enabled = true;
-        actionButton.Text = "Cancel";
+        actionButton.Text = uiText.CancelButton;
         actionButton.Enabled = true;
 
         LoadModelPackRows(pageModel);
@@ -434,7 +749,7 @@ internal sealed class SetupProgressForm : Form
 
             modelPackNoPacksLabel.Text = !string.IsNullOrWhiteSpace(pageModel.NoPacksMessage)
                 ? pageModel.NoPacksMessage
-                : InstallerModelPackSelectionPageModel.OfflineNoPacksText;
+                : uiText.OfflineNoPacksText;
             modelPackNoPacksLabel.Visible = !pageModel.HasRows;
             modelPackGrid.Visible = pageModel.HasRows;
         }
@@ -461,7 +776,9 @@ internal sealed class SetupProgressForm : Form
                 InstallerModelPackTopSelectionState.Indeterminate => CheckState.Indeterminate,
                 _ => CheckState.Unchecked,
             };
-            modelPackSelectedSummaryLabel.Text = modelPackSelectionPageModel.SelectedSummaryText;
+            modelPackSelectedSummaryLabel.Text = uiText.FormatSelectedSummary(
+                modelPackSelectionPageModel.SelectionState.SelectedCount,
+                modelPackSelectionPageModel.SelectionState.SelectedTotalSizeText);
 
             foreach (DataGridViewRow gridRow in modelPackGrid.Rows)
             {
@@ -524,13 +841,13 @@ internal sealed class SetupProgressForm : Form
             selectedModelPackRows = modelPackSelectionPageModel.SelectionState.SelectedRows;
             if (selectedModelPackRows.Count == 0)
             {
-                pendingSetupInfoMessages.Add("No optional model packs selected.");
-                AppendLogLine("No optional model packs selected.");
+                var message = uiText.FormatNoOptionalModelPacksSelected();
+                pendingSetupInfoMessages.Add(message);
+                AppendLogLine(message);
             }
             else
             {
-                var message =
-                    $"Optional model packs selected for download, verification, and install after app payload: {selectedModelPackRows.Count}.";
+                var message = uiText.FormatOptionalModelPacksSelected(selectedModelPackRows.Count);
                 pendingSetupInfoMessages.Add(message);
                 AppendLogLine(message);
             }
@@ -542,13 +859,13 @@ internal sealed class SetupProgressForm : Form
     private void StartPayloadInstall()
     {
         payloadInstallStarted = true;
-        headingLabel.Text = "Installing v3dfy";
+        headingLabel.Text = uiText.InstallingTitle;
         modelPackSelectionPanel.Visible = false;
         progressPanel.Visible = true;
         logLabel.Visible = true;
         logListBox.Visible = true;
         continueButton.Visible = false;
-        actionButton.Text = "Cancel";
+        actionButton.Text = uiText.CancelButton;
         actionButton.Enabled = true;
 
         _ = Task.Run(RunInstallAsync);
@@ -569,7 +886,18 @@ internal sealed class SetupProgressForm : Form
     private async Task RunInstallAsync()
     {
         using var log = new UiSetupLog(logPath, this);
-        var progress = new UiSetupProgress(this);
+        ISetupProgress progress = new UiSetupProgress(this);
+        var hasSelectedModelPacks = selectedModelPackRows.Count > 0;
+        if (hasSelectedModelPacks)
+        {
+            progress = new SetupOptionalModelPackOverallProgressTracker(
+                progress,
+                selectedModelPackRows
+                    .Select(static row => new SetupOptionalModelPackProgressItem(
+                        row.AssetFileName,
+                        row.ZipSizeBytes))
+                    .ToArray());
+        }
 
         try
         {
@@ -598,19 +926,33 @@ internal sealed class SetupProgressForm : Form
                 log,
                 progress,
                 cancellationTokenSource.Token);
-            if (acquisitionResult?.HasFailures == true || importResult?.HasFailures == true)
+            var hasOptionalWarnings =
+                acquisitionResult?.HasFailures == true ||
+                importResult?.HasFailures == true;
+            if (hasOptionalWarnings)
             {
-                const string warning = "v3dfy installed with optional model-pack warnings.";
+                var warning = uiText.OptionalModelPackWarnings;
                 log.Warning(warning);
             }
 
+            var successMessage = CreateSuccessMessage(
+                acquisitionResult,
+                importResult,
+                hasOptionalWarnings);
+            if (hasSelectedModelPacks)
+            {
+                progress.Report(new SetupProgressEvent(
+                    SetupProgressPhase.Completed,
+                    successMessage));
+            }
+
             ExitCode = 0;
-            PostSuccess();
+            PostSuccess(successMessage);
         }
         catch (OperationCanceledException)
         {
-            log.Error("Installation was cancelled.");
-            PostFailure("Installation was cancelled.");
+            log.Error(uiText.InstallationCanceled);
+            PostFailure(uiText.InstallationCanceled);
         }
         catch (PayloadInstallException ex)
         {
@@ -635,7 +977,7 @@ internal sealed class SetupProgressForm : Form
         }
 
         var selectedCount = selectedModelPackRows.Count;
-        var message = $"Downloading/verifying optional model packs: {selectedCount}.";
+        var message = uiText.FormatDownloadingVerifyingOptionalModelPacks(selectedCount);
         log.Info(message);
         AppendLogLine(message);
 
@@ -656,7 +998,7 @@ internal sealed class SetupProgressForm : Form
         }
         catch (Exception ex)
         {
-            log.Warning($"Optional model-pack acquisition failed: {ex.Message}");
+            log.Warning(uiText.FormatOptionalModelPackAcquisitionFailed(ex.Message));
             result = new InstallerModelPackAcquisitionResult(
                 AcquiredFiles: [],
                 Failures: selectedModelPackRows.Select(row => new InstallerModelPackAcquisitionFailure(
@@ -670,15 +1012,39 @@ internal sealed class SetupProgressForm : Form
         acquiredModelPackFiles = result.AcquiredFiles;
         if (result.HasFailures)
         {
-            AppendLogLine(
-                $"Optional model packs verified: {result.SuccessCount}; acquisition failed: {result.FailureCount}.");
+            AppendLogLine(uiText.FormatOptionalModelPacksVerified(
+                result.SuccessCount,
+                result.FailureCount));
             return result;
         }
 
-        var summary = $"Optional model packs verified: {result.SuccessCount}.";
+        var summary = uiText.FormatOptionalModelPacksVerified(result.SuccessCount, result.FailureCount);
         log.Info(summary);
         AppendLogLine(summary);
         return result;
+    }
+
+    private string CreateSuccessMessage(
+        InstallerModelPackAcquisitionResult? acquisitionResult,
+        InstallerModelPackImportResult? importResult,
+        bool hasOptionalWarnings)
+    {
+        if (hasOptionalWarnings)
+        {
+            return uiText.OptionalModelPackWarnings;
+        }
+
+        if (selectedModelPackRows.Count == 0)
+        {
+            return uiText.SuccessWithBaseModel;
+        }
+
+        if (acquisitionResult?.SuccessCount > 0 || importResult?.SuccessCount > 0)
+        {
+            return uiText.SuccessWithOptionalModelPacks;
+        }
+
+        return uiText.SuccessWithBaseModel;
     }
 
     private async Task<InstallerModelPackImportResult?> ImportAcquiredModelPacksAsync(
@@ -711,7 +1077,7 @@ internal sealed class SetupProgressForm : Form
         }
         catch (Exception ex)
         {
-            log.Warning($"Optional model-pack import failed: {ex.Message}");
+            log.Warning(uiText.FormatOptionalModelPackImportFailed(ex.Message));
             result = new InstallerModelPackImportResult(
                 ImportedPacks: [],
                 Failures: acquisitionResult.AcquiredFiles.Select(file => new InstallerModelPackImportFailure(
@@ -726,12 +1092,13 @@ internal sealed class SetupProgressForm : Form
         importedModelPackFiles = result.ImportedPacks;
         if (result.HasFailures)
         {
-            AppendLogLine(
-                $"Optional model packs installed: {result.SuccessCount}; import failed: {result.FailureCount}.");
+            AppendLogLine(uiText.FormatOptionalModelPacksInstalled(
+                result.SuccessCount,
+                result.FailureCount));
             return result;
         }
 
-        var summary = $"Optional model packs installed: {result.SuccessCount}.";
+        var summary = uiText.FormatOptionalModelPacksInstalled(result.SuccessCount, result.FailureCount);
         log.Info(summary);
         AppendLogLine(summary);
         return result;
@@ -764,8 +1131,8 @@ internal sealed class SetupProgressForm : Form
             return;
         }
 
-        AppendLogLine("Cancel requested");
-        statusLabel.Text = "Canceling setup";
+        AppendLogLine(uiText.CancelRequested);
+        statusLabel.Text = uiText.CancelingSetup;
         actionButton.Enabled = false;
         cancellationTokenSource.Cancel();
     }
@@ -793,7 +1160,7 @@ internal sealed class SetupProgressForm : Form
             {
                 progressBar.Style = ProgressBarStyle.Marquee;
                 progressBar.MarqueeAnimationSpeed = 30;
-                progressTextLabel.Text = "Working...";
+                progressTextLabel.Text = uiText.Working;
             }
 
             if (ShouldLogProgress(progress))
@@ -820,7 +1187,7 @@ internal sealed class SetupProgressForm : Form
         logListBox.TopIndex = Math.Max(0, logListBox.Items.Count - 1);
     }
 
-    private void PostSuccess()
+    private void PostSuccess(string message)
     {
         if (IsDisposed)
         {
@@ -830,15 +1197,15 @@ internal sealed class SetupProgressForm : Form
         BeginInvoke(async () =>
         {
             running = false;
-            statusLabel.Text = "Installation complete";
+            statusLabel.Text = message;
             overallProgressBar.Style = ProgressBarStyle.Continuous;
             overallProgressBar.Value = overallProgressBar.Maximum;
-            overallProgressTextLabel.Text = "Installation complete";
+            overallProgressTextLabel.Text = uiText.InstallationComplete;
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Value = progressBar.Maximum;
-            progressTextLabel.Text = "Complete";
+            progressTextLabel.Text = uiText.Complete;
             actionButton.Enabled = false;
-            AppendLogLine("Complete");
+            AppendLogLine(message);
             await Task.Delay(1000);
             Close();
         });
@@ -857,10 +1224,10 @@ internal sealed class SetupProgressForm : Form
             ExitCode = 1;
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Value = 0;
-            progressTextLabel.Text = "Failed";
-            overallProgressTextLabel.Text = "Failed";
-            statusLabel.Text = "Installation failed";
-            actionButton.Text = "Close";
+            progressTextLabel.Text = uiText.Failed;
+            overallProgressTextLabel.Text = uiText.Failed;
+            statusLabel.Text = uiText.InstallationFailed;
+            actionButton.Text = uiText.CloseButton;
             actionButton.Enabled = true;
         });
     }
@@ -900,21 +1267,21 @@ internal sealed class SetupProgressForm : Form
         return progress.Phase switch
         {
             SetupProgressPhase.DownloadingPart when partNumber is not null =>
-                FormatPartStatus("Downloading", partNumber.Value),
+                FormatPartStatus(uiText.DownloadingAction, partNumber.Value),
             SetupProgressPhase.VerifyingPart when partNumber is not null =>
-                FormatPartStatus("Verifying", partNumber.Value),
+                FormatPartStatus(uiText.VerifyingAction, partNumber.Value),
             SetupProgressPhase.FindingPart when partNumber is not null =>
-                FormatPartStatus("Finding", partNumber.Value),
-            SetupProgressPhase.RebuildingZip => "Rebuilding portable package",
-            SetupProgressPhase.VerifyingZip => "Verifying portable package",
-            SetupProgressPhase.ExtractingPayload => "Extracting files",
-            SetupProgressPhase.InstallingPayload => "Installing v3dfy",
-            SetupProgressPhase.DownloadingModelPack => "Downloading optional model pack",
-            SetupProgressPhase.VerifyingModelPack => "Verifying optional model pack",
-            SetupProgressPhase.ValidatingModelPack => "Validating optional model pack",
-            SetupProgressPhase.InstallingModelPack => "Installing optional model pack",
-            SetupProgressPhase.CleaningUp => "Cleaning temporary files",
-            SetupProgressPhase.Completed => "Installation complete",
+                FormatPartStatus(uiText.FindingAction, partNumber.Value),
+            SetupProgressPhase.RebuildingZip => uiText.RebuildingPortablePackage,
+            SetupProgressPhase.VerifyingZip => uiText.VerifyingPortablePackage,
+            SetupProgressPhase.ExtractingPayload => uiText.ExtractingFiles,
+            SetupProgressPhase.InstallingPayload => uiText.InstallingV3dfy,
+            SetupProgressPhase.DownloadingModelPack => uiText.DownloadingOptionalModelPack,
+            SetupProgressPhase.VerifyingModelPack => uiText.VerifyingOptionalModelPack,
+            SetupProgressPhase.ValidatingModelPack => uiText.ValidatingOptionalModelPack,
+            SetupProgressPhase.InstallingModelPack => uiText.InstallingOptionalModelPack,
+            SetupProgressPhase.CleaningUp => uiText.CleaningTemporaryFiles,
+            SetupProgressPhase.Completed => uiText.InstallationComplete,
             _ => progress.Message.TrimEnd('.'),
         };
     }
@@ -933,23 +1300,23 @@ internal sealed class SetupProgressForm : Form
             overallProgressBar.Minimum,
             overallProgressBar.Maximum);
         overallProgressTextLabel.Text = !string.IsNullOrWhiteSpace(progress.OverallMessage)
-            ? progress.OverallMessage
+            ? uiText.TranslateOverallMessage(progress.OverallMessage)
             : FormatOverallProgressText(progress.OverallCompletedUnits, progress.OverallTotalUnits);
     }
 
-    private static string FormatPartStatus(string action, int partNumber) =>
-        $"{action} payload part {partNumber}";
+    private string FormatPartStatus(string action, int partNumber) =>
+        uiText.FormatPayloadPartStatus(action, partNumber);
 
-    private static string FormatOverallProgressText(int? completedUnits, int? totalUnits)
+    private string FormatOverallProgressText(int? completedUnits, int? totalUnits)
     {
         if (completedUnits is not { } completed || totalUnits is not { } total || total <= 0)
         {
-            return "Overall progress";
+            return uiText.OverallProgress;
         }
 
         return completed >= total
-            ? "Installation complete"
-            : "Overall progress";
+            ? uiText.InstallationComplete
+            : uiText.OverallProgress;
     }
 
     private string FormatLogLine(SetupProgressEvent progress)
@@ -1068,13 +1435,13 @@ internal sealed class UiSetupLog : ISetupLog, IDisposable
     public void Warning(string message)
     {
         fileLog.Warning(message);
-        form.AppendLogLine("WARNING: " + message);
+        form.AppendLogLine($"{form.WarningPrefix}: {message}");
     }
 
     public void Error(string message)
     {
         fileLog.Error(message);
-        form.AppendLogLine("ERROR: " + message);
+        form.AppendLogLine($"{form.ErrorPrefix}: {message}");
     }
 
     public void Dispose() => fileLog.Dispose();
@@ -1083,4 +1450,11 @@ internal sealed class UiSetupLog : ISetupLog, IDisposable
 internal sealed class UiSetupProgress(SetupProgressForm form) : ISetupProgress
 {
     public void Report(SetupProgressEvent progress) => form.ReportProgress(progress);
+}
+
+internal sealed class SetupComboBoxItem<T>(T value, string text)
+{
+    public T Value { get; } = value;
+
+    public override string ToString() => text;
 }
