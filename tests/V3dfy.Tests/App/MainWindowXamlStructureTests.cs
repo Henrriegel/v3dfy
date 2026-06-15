@@ -24,6 +24,46 @@ public sealed class MainWindowXamlStructureTests
     }
 
     [Fact]
+    public void ConversionPlanTab_ContainsPreflightEstimateAndGuidanceSummary()
+    {
+        var xaml = ReadMainWindowXaml();
+        var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var planTab = ExtractSourceRange(
+            xaml,
+            "Header=\"{Binding ConversionPlanTitle}\"",
+            "Text=\"{Binding ConversionPlanStatusText}\"");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"ConversionPreflightEstimates\"", planTab);
+        Assert.Contains("Text=\"{Binding EstimatedConversionTimeText}\"", planTab);
+        Assert.Contains("Text=\"{Binding EstimateConfidenceText}\"", planTab);
+        Assert.Contains("Text=\"{Binding EstimateBasisText}\"", planTab);
+        Assert.Contains("Text=\"{Binding EstimatedOutputSizeText}\"", planTab);
+        Assert.Contains("Text=\"{Binding RecommendedFreeSpaceText}\"", planTab);
+        Assert.Contains("Text=\"{Binding SelectedModelGuidanceText}\"", planTab);
+        Assert.Contains("Text=\"{Binding PresetGuidanceText}\"", planTab);
+        Assert.Contains("Text=\"{Binding PerformanceHistoryPrivacyText}\"", planTab);
+        Assert.Contains("Performance history is stored locally", viewModel);
+        Assert.Contains("No telemetry or file paths are stored", viewModel);
+    }
+
+    [Fact]
+    public void ConversionPlanTab_KeepsConvertButtonInPrimaryActionSlot()
+    {
+        var xaml = ReadMainWindowXaml();
+        var preflightIndex = xaml.IndexOf(
+            "AutomationProperties.AutomationId=\"ConversionPreflightEstimates\"",
+            StringComparison.Ordinal);
+        var startButtonIndex = xaml.IndexOf(
+            "AutomationProperties.AutomationId=\"StartConversionButton\"",
+            StringComparison.Ordinal);
+
+        Assert.True(preflightIndex >= 0);
+        Assert.True(startButtonIndex > preflightIndex);
+        Assert.Contains("Grid.Row=\"1\"", xaml);
+        Assert.Contains("Command=\"{Binding StartConversionCommand}\"", xaml);
+    }
+
+    [Fact]
     public void MainWindow_DoesNotKeepPermanentSelectedOutputPresetCard()
     {
         var xaml = ReadMainWindowXaml();

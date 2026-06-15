@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Windows;
 using Microsoft.Win32;
@@ -9,6 +10,7 @@ using V3dfy.App.Mvvm;
 using V3dfy.App.Services;
 using V3dfy.Core.Analysis;
 using V3dfy.Core.Diagnostics;
+using V3dfy.Core.Estimation;
 using V3dfy.Core.Execution;
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
@@ -22,6 +24,7 @@ using V3dfy.Engine.Iw3.Commands;
 using V3dfy.Engine.Iw3.Execution;
 using V3dfy.Engine.Iw3.Planning;
 using V3dfy.Infrastructure.Analysis;
+using V3dfy.Infrastructure.Estimation;
 using V3dfy.Infrastructure.Files;
 using V3dfy.Infrastructure.Health;
 using V3dfy.Infrastructure.ModelPacks;
@@ -79,6 +82,10 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ConversionExecutionFeatureGate _conversionExecutionFeatureGate;
     private readonly ConversionExecutionRequestFactory _conversionExecutionRequestFactory;
     private readonly ConversionExecutionRequestValidator _conversionExecutionRequestValidator = new();
+    private readonly ConversionTimeEstimator _conversionTimeEstimator = new();
+    private readonly OutputSizeEstimator _outputSizeEstimator = new();
+    private readonly ModelGuidanceService _modelGuidanceService = new();
+    private readonly IConversionPerformanceHistoryStore _performanceHistoryStore;
     private readonly IConversionExecutor _conversionExecutor;
     private readonly ConversionOutputOpenService _conversionOutputOpenService;
     private readonly IIw3PreviewExecutor _previewExecutor;
@@ -103,10 +110,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private VideoConversionPlan? _conversionPlan;
     private ConversionReadiness? _conversionReadiness;
     private ConversionExecutionState _conversionExecutionState = ConversionExecutionState.NotStarted();
+    private IReadOnlyList<ConversionPerformanceRecord> _performanceHistory = [];
     private PreviewWorkflowState _previewState =
         PreviewWorkflowState.NotGenerated(TimeSpan.Zero, PreviewTimeRangeService.DefaultDuration);
     private LocalModelSelectionCandidate? _selectedLocalModelCandidate;
-    private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.General3dVideo;
+    private TargetDevicePreset _selectedOutputPreset = TargetDevicePresets.Recommended3dTv;
     private string _outputPathText = string.Empty;
     private string _technicalDetailsBodyText = string.Empty;
     private string _activityLogModalText = string.Empty;
@@ -187,6 +195,8 @@ public sealed class MainWindowViewModel : ObservableObject
         _iw3ConversionReadinessService = new Iw3ConversionReadinessService();
         _conversionExecutionFeatureGate = new ConversionExecutionFeatureGate();
         _conversionExecutionRequestFactory = new ConversionExecutionRequestFactory();
+        _performanceHistoryStore = new FileSystemConversionPerformanceHistoryStore();
+        LoadPerformanceHistory();
         _conversionExecutor = new LocalIw3ConversionExecutor(
             processRunner: new BundledLocalProcessRunner(
                 new LocalProcessRunner(),
@@ -381,8 +391,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public IReadOnlyList<LocalizedOptionViewModel<TargetDevicePreset>> OutputPresetOptions { get; } =
     [
-        new(TargetDevicePresets.General3dVideo, "General 3D video", "Video 3D general"),
-        new(TargetDevicePresets.Lg3dFullHd2012, "LG 3D Full HD 2012", "LG 3D Full HD 2012"),
+        new(TargetDevicePresets.Recommended3dTv, "Recommended 3D TV", "TV 3D recomendada"),
+        new(TargetDevicePresets.MaximumCompatibility, "Maximum Compatibility", "Maxima compatibilidad"),
+        new(TargetDevicePresets.HighQualityMaster, "High Quality Master", "Master de alta calidad"),
+        new(TargetDevicePresets.Lg3dFullHd2012, "Legacy LG 3D TV (2012)", "Legacy LG 3D TV (2012)"),
     ];
 
     public TargetDevicePreset SelectedOutputPreset
@@ -876,6 +888,93 @@ public sealed class MainWindowViewModel : ObservableObject
         : Text(
             $"Selected local model: {SelectedLocalModelCandidate.DisplayName}. iw3 depth model: {SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"}",
             $"Modelo local seleccionado: {SelectedLocalModelCandidate.DisplayName}. Modelo de profundidad iw3: {SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"}");
+
+    public string SelectedModelGuidanceText => CreateSelectedModelGuidanceText();
+
+    public string PresetGuidanceText => Text(
+        $"Preset guidance: {SelectedOutputPreset.BestFor}",
+        $"Guia del perfil: {SelectedOutputPreset.SpanishBestFor}");
+
+    public string EstimatedConversionTimeText
+    {
+        get
+        {
+            var estimate = CreateCurrentConversionTimeEstimate();
+            if (!estimate.IsAvailable)
+            {
+                return Text(
+                    "Estimated conversion time: Not enough information yet",
+                    "Tiempo estimado de conversion: aun no hay suficiente informacion");
+            }
+
+            return Text(
+                $"Estimated conversion time: {FormatEstimateRange(estimate.Low, estimate.High)}",
+                $"Tiempo estimado de conversion: {FormatEstimateRange(estimate.Low, estimate.High)}");
+        }
+    }
+
+    public string EstimateConfidenceText
+    {
+        get
+        {
+            var estimate = CreateCurrentConversionTimeEstimate();
+            return Text(
+                $"Confidence: {ConfidenceText(estimate.Confidence, useSpanish: false)}",
+                $"Confianza: {ConfidenceText(estimate.Confidence, useSpanish: true)}");
+        }
+    }
+
+    public string EstimateBasisText
+    {
+        get
+        {
+            var estimate = CreateCurrentConversionTimeEstimate();
+            var basis = IsSpanish
+                ? estimate.SpanishBasisItems
+                : estimate.EnglishBasisItems;
+            return Text("Based on: ", "Basado en: ") + string.Join(", ", basis);
+        }
+    }
+
+    public string EstimatedOutputSizeText
+    {
+        get
+        {
+            var estimate = CreateCurrentOutputSizeEstimate();
+            if (!estimate.IsAvailable)
+            {
+                return Text(
+                    "Estimated output size: Output size depends on final encoding settings.",
+                    "Tamano estimado de salida: el tamano depende de la configuracion final de codificacion.");
+            }
+
+            return Text(
+                $"Estimated output size: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)}",
+                $"Tamano estimado de salida: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)}");
+        }
+    }
+
+    public string RecommendedFreeSpaceText
+    {
+        get
+        {
+            var estimate = CreateCurrentOutputSizeEstimate();
+            if (!estimate.IsAvailable)
+            {
+                return Text(
+                    "Recommended free space: check the destination drive before converting.",
+                    "Espacio libre recomendado: revisa la unidad de destino antes de convertir.");
+            }
+
+            return Text(
+                $"Recommended free space: at least {FormatBytes(estimate.RecommendedFreeBytes)}",
+                $"Espacio libre recomendado: al menos {FormatBytes(estimate.RecommendedFreeBytes)}");
+        }
+    }
+
+    public string PerformanceHistoryPrivacyText => Text(
+        "Performance history is stored locally on this device to improve future time estimates. No telemetry or file paths are stored.",
+        "El historial de rendimiento se guarda localmente en este equipo para mejorar futuros tiempos estimados. No se guarda telemetria ni rutas de archivos.");
 
     public bool HasUnmappedLocalModelCandidates =>
         Iw3DepthModelMapper.GetUnmappedCandidates(
@@ -2092,6 +2191,124 @@ public sealed class MainWindowViewModel : ObservableObject
             ? null
             : $"{_conversionPlan.OutputContainer} \u00b7 {ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat, IsSpanish)} \u00b7 {_conversionPlan.Width}x{_conversionPlan.Height}";
 
+    private ConversionTimeEstimate CreateCurrentConversionTimeEstimate() =>
+        _conversionTimeEstimator.Estimate(
+            CreateCurrentConversionEstimateInput(),
+            _performanceHistory);
+
+    private OutputSizeEstimate CreateCurrentOutputSizeEstimate()
+    {
+        if (_analysis is null)
+        {
+            return _outputSizeEstimator.Estimate(null);
+        }
+
+        return _outputSizeEstimator.Estimate(new(
+            Duration: _analysis.File.Duration,
+            OutputContainer: SelectedOutputContainer,
+            QualityPreset: SelectedQualityPreset,
+            OutputPresetId: SelectedOutputPreset.Id,
+            TargetWidth: _conversionPlan?.Width ?? SelectedOutputPreset.Recommendation.Width,
+            TargetHeight: _conversionPlan?.Height ?? SelectedOutputPreset.Recommendation.Height,
+            IncludeTemporaryWorkingSpace: true));
+    }
+
+    private ConversionEstimateInput? CreateCurrentConversionEstimateInput()
+    {
+        if (_analysis is null)
+        {
+            return null;
+        }
+
+        var selectedModel = _conversionPlan?.SelectedLocalModel;
+        return ConversionEstimateInput.FromAnalysis(
+            _analysis,
+            selectedModel?.MappingKey ?? SelectedLocalModelCandidate?.MappingKey,
+            selectedModel?.DisplayName ?? SelectedLocalModelCandidate?.DisplayName,
+            SelectedOutputPreset.Id,
+            Text(SelectedOutputPreset.Name, SelectedOutputPreset.SpanishName),
+            SelectedOutputContainer,
+            SelectedQualityPreset,
+            SelectedThreeDOutputFormat,
+            GetDeviceCapabilityBucket());
+    }
+
+    private string CreateSelectedModelGuidanceText()
+    {
+        if (SelectedLocalModelCandidate is null)
+        {
+            return Text(
+                "Model guidance: v3dfy includes a usable base model when the bundled base model is selected. Optional model packs can be imported later.",
+                "Guia de modelo: v3dfy incluye un modelo base utilizable cuando se selecciona el modelo base incluido. Los paquetes opcionales pueden importarse despues.");
+        }
+
+        var entry = FindRegistryEntry(SelectedLocalModelCandidate);
+        var guidance = _modelGuidanceService.Create(
+            SelectedLocalModelCandidate.MappingKey,
+            SelectedLocalModelCandidate.Iw3DepthModelName,
+            SelectedLocalModelCandidate.DisplayName,
+            entry?.IsEmbeddedBase == true);
+        return Text(
+            $"Model guidance: {guidance.EnglishHeadline}. Good for: {guidance.EnglishBestFor}. Speed: {guidance.EnglishSpeed}. Quality: {guidance.EnglishQuality}. Size: {guidance.EnglishSize}.",
+            $"Guia de modelo: {guidance.SpanishHeadline}. Bueno para: {guidance.SpanishBestFor}. Velocidad: {guidance.SpanishSpeed}. Calidad: {guidance.SpanishQuality}. Tamano: {guidance.SpanishSize}.");
+    }
+
+    private string GetDeviceCapabilityBucket()
+    {
+        if (_lastProcessMetricSample?.GpuUsagePercent is not null ||
+            _lastPreviewMetricSample?.GpuUsagePercent is not null)
+        {
+            return "GPU observed locally";
+        }
+
+        return _dependencyHealth?.IsComplete == true || _toolHealth?.IsComplete == true
+            ? "local engine ready"
+            : "hardware not benchmarked yet";
+    }
+
+    private static string ConfidenceText(
+        ConversionEstimateConfidence confidence,
+        bool useSpanish) => confidence switch
+    {
+        ConversionEstimateConfidence.High => useSpanish ? "Alta" : "High",
+        ConversionEstimateConfidence.Medium => useSpanish ? "Media" : "Medium",
+        ConversionEstimateConfidence.Low => useSpanish ? "Baja" : "Low",
+        _ => useSpanish ? "No disponible" : "Unavailable",
+    };
+
+    private static string FormatEstimateRange(TimeSpan low, TimeSpan high) =>
+        $"~{FormatDurationCompact(low)}-{FormatDurationCompact(high)}";
+
+    private static string FormatDurationCompact(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+        {
+            return $"{Math.Max(1, (int)Math.Round(duration.TotalHours))} h";
+        }
+
+        if (duration.TotalMinutes >= 1)
+        {
+            return $"{Math.Max(1, (int)Math.Round(duration.TotalMinutes))} min";
+        }
+
+        return $"{Math.Max(1, (int)Math.Round(duration.TotalSeconds))} sec";
+    }
+
+    private static string FormatByteRange(long lowBytes, long highBytes) =>
+        $"~{FormatBytes(lowBytes)}-{FormatBytes(highBytes)}";
+
+    private static string FormatBytes(long bytes)
+    {
+        const double gib = 1024d * 1024d * 1024d;
+        const double mib = 1024d * 1024d;
+        if (bytes >= gib)
+        {
+            return $"{bytes / gib:0.0} GB";
+        }
+
+        return $"{bytes / mib:0} MB";
+    }
+
     public bool CanStartConversion =>
         _conversionExecutionState.Status is not ConversionExecutionStatus.Running and
             not ConversionExecutionStatus.Canceling &&
@@ -2944,10 +3161,25 @@ public sealed class MainWindowViewModel : ObservableObject
                 Use: GetModelUseExample(candidate, entry, IsSpanish),
                 Scene: GetSceneScopeText(entry, IsSpanish),
                 Depth: GetDepthTypeText(entry, IsSpanish),
-                SizePerformance: GetSizeClassText(entry, IsSpanish)));
+                SizePerformance: GetModelSizePerformanceText(candidate, entry)));
         }
 
         return rows;
+    }
+
+    private string GetModelSizePerformanceText(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry)
+    {
+        var guidance = _modelGuidanceService.Create(
+            candidate.MappingKey,
+            candidate.Iw3DepthModelName,
+            candidate.DisplayName,
+            entry?.IsEmbeddedBase == true);
+        var sizeClass = GetSizeClassText(entry, IsSpanish);
+        return IsSpanish
+            ? $"{sizeClass}; velocidad {guidance.SpanishSpeed}; calidad {guidance.SpanishQuality}; tamano {guidance.SpanishSize}"
+            : $"{sizeClass}; speed {guidance.EnglishSpeed}; quality {guidance.EnglishQuality}; size {guidance.EnglishSize}";
     }
 
     private static Iw3DepthModelRegistryEntry? FindRegistryEntry(
@@ -3583,6 +3815,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
         OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
+        RaisePreflightEstimatePropertiesChanged();
         UpdateConversionReadiness();
 
         if (!regeneratePlan)
@@ -4365,6 +4598,11 @@ public sealed class MainWindowViewModel : ObservableObject
                 _previewState.Status == PreviewGenerationStatus.Ready)
             {
                 _previewProgressPercent = 100;
+                RecordSuccessfulPerformanceHistory(
+                    ConversionPerformanceOperationType.Preview,
+                    result.StartedAt,
+                    result.FinishedAt,
+                    CurrentPreviewDuration);
             }
             else if (_previewState.Status is PreviewGenerationStatus.Canceled or PreviewGenerationStatus.Failed)
             {
@@ -4944,6 +5182,10 @@ public sealed class MainWindowViewModel : ObservableObject
             ResetConversionTimingEstimate();
             if (result.Success && !result.WasCanceled)
             {
+                RecordSuccessfulPerformanceHistory(
+                    ConversionPerformanceOperationType.FullConversion,
+                    result.StartedAt,
+                    result.FinishedAt);
                 ShowConversionCompletedModal(result, request.OutputPath);
             }
         }
@@ -5884,6 +6126,65 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void LoadPerformanceHistory()
+    {
+        var result = _performanceHistoryStore.Load();
+        _performanceHistory = result.Records;
+        if (!string.IsNullOrWhiteSpace(result.Warning))
+        {
+            AddLog(
+                result.Warning,
+                $"El historial de rendimiento no se pudo cargar y se ignorara: {result.Warning}");
+        }
+    }
+
+    private void RecordSuccessfulPerformanceHistory(
+        ConversionPerformanceOperationType operationType,
+        DateTimeOffset startedAt,
+        DateTimeOffset finishedAt,
+        TimeSpan? operationDuration = null)
+    {
+        var input = CreateCurrentConversionEstimateInput();
+        if (input is null)
+        {
+            return;
+        }
+
+        var elapsed = finishedAt - startedAt;
+        var record = ConversionPerformanceHistory.CreateSuccessfulRecord(
+            operationType,
+            input,
+            elapsed,
+            GetAppVersion(),
+            operationDuration);
+        if (record is null)
+        {
+            return;
+        }
+
+        var updatedRecords = ConversionPerformanceHistory.AddBounded(
+            _performanceHistory,
+            record);
+        var saveResult = _performanceHistoryStore.Save(updatedRecords);
+        if (!saveResult.Success)
+        {
+            if (!string.IsNullOrWhiteSpace(saveResult.Warning))
+            {
+                AddLog(
+                    saveResult.Warning,
+                    $"El historial de rendimiento no se pudo guardar: {saveResult.Warning}");
+            }
+
+            return;
+        }
+
+        _performanceHistory = updatedRecords;
+        RaisePreflightEstimatePropertiesChanged();
+    }
+
+    private static string GetAppVersion() =>
+        Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "unknown";
+
     private void ResetPreviewGenerationLog()
     {
         if (DispatchToUiThreadIfNeeded(ResetPreviewGenerationLog))
@@ -6180,6 +6481,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(TvPlaybackTitle));
         OnPropertyChanged(nameof(TvPlaybackInstructions));
         OnPropertyChanged(nameof(ProfileDetailsBodyText));
+        RaisePreflightEstimatePropertiesChanged();
     }
 
     private void RaiseAnalysisPropertiesChanged()
@@ -6194,6 +6496,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(AnalysisSubtitleStreamsText));
         OnPropertyChanged(nameof(AnalysisHdrText));
         OnPropertyChanged(nameof(AnalysisCompatibilityText));
+        RaisePreflightEstimatePropertiesChanged();
     }
 
     private void RaiseRecommendationPropertiesChanged()
@@ -6210,6 +6513,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(RecommendedIntensityText));
         OnPropertyChanged(nameof(RecommendedNotesTitle));
         OnPropertyChanged(nameof(RecommendedNotesText));
+        RaisePreflightEstimatePropertiesChanged();
     }
 
     private string RecommendationLabelValue(string englishLabel, string spanishLabel, string? value) =>
@@ -6233,6 +6537,19 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionPlanLgCompatibilityCopyPathText));
         OnPropertyChanged(nameof(ConversionSummaryPresetText));
         OnPropertyChanged(nameof(ConversionSummaryLgCompatibilityCopyText));
+        RaisePreflightEstimatePropertiesChanged();
+    }
+
+    private void RaisePreflightEstimatePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedModelGuidanceText));
+        OnPropertyChanged(nameof(PresetGuidanceText));
+        OnPropertyChanged(nameof(EstimatedConversionTimeText));
+        OnPropertyChanged(nameof(EstimateConfidenceText));
+        OnPropertyChanged(nameof(EstimateBasisText));
+        OnPropertyChanged(nameof(EstimatedOutputSizeText));
+        OnPropertyChanged(nameof(RecommendedFreeSpaceText));
+        OnPropertyChanged(nameof(PerformanceHistoryPrivacyText));
     }
 
     private void RaiseConversionPlanPropertiesChanged()
@@ -6259,6 +6576,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+        RaisePreflightEstimatePropertiesChanged();
         RaiseModelHelpPropertiesChanged();
         OnPropertyChanged(nameof(OutputLocationTitle));
         OnPropertyChanged(nameof(OutputPathLabel));

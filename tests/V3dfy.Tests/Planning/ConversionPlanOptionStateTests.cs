@@ -193,6 +193,7 @@ public sealed class ConversionPlanOptionStateTests
         OutputContainer outputContainer,
         ThreeDOutputFormat outputFormat,
         bool usesLegacyLgCompatibilityGuidance = false) => new(
+        Id: "test-preset",
         Name: "Test preset",
         SpanishName: "Perfil de prueba",
         Recommendation: new ConversionRecommendation(

@@ -171,6 +171,22 @@ public sealed class MainWindowModelSelectionUiSourceTests
     }
 
     [Fact]
+    public void ModelGuidance_UsesCompactSelectedModelGuidanceAndMetadataService()
+    {
+        var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var guidanceService = ReadRepoFile("src", "V3dfy.Core", "Estimation", "ModelGuidanceService.cs");
+
+        Assert.Contains("SelectedModelGuidanceText", xaml);
+        Assert.Contains("private readonly ModelGuidanceService _modelGuidanceService", source);
+        Assert.Contains("Recommended first optional model", guidanceService);
+        Assert.Contains("v3dfy includes a usable base model", source);
+        Assert.Contains("Good for:", source);
+        Assert.Contains("Speed:", source);
+        Assert.Contains("Quality:", source);
+    }
+
+    [Fact]
     public void ModelInventory_DoesNotExposeFullInternalRegistryAsAvailableModels()
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");

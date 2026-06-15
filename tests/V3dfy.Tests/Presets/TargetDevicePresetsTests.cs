@@ -6,33 +6,69 @@ namespace V3dfy.Tests.Presets;
 public sealed class TargetDevicePresetsTests
 {
     [Fact]
-    public void All_DefaultsToGeneral3dVideo()
+    public void All_DefaultsToRecommended3dTv()
     {
-        Assert.Same(TargetDevicePresets.General3dVideo, TargetDevicePresets.All[0]);
-        Assert.Equal("General 3D video", TargetDevicePresets.General3dVideo.Name);
-        Assert.Equal("Video 3D general", TargetDevicePresets.General3dVideo.SpanishName);
+        Assert.Same(TargetDevicePresets.Recommended3dTv, TargetDevicePresets.All[0]);
+        Assert.Equal("recommended-3d-tv", TargetDevicePresets.Recommended3dTv.Id);
+        Assert.Equal("Recommended 3D TV", TargetDevicePresets.Recommended3dTv.Name);
+        Assert.Equal("TV 3D recomendada", TargetDevicePresets.Recommended3dTv.SpanishName);
+        Assert.Same(TargetDevicePresets.Recommended3dTv, TargetDevicePresets.General3dVideo);
     }
 
     [Fact]
-    public void General3dVideo_RecommendsNeutralMp4HalfTopBottomDefaults()
+    public void Recommended3dTv_RecommendsMp4HalfTopBottomDefaults()
     {
         Assert.Equal(
             OutputContainer.MP4,
-            TargetDevicePresets.General3dVideo.Recommendation.OutputContainer);
+            TargetDevicePresets.Recommended3dTv.Recommendation.OutputContainer);
         Assert.Equal(
             ThreeDOutputFormat.HalfTopBottom,
-            TargetDevicePresets.General3dVideo.Recommendation.ThreeDOutputFormat);
-        Assert.False(TargetDevicePresets.General3dVideo.UsesLegacyLgCompatibilityGuidance);
-        Assert.Contains("Neutral output profile", TargetDevicePresets.General3dVideo.Description);
-        Assert.Contains("broad compatibility", TargetDevicePresets.General3dVideo.CompatibilityNote);
+            TargetDevicePresets.Recommended3dTv.Recommendation.ThreeDOutputFormat);
+        Assert.False(TargetDevicePresets.Recommended3dTv.UsesLegacyLgCompatibilityGuidance);
+        Assert.Equal(TargetDevicePresetCategory.Recommended, TargetDevicePresets.Recommended3dTv.Category);
+        Assert.Contains("Default general-purpose", TargetDevicePresets.Recommended3dTv.Description);
     }
 
     [Fact]
-    public void Lg3dFullHd2012_DescribesDeviceSpecificPlaybackGuidance()
+    public void Lg3dFullHd2012_IsLegacyAndNotDefault()
     {
-        Assert.Contains("Device-specific", TargetDevicePresets.Lg3dFullHd2012.Description);
+        Assert.NotSame(TargetDevicePresets.Lg3dFullHd2012, TargetDevicePresets.All[0]);
+        Assert.Equal(TargetDevicePresetCategory.Legacy, TargetDevicePresets.Lg3dFullHd2012.Category);
+        Assert.Contains("Legacy", TargetDevicePresets.Lg3dFullHd2012.Name);
         Assert.Contains("optional Full HD MP4 copy", TargetDevicePresets.Lg3dFullHd2012.CompatibilityNote);
         Assert.Contains("Side-by-Side", TargetDevicePresets.Lg3dFullHd2012.PlaybackInstructions);
+    }
+
+    [Fact]
+    public void MaximumCompatibilityAndHighQualityMasterUseDifferentSettings()
+    {
+        Assert.Equal(OutputContainer.MP4, TargetDevicePresets.MaximumCompatibility.Recommendation.OutputContainer);
+        Assert.Equal(OutputContainer.MKV, TargetDevicePresets.HighQualityMaster.Recommendation.OutputContainer);
+        Assert.True(
+            TargetDevicePresets.HighQualityMaster.EstimatedVideoBitrateHighMbps >
+            TargetDevicePresets.MaximumCompatibility.EstimatedVideoBitrateHighMbps);
+    }
+
+    [Fact]
+    public void Resolve_MapsOldLgIdToLegacyPresetAndUnknownToRecommended()
+    {
+        Assert.Same(
+            TargetDevicePresets.Lg3dFullHd2012,
+            TargetDevicePresets.Resolve("lg-3d-full-hd-2012"));
+        Assert.Same(
+            TargetDevicePresets.Lg3dFullHd2012,
+            TargetDevicePresets.Resolve("LG 3D Full HD 2012"));
+        Assert.Same(
+            TargetDevicePresets.Recommended3dTv,
+            TargetDevicePresets.Resolve("missing"));
+    }
+
+    [Fact]
+    public void UnsupportedVrPreset_IsNotExposed()
+    {
+        Assert.DoesNotContain(
+            TargetDevicePresets.All,
+            preset => preset.Name.Contains("VR", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

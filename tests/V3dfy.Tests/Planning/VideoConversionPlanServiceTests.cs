@@ -168,13 +168,13 @@ public sealed class VideoConversionPlanServiceTests
     }
 
     [Fact]
-    public void Create_GeneralPreset_UsesSelectedPresetInPlanStep()
+    public void Create_RecommendedPreset_UsesSelectedPresetInPlanStep()
     {
-        var plan = CreatePlan(targetPreset: TargetDevicePresets.General3dVideo);
+        var plan = CreatePlan(targetPreset: TargetDevicePresets.Recommended3dTv);
 
         Assert.Contains(
             plan.Steps,
-            step => step.EnglishText.Contains("General 3D video", StringComparison.Ordinal));
+            step => step.EnglishText.Contains("Recommended 3D TV", StringComparison.Ordinal));
     }
 
     [Fact]
