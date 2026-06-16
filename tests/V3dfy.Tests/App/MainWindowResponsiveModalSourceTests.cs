@@ -21,6 +21,8 @@ public sealed class MainWindowResponsiveModalSourceTests
             StringComparison.Ordinal)];
 
         Assert.Contains("ClipToBounds=\"True\"", overlay);
+        Assert.Contains("Grid.Row=\"1\"", overlay);
+        Assert.Contains("Grid.ColumnSpan=\"2\"", overlay);
         Assert.Contains("Width=\"{Binding ActiveModalWidth}\"", overlay);
         Assert.Contains("Height=\"{Binding ActiveModalHeight}\"", overlay);
         Assert.Contains("MaxWidth=\"{Binding ActualWidth", overlay);

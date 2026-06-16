@@ -1277,6 +1277,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string SettingsSideMenuTitleText => Text("Settings", "Ajustes");
 
+    public string WindowMinimizeToolTipText => Text("Minimize", "Minimizar");
+
+    public string WindowMaximizeToolTipText => Text("Maximize", "Maximizar");
+
+    public string WindowRestoreToolTipText => Text("Restore", "Restaurar");
+
+    public string WindowCloseToolTipText => Text("Close", "Cerrar");
+
     public SettingsSection SelectedSettingsSection
     {
         get => _selectedSettingsSection;
@@ -8905,6 +8913,10 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HomeNavigationText));
         OnPropertyChanged(nameof(ImageConversionNavigationText));
         OnPropertyChanged(nameof(VideoConversionNavigationText));
+        OnPropertyChanged(nameof(WindowMinimizeToolTipText));
+        OnPropertyChanged(nameof(WindowMaximizeToolTipText));
+        OnPropertyChanged(nameof(WindowRestoreToolTipText));
+        OnPropertyChanged(nameof(WindowCloseToolTipText));
         OnPropertyChanged(nameof(HomeTitleText));
         OnPropertyChanged(nameof(HomeDescriptionText));
         OnPropertyChanged(nameof(HomeVideoCardTitleText));

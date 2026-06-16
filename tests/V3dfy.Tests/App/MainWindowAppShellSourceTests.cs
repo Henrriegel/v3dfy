@@ -3,6 +3,142 @@ namespace V3dfy.Tests.App;
 public sealed class MainWindowAppShellSourceTests
 {
     [Fact]
+    public void MainWindow_UsesWindowChromeCustomTitleBarWithNativeWindowControls()
+    {
+        var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var codeBehind = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml.cs");
+        var chrome = ExtractSourceRange(
+            xaml,
+            "<shell:WindowChrome.WindowChrome>",
+            "</shell:WindowChrome.WindowChrome>");
+        var titleBarStyles = ExtractSourceRange(
+            xaml,
+            "x:Key=\"TitleBarWindowButtonStyle\"",
+            "x:Key=\"WizardStepPillStyle\"");
+        var titleBar = ExtractSourceRange(
+            xaml,
+            "<Grid Grid.Row=\"0\"",
+            "AutomationProperties.AutomationId=\"AppSidebar\"");
+
+        Assert.Contains("xmlns:shell=\"clr-namespace:System.Windows.Shell;assembly=PresentationFramework\"", xaml);
+        Assert.Contains("WindowStyle=\"SingleBorderWindow\"", xaml);
+        Assert.Contains("ResizeMode=\"CanResize\"", xaml);
+        Assert.Contains("StateChanged=\"OnWindowStateChanged\"", xaml);
+        Assert.Contains("<shell:WindowChrome CaptionHeight=\"40\"", chrome);
+        Assert.Contains("GlassFrameThickness=\"0\"", chrome);
+        Assert.Contains("ResizeBorderThickness=\"6\"", chrome);
+        Assert.Contains("UseAeroCaptionButtons=\"False\"", chrome);
+        Assert.DoesNotContain("WindowStyle=\"None\"", xaml);
+        Assert.DoesNotContain("AllowsTransparency=\"True\"", xaml);
+
+        Assert.Contains("x:Name=\"AppChromeRoot\"", xaml);
+        Assert.Contains("<RowDefinition Height=\"40\" />", xaml);
+        Assert.Contains("<RowDefinition Height=\"*\" />", xaml);
+        Assert.Contains("Grid.ColumnSpan=\"2\"", titleBar);
+        Assert.Contains("AutomationProperties.AutomationId=\"AppTitleBar\"", titleBar);
+        Assert.Contains("AutomationProperties.AutomationId=\"AppTitleBarCaptionArea\"", titleBar);
+        Assert.Contains("Background=\"{DynamicResource WindowBackgroundBrush}\"", titleBar);
+        Assert.Contains("BorderBrush=\"{DynamicResource CardBorderBrush}\"", titleBar);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"AppTitleBarLeadingArea\"", titleBar);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"AppTitleBarIcon\"", titleBar);
+        Assert.DoesNotContain("v3dfy-icon-left-square-transparent.png", titleBar);
+        Assert.DoesNotContain("Text=\"{Binding AppTitle}\"", titleBar);
+        Assert.DoesNotContain("ShellTaglineText", titleBar);
+        Assert.DoesNotContain("HomeNavigationText", titleBar);
+        Assert.DoesNotContain("ImageConversionNavigationText", titleBar);
+        Assert.DoesNotContain("VideoConversionNavigationText", titleBar);
+        Assert.DoesNotContain("Text=\"v3dfy\"", titleBar);
+        Assert.DoesNotContain("<Image", titleBar);
+        Assert.Equal(3, CountOccurrences(titleBar, "<Button "));
+
+        Assert.Contains("AutomationProperties.AutomationId=\"TitleBarMinimizeButton\"", titleBar);
+        Assert.Contains("AutomationProperties.AutomationId=\"TitleBarMaximizeRestoreButton\"", titleBar);
+        Assert.Contains("AutomationProperties.AutomationId=\"TitleBarCloseButton\"", titleBar);
+        Assert.True(CountOccurrences(titleBar, "shell:WindowChrome.IsHitTestVisibleInChrome=\"True\"") >= 4);
+        Assert.Contains("ToolTip=\"{Binding WindowMinimizeToolTipText}\"", titleBar);
+        Assert.Contains("Style=\"{StaticResource TitleBarMaximizeRestoreButtonStyle}\"", titleBar);
+        Assert.Contains("Style=\"{StaticResource TitleBarCloseButtonStyle}\"", titleBar);
+        Assert.Contains("Click=\"OnMinimizeWindowButtonClick\"", titleBar);
+        Assert.Contains("Click=\"OnMaximizeRestoreWindowButtonClick\"", titleBar);
+        Assert.Contains("Click=\"OnCloseWindowButtonClick\"", titleBar);
+
+        Assert.Contains("x:Key=\"TitleBarMaximizeRestoreGlyphStyle\"", titleBarStyles);
+        Assert.Contains("Value=\"&#xE922;\"", titleBarStyles);
+        Assert.Contains("Value=\"&#xE923;\"", titleBarStyles);
+        Assert.Contains("RelativeSource={RelativeSource AncestorType=Window}", titleBarStyles);
+        Assert.Contains("Value=\"Maximized\"", titleBarStyles);
+        Assert.Contains("Value=\"{DynamicResource ComboBoxHoverBrush}\"", titleBarStyles);
+        Assert.Contains("Value=\"{DynamicResource InputBackgroundBrush}\"", titleBarStyles);
+        Assert.Contains("Value=\"{DynamicResource DestructiveBrush}\"", titleBarStyles);
+        Assert.Contains("Value=\"{DynamicResource DestructivePressedBrush}\"", titleBarStyles);
+        Assert.Contains("Value=\"{DynamicResource PrimaryTextBrush}\"", titleBarStyles);
+        Assert.Contains("Value=\"{DynamicResource ButtonForegroundBrush}\"", titleBarStyles);
+        Assert.DoesNotContain("Color=\"#", titleBarStyles);
+        Assert.DoesNotContain("Background=\"#", titleBar);
+
+        Assert.Contains("private void OnMinimizeWindowButtonClick", codeBehind);
+        Assert.Contains("WindowState = WindowState.Minimized;", codeBehind);
+        Assert.Contains("private void OnMaximizeRestoreWindowButtonClick", codeBehind);
+        Assert.Contains("WindowState == WindowState.Maximized", codeBehind);
+        Assert.Contains("WindowState.Normal", codeBehind);
+        Assert.Contains("private void OnCloseWindowButtonClick", codeBehind);
+        Assert.Contains("Close();", codeBehind);
+        Assert.Contains("private void OnWindowStateChanged", codeBehind);
+        Assert.Contains("UpdateChromeContentMargin();", codeBehind);
+        Assert.Contains("SystemParameters.WindowResizeBorderThickness", codeBehind);
+
+        Assert.Contains("public string WindowMinimizeToolTipText", source);
+        Assert.Contains("public string WindowMaximizeToolTipText", source);
+        Assert.Contains("public string WindowRestoreToolTipText", source);
+        Assert.Contains("public string WindowCloseToolTipText", source);
+        Assert.Contains("OnPropertyChanged(nameof(WindowMinimizeToolTipText));", source);
+        Assert.Contains("OnPropertyChanged(nameof(WindowMaximizeToolTipText));", source);
+        Assert.Contains("OnPropertyChanged(nameof(WindowRestoreToolTipText));", source);
+        Assert.Contains("OnPropertyChanged(nameof(WindowCloseToolTipText));", source);
+    }
+
+    [Fact]
+    public void CustomChrome_KeepsSidebarContentAndModalsOutsideCaptionHitTesting()
+    {
+        var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
+        var titleBar = ExtractSourceRange(
+            xaml,
+            "<Grid Grid.Row=\"0\"",
+            "AutomationProperties.AutomationId=\"AppSidebar\"");
+        var sidebar = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"AppSidebar\"",
+            "AutomationProperties.AutomationId=\"HomeSection\"");
+        var modalOverlay = ExtractSourceRange(
+            xaml,
+            "<Grid x:Name=\"ModalOverlay\"",
+            "AutomationProperties.AutomationId=\"GlobalBusyOverlay\"");
+
+        Assert.Contains("Grid.Row=\"1\"", sidebar);
+        Assert.Contains("Grid.Row=\"1\"", ExtractSourceRange(
+            xaml,
+            "<Grid Grid.Column=\"1\"",
+            "AutomationProperties.AutomationId=\"LogCopyNotification\""));
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SidebarHomeButton\"", titleBar);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", titleBar);
+        Assert.DoesNotContain("shell:WindowChrome.IsHitTestVisibleInChrome", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarHomeButton\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarImageConversionButton\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarVideoConversionButton\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", sidebar);
+
+        Assert.Contains("Grid.Row=\"1\"", modalOverlay);
+        Assert.Contains("Grid.ColumnSpan=\"2\"", modalOverlay);
+        Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", modalOverlay);
+        Assert.Contains("ElementName=ModalOverlay", modalOverlay);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsModal\"", modalOverlay);
+        Assert.Contains("AutomationProperties.AutomationId=\"ResponsiveModalFooter\"", modalOverlay);
+        Assert.DoesNotContain("TitleBarMinimizeButton", modalOverlay);
+        Assert.DoesNotContain("TitleBarCloseButton", modalOverlay);
+    }
+
+    [Fact]
     public void Sidebar_ContainsBrandNavigationAndBottomSettings()
     {
         var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");

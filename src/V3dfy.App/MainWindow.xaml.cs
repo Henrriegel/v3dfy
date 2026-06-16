@@ -23,6 +23,7 @@ public partial class MainWindow : Window
 {
     private static readonly TimeSpan PreviewFirstFrameNudge = TimeSpan.FromMilliseconds(33);
     private static readonly Duration SidebarWidthAnimationDuration = new(TimeSpan.FromMilliseconds(150));
+    private static readonly Thickness NormalChromeContentMargin = new(0);
     private const double PreviewDefaultVolume = 0.7;
     private const double PreviewMutedVolumeThreshold = 0.001;
     private const string PreviewPlayGlyph = "\uE768";
@@ -44,6 +45,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        UpdateChromeContentMargin();
         _previewPlaybackTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(250),
@@ -57,6 +59,35 @@ public partial class MainWindow : Window
             viewModel.ConversionLogs.CollectionChanged += OnConversionLogsChanged;
             viewModel.PreviewGenerationLogs.CollectionChanged += OnPreviewGenerationLogsChanged;
         }
+    }
+
+    private void OnMinimizeWindowButtonClick(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void OnMaximizeRestoreWindowButtonClick(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+    }
+
+    private void OnCloseWindowButtonClick(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        UpdateChromeContentMargin();
+    }
+
+    private void UpdateChromeContentMargin()
+    {
+        AppChromeRoot.Margin = WindowState == WindowState.Maximized
+            ? SystemParameters.WindowResizeBorderThickness
+            : NormalChromeContentMargin;
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

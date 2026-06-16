@@ -4,6 +4,7 @@
         xmlns:converters="clr-namespace:V3dfy.App.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         mc:Ignorable="d"
         Title="{Binding AppTitle}"
         Icon="Assets/Branding/v3dfy.ico"
@@ -13,7 +14,17 @@
         MinHeight="720"
         Background="{DynamicResource WindowBackgroundBrush}"
         AllowDrop="True"
-        Drop="OnDrop">
+        Drop="OnDrop"
+        ResizeMode="CanResize"
+        StateChanged="OnWindowStateChanged"
+        WindowStyle="SingleBorderWindow">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="40"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="6"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <converters:ViewportMaxSizeConverter x:Key="ViewportMaxSizeConverter" />
         <converters:ViewportThresholdVisibilityConverter x:Key="ViewportThresholdVisibilityConverter" />
@@ -89,6 +100,124 @@
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="Padding" Value="10,5" />
+        </Style>
+        <Style x:Key="TitleBarWindowButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="MinWidth" Value="46" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="TitleBarButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              TextElement.FontFamily="{TemplateBinding FontFamily}"
+                                              TextElement.FontSize="{TemplateBinding FontSize}"
+                                              TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ComboBoxHoverBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TitleBarMaximizeRestoreButtonStyle"
+               BasedOn="{StaticResource TitleBarWindowButtonStyle}"
+               TargetType="Button">
+            <Setter Property="AutomationProperties.Name" Value="{Binding WindowMaximizeToolTipText}" />
+            <Setter Property="ToolTip" Value="{Binding WindowMaximizeToolTipText}" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding WindowState,
+                                               RelativeSource={RelativeSource AncestorType=Window}}"
+                             Value="Maximized">
+                    <Setter Property="AutomationProperties.Name" Value="{Binding WindowRestoreToolTipText}" />
+                    <Setter Property="ToolTip" Value="{Binding WindowRestoreToolTipText}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TitleBarMaximizeRestoreGlyphStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Text" Value="&#xE922;" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding WindowState,
+                                               RelativeSource={RelativeSource AncestorType=Window}}"
+                             Value="Maximized">
+                    <Setter Property="Text" Value="&#xE923;" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TitleBarCloseButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="MinWidth" Value="46" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding WindowCloseToolTipText}" />
+            <Setter Property="ToolTip" Value="{Binding WindowCloseToolTipText}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="TitleBarCloseButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              TextElement.FontFamily="{TemplateBinding FontFamily}"
+                                              TextElement.FontSize="{TemplateBinding FontSize}"
+                                              TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource DestructiveBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource DestructivePressedBrush}" />
+                    <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource DestructiveBrush}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="WizardStepPillStyle" TargetType="Border">
             <Setter Property="Padding" Value="10,8" />
@@ -553,7 +682,12 @@
         </Style>
     </Window.Resources>
 
-    <Grid Background="{DynamicResource WindowBackgroundBrush}">
+    <Grid x:Name="AppChromeRoot"
+          Background="{DynamicResource WindowBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="SidebarColumn"
                               Width="208"
@@ -561,7 +695,47 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
+        <Grid Grid.Row="0"
+              Grid.ColumnSpan="2"
+              AutomationProperties.AutomationId="AppTitleBar"
+              Background="{DynamicResource WindowBackgroundBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border AutomationProperties.AutomationId="AppTitleBarCaptionArea"
+                    Background="{DynamicResource WindowBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
+                    BorderThickness="0,0,0,1" />
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button x:Name="MinimizeWindowButton"
+                        AutomationProperties.AutomationId="TitleBarMinimizeButton"
+                        AutomationProperties.Name="{Binding WindowMinimizeToolTipText}"
+                        Click="OnMinimizeWindowButtonClick"
+                        Content="&#xE921;"
+                        Style="{StaticResource TitleBarWindowButtonStyle}"
+                        ToolTip="{Binding WindowMinimizeToolTipText}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True" />
+                <Button x:Name="MaximizeRestoreWindowButton"
+                        AutomationProperties.AutomationId="TitleBarMaximizeRestoreButton"
+                        Click="OnMaximizeRestoreWindowButtonClick"
+                        Style="{StaticResource TitleBarMaximizeRestoreButtonStyle}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <TextBlock Style="{StaticResource TitleBarMaximizeRestoreGlyphStyle}" />
+                </Button>
+                <Button x:Name="CloseWindowButton"
+                        AutomationProperties.AutomationId="TitleBarCloseButton"
+                        Click="OnCloseWindowButtonClick"
+                        Content="&#xE8BB;"
+                        Style="{StaticResource TitleBarCloseButtonStyle}"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True" />
+            </StackPanel>
+        </Grid>
+
         <Border Grid.Column="0"
+                Grid.Row="1"
                 Padding="{Binding SidebarPadding}"
                 AutomationProperties.AutomationId="AppSidebar"
                 Background="{DynamicResource CardBackgroundBrush}"
@@ -685,6 +859,7 @@
         </Border>
 
         <Grid Grid.Column="1"
+              Grid.Row="1"
               Margin="24"
               Background="{DynamicResource WindowBackgroundBrush}">
             <ScrollViewer AutomationProperties.AutomationId="HomeSection"
@@ -3741,7 +3916,8 @@
             </Grid>
         </Grid>
 
-        <Border Grid.ColumnSpan="2"
+        <Border Grid.Row="1"
+                Grid.ColumnSpan="2"
                 Panel.ZIndex="20"
                 MaxWidth="420"
                 Margin="0,8,0,0"
@@ -3762,6 +3938,7 @@
         </Border>
 
         <Grid x:Name="ModalOverlay"
+              Grid.Row="1"
               Grid.ColumnSpan="2"
               Panel.ZIndex="10"
               ClipToBounds="True"
@@ -4982,7 +5159,8 @@
             </Border>
         </Grid>
 
-        <Grid Grid.ColumnSpan="2"
+        <Grid Grid.Row="1"
+              Grid.ColumnSpan="2"
               Panel.ZIndex="30"
               AutomationProperties.AutomationId="GlobalBusyOverlay"
               Background="#80000000"
