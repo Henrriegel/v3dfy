@@ -1676,88 +1676,119 @@
                                                                    TextWrapping="Wrap" />
                                                         <Grid Grid.Row="1"
                                                               Margin="0,10,0,0">
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="*" />
-                                                                <ColumnDefinition Width="8" />
-                                                                <ColumnDefinition Width="*" />
-                                                            </Grid.ColumnDefinitions>
                                                             <Border Background="{DynamicResource LogBackgroundBrush}"
                                                                     BorderBrush="{DynamicResource CardBorderBrush}"
                                                                     BorderThickness="1"
                                                                     CornerRadius="6">
-                                                                <TextBlock HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"
-                                                                           Text="L"
-                                                                           FontSize="34"
-                                                                           FontWeight="Bold"
-                                                                           Foreground="{DynamicResource AccentBrush}" />
-                                                            </Border>
-                                                            <Border Grid.Column="2"
-                                                                    Background="{DynamicResource LogBackgroundBrush}"
-                                                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="6">
-                                                                <TextBlock HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"
-                                                                           Text="R"
-                                                                           FontSize="34"
-                                                                           FontWeight="Bold"
-                                                                           Foreground="{DynamicResource AccentBrush}" />
+                                                                <Grid>
+                                                                    <Image Margin="8"
+                                                                           Source="{Binding SelectedImagePath}"
+                                                                           Stretch="Uniform" />
+                                                                    <Border Margin="10"
+                                                                            Padding="8,5"
+                                                                            HorizontalAlignment="Left"
+                                                                            VerticalAlignment="Top"
+                                                                            Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                            BorderBrush="{DynamicResource AccentBrush}"
+                                                                            BorderThickness="1"
+                                                                            CornerRadius="6">
+                                                                        <TextBlock FontWeight="SemiBold"
+                                                                                   Foreground="{DynamicResource AccentBrush}"
+                                                                                   Text="{Binding SelectedStereoOutputFormatDisplayText}"
+                                                                                   TextWrapping="Wrap" />
+                                                                    </Border>
+                                                                </Grid>
                                                             </Border>
                                                         </Grid>
                                                     </Grid>
                                                 </Border>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <Border Style="{StaticResource CardStyle}">
+                                                    <StackPanel>
+                                                        <TextBlock FontWeight="SemiBold"
+                                                                   Text="{Binding ImageStereoControlsTitleText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,8,0,3"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageStereoOutputFormatLabelText}" />
+                                                        <ComboBox ItemsSource="{Binding StereoOutputFormatOptions}"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  SelectedItem="{Binding SelectedStereoOutputFormatOption,
+                                                                                         Mode=TwoWay}" />
+                                                        <TextBlock Margin="0,8,0,3"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageStereoEyeSeparationLabelText}" />
+                                                        <ComboBox ItemsSource="{Binding StereoEyeSeparationOptions}"
+                                                                  SelectedItem="{Binding SelectedStereoEyeSeparation}" />
+                                                        <TextBlock Margin="0,8,0,3"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageStereoConvergenceLabelText}" />
+                                                        <ComboBox ItemsSource="{Binding StereoConvergenceOptions}"
+                                                                  SelectedItem="{Binding SelectedStereoConvergence}" />
+                                                        <CheckBox Margin="0,10,0,0"
+                                                                  Content="{Binding ImageStereoSwapEyesLabelText}"
+                                                                  IsChecked="{Binding ImageStereoSwapEyes}" />
+                                                        <TextBlock Margin="0,8,0,3"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageStereoAnaglyphModeLabelText}"
+                                                                   Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
+                                                        <ComboBox ItemsSource="{Binding StereoAnaglyphModeOptions}"
+                                                                  SelectedItem="{Binding SelectedStereoAnaglyphMode}"
+                                                                  Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
+                                                        <TextBlock Margin="0,10,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageStereoSummaryText}" />
+                                                    </StackPanel>
+                                                </Border>
                                                 <Border Margin="0,12,0,0"
+                                                        AutomationProperties.AutomationId="ImageStereoReadinessSummaryCard"
                                                         Style="{StaticResource CardStyle}">
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold"
-                                                                   Text="{Binding ImageComparisonTitleText}"
+                                                                   Text="{Binding ImageStereoReadinessSummaryTitleText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,8,0,3"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageModelSelectionLabelText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <ComboBox AutomationProperties.AutomationId="ImageModelSelector"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  IsEnabled="{Binding HasLocalModelSelectionCandidates}"
+                                                                  ItemsSource="{Binding LocalModelCandidates}"
+                                                                  SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                         Mode=TwoWay}" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageModelSelectionSharedNoteText}"
                                                                    TextWrapping="Wrap" />
                                                         <TextBlock Margin="0,8,0,0"
                                                                    Style="{StaticResource MutedTextStyle}"
-                                                                   Text="SBS | TAB | Anaglyph | L/R pair" />
+                                                                   Text="{Binding ImageSelectedModelSummaryText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageExpectedOutputFileText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageSaveLocationText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageSupportedStereoFormatsText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageNotImplementedStateText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageBundledIw3StereoNoteText}"
+                                                                   TextWrapping="Wrap" />
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
-                                            <Border Grid.Column="2"
-                                                    Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageStereoControlsTitleText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,3"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageStereoOutputFormatLabelText}" />
-                                                    <ComboBox ItemsSource="{Binding StereoOutputFormatOptions}"
-                                                              DisplayMemberPath="DisplayName"
-                                                              SelectedValue="{Binding SelectedStereoOutputFormat}"
-                                                              SelectedValuePath="Value" />
-                                                    <TextBlock Margin="0,8,0,3"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageStereoEyeSeparationLabelText}" />
-                                                    <ComboBox ItemsSource="{Binding StereoEyeSeparationOptions}"
-                                                              SelectedItem="{Binding SelectedStereoEyeSeparation}" />
-                                                    <TextBlock Margin="0,8,0,3"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageStereoConvergenceLabelText}" />
-                                                    <ComboBox ItemsSource="{Binding StereoConvergenceOptions}"
-                                                              SelectedItem="{Binding SelectedStereoConvergence}" />
-                                                    <CheckBox Margin="0,10,0,0"
-                                                              Content="{Binding ImageStereoSwapEyesLabelText}"
-                                                              IsChecked="{Binding ImageStereoSwapEyes}" />
-                                                    <TextBlock Margin="0,8,0,3"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageStereoAnaglyphModeLabelText}" />
-                                                    <ComboBox ItemsSource="{Binding StereoAnaglyphModeOptions}"
-                                                              SelectedItem="{Binding SelectedStereoAnaglyphMode}" />
-                                                    <TextBlock Margin="0,10,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageStereoSummaryText}" />
-                                                    <Button Margin="0,12,0,0"
-                                                            Content="{Binding ImagePreviewActionText}"
-                                                            IsEnabled="False" />
-                                                </StackPanel>
-                                            </Border>
                                         </Grid>
                                         <StackPanel AutomationProperties.AutomationId="ImageStereoSetupNarrowLayout"
                                                     Visibility="{Binding ActualWidth,
@@ -1778,47 +1809,31 @@
                                                                TextWrapping="Wrap" />
                                                     <Grid Grid.Row="1"
                                                           Margin="0,10,0,0">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="8" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
                                                         <Border Background="{DynamicResource LogBackgroundBrush}"
                                                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                                                 BorderThickness="1"
                                                                 CornerRadius="6">
-                                                            <TextBlock HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"
-                                                                       Text="L"
-                                                                       FontSize="30"
-                                                                       FontWeight="Bold"
-                                                                       Foreground="{DynamicResource AccentBrush}" />
-                                                        </Border>
-                                                        <Border Grid.Column="2"
-                                                                Background="{DynamicResource LogBackgroundBrush}"
-                                                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                                                BorderThickness="1"
-                                                                CornerRadius="6">
-                                                            <TextBlock HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"
-                                                                       Text="R"
-                                                                       FontSize="30"
-                                                                       FontWeight="Bold"
-                                                                       Foreground="{DynamicResource AccentBrush}" />
+                                                            <Grid>
+                                                                <Image Margin="8"
+                                                                       Source="{Binding SelectedImagePath}"
+                                                                       Stretch="Uniform" />
+                                                                <Border Margin="10"
+                                                                        Padding="8,5"
+                                                                        HorizontalAlignment="Left"
+                                                                        VerticalAlignment="Top"
+                                                                        Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                        BorderBrush="{DynamicResource AccentBrush}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="6">
+                                                                    <TextBlock FontWeight="SemiBold"
+                                                                               Foreground="{DynamicResource AccentBrush}"
+                                                                               Text="{Binding SelectedStereoOutputFormatDisplayText}"
+                                                                               TextWrapping="Wrap" />
+                                                                </Border>
+                                                            </Grid>
                                                         </Border>
                                                     </Grid>
                                                 </Grid>
-                                            </Border>
-                                            <Border Margin="0,12,0,0"
-                                                    Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageComparisonTitleText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="SBS | TAB | Anaglyph | L/R pair" />
-                                                </StackPanel>
                                             </Border>
                                             <Border Margin="0,12,0,0"
                                                     Style="{StaticResource CardStyle}">
@@ -1831,8 +1846,8 @@
                                                                Text="{Binding ImageStereoOutputFormatLabelText}" />
                                                     <ComboBox ItemsSource="{Binding StereoOutputFormatOptions}"
                                                               DisplayMemberPath="DisplayName"
-                                                              SelectedValue="{Binding SelectedStereoOutputFormat}"
-                                                              SelectedValuePath="Value" />
+                                                              SelectedItem="{Binding SelectedStereoOutputFormatOption,
+                                                                                     Mode=TwoWay}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageStereoEyeSeparationLabelText}" />
@@ -1848,15 +1863,61 @@
                                                               IsChecked="{Binding ImageStereoSwapEyes}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageStereoAnaglyphModeLabelText}" />
+                                                               Text="{Binding ImageStereoAnaglyphModeLabelText}"
+                                                               Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
                                                     <ComboBox ItemsSource="{Binding StereoAnaglyphModeOptions}"
-                                                              SelectedItem="{Binding SelectedStereoAnaglyphMode}" />
+                                                              SelectedItem="{Binding SelectedStereoAnaglyphMode}"
+                                                              Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
                                                     <TextBlock Margin="0,10,0,0"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageStereoSummaryText}" />
-                                                    <Button Margin="0,12,0,0"
-                                                            Content="{Binding ImagePreviewActionText}"
-                                                            IsEnabled="False" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Margin="0,12,0,0"
+                                                    AutomationProperties.AutomationId="ImageStereoReadinessSummaryCardNarrow"
+                                                    Style="{StaticResource CardStyle}">
+                                                <StackPanel>
+                                                    <TextBlock FontWeight="SemiBold"
+                                                               Text="{Binding ImageStereoReadinessSummaryTitleText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,8,0,3"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageModelSelectionLabelText}"
+                                                               TextWrapping="Wrap" />
+                                                    <ComboBox AutomationProperties.AutomationId="ImageModelSelectorNarrow"
+                                                              DisplayMemberPath="DisplayName"
+                                                              IsEnabled="{Binding HasLocalModelSelectionCandidates}"
+                                                              ItemsSource="{Binding LocalModelCandidates}"
+                                                              SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                     Mode=TwoWay}" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageModelSelectionSharedNoteText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageSelectedModelSummaryText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageExpectedOutputFileText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageSaveLocationText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageSupportedStereoFormatsText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageNotImplementedStateText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageBundledIw3StereoNoteText}"
+                                                               TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
@@ -2034,11 +2095,6 @@
                                       Visibility="{Binding ImageStereoPreviewExportStepVisibility}">
                                     <Grid AutomationProperties.AutomationId="ImageStereoPreviewExportVerticalLayout"
                                           Visibility="{Binding ImageStereoPreviewExportVerticalLayoutVisibility}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="2*" />
-                                            <ColumnDefinition Width="14" />
-                                            <ColumnDefinition Width="1*" />
-                                        </Grid.ColumnDefinitions>
                                         <Border MinHeight="240"
                                                 Style="{StaticResource CardStyle}">
                                             <Grid>
@@ -2048,114 +2104,51 @@
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                            Text="{Binding ImageStereoResultTitleText}" />
-                                                <UniformGrid Grid.Row="1"
-                                                             Margin="0,10,0,0"
-                                                             Columns="2"
-                                                             Rows="2">
-                                                    <Border Margin="0,0,5,5"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
+                                                <Grid Grid.Row="1"
+                                                      Margin="0,10,0,0"
+                                                      MinHeight="200">
+                                                    <Border Background="{DynamicResource LogBackgroundBrush}"
                                                             BorderBrush="{DynamicResource CardBorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="24"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="SBS"
-                                                                   TextWrapping="Wrap" />
+                                                        <Grid>
+                                                            <Image Margin="10"
+                                                                   Source="{Binding ImageStereoPreviewImagePath}"
+                                                                   Stretch="Uniform" />
+                                                            <Border Margin="12"
+                                                                    Padding="10,6"
+                                                                    HorizontalAlignment="Left"
+                                                                    VerticalAlignment="Top"
+                                                                    Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                    BorderBrush="{DynamicResource AccentBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="6">
+                                                                <TextBlock FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource AccentBrush}"
+                                                                           Text="{Binding SelectedStereoOutputFormatDisplayText}"
+                                                                           TextWrapping="Wrap" />
+                                                            </Border>
+                                                            <Border Background="{DynamicResource ModalOverlayBrush}"
+                                                                    Visibility="{Binding ImageExportProgressVisibility}">
+                                                                <StackPanel Width="280"
+                                                                            HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center">
+                                                                    <TextBlock FontWeight="SemiBold"
+                                                                               Foreground="{DynamicResource ButtonForegroundBrush}"
+                                                                               Text="{Binding ImageExportOverlayText}"
+                                                                               TextAlignment="Center"
+                                                                               TextWrapping="Wrap" />
+                                                                    <ProgressBar Margin="0,12,0,0"
+                                                                                 Maximum="100"
+                                                                                 Value="{Binding ImageExportProgressPercent, Mode=OneWay}"
+                                                                                 Style="{StaticResource V3dfyProgressBarStyle}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </Grid>
                                                     </Border>
-                                                    <Border Margin="5,0,0,5"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="24"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="TAB"
-                                                                   TextWrapping="Wrap" />
-                                                    </Border>
-                                                    <Border Margin="0,5,5,0"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="20"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="Anaglyph"
-                                                                   TextWrapping="Wrap" />
-                                                    </Border>
-                                                    <Border Margin="5,5,0,0"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="20"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="L / R"
-                                                                   TextWrapping="Wrap" />
-                                                    </Border>
-                                                </UniformGrid>
+                                                </Grid>
                                             </Grid>
                                         </Border>
-                                        <StackPanel Grid.Column="2">
-                                            <Border Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageGeneratedFilesTitleText}" />
-                                                    <TextBlock Margin="0,8,0,8"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageOutputPlanText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_sbs.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_tab.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_anaglyph.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_left.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_right.png" />
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Margin="0,12,0,0"
-                                                    Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageOutputPanelTitleText}" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageSetupSummaryText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageNotImplementedStateText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Button Margin="0,12,0,0"
-                                                            Content="{Binding ImageExportActionText}"
-                                                            IsEnabled="False" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageOpenOutputFolderActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageNewConversionActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
                                     </Grid>
                                     <StackPanel AutomationProperties.AutomationId="ImageStereoPreviewExportWideLayout"
                                                 Visibility="{Binding ImageStereoPreviewExportWideLayoutVisibility}">
@@ -2168,120 +2161,51 @@
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                            Text="{Binding ImageStereoResultTitleText}" />
-                                                <UniformGrid Grid.Row="1"
-                                                             Margin="0,10,0,0"
-                                                             Columns="2"
-                                                             Rows="2">
-                                                    <Border Margin="0,0,5,5"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
+                                                <Grid Grid.Row="1"
+                                                      Margin="0,10,0,0"
+                                                      MinHeight="190">
+                                                    <Border Background="{DynamicResource LogBackgroundBrush}"
                                                             BorderBrush="{DynamicResource CardBorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="24"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="SBS"
-                                                                   TextWrapping="Wrap" />
+                                                        <Grid>
+                                                            <Image Margin="10"
+                                                                   Source="{Binding ImageStereoPreviewImagePath}"
+                                                                   Stretch="Uniform" />
+                                                            <Border Margin="12"
+                                                                    Padding="10,6"
+                                                                    HorizontalAlignment="Left"
+                                                                    VerticalAlignment="Top"
+                                                                    Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                    BorderBrush="{DynamicResource AccentBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="6">
+                                                                <TextBlock FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource AccentBrush}"
+                                                                           Text="{Binding SelectedStereoOutputFormatDisplayText}"
+                                                                           TextWrapping="Wrap" />
+                                                            </Border>
+                                                            <Border Background="{DynamicResource ModalOverlayBrush}"
+                                                                    Visibility="{Binding ImageExportProgressVisibility}">
+                                                                <StackPanel Width="280"
+                                                                            HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center">
+                                                                    <TextBlock FontWeight="SemiBold"
+                                                                               Foreground="{DynamicResource ButtonForegroundBrush}"
+                                                                               Text="{Binding ImageExportOverlayText}"
+                                                                               TextAlignment="Center"
+                                                                               TextWrapping="Wrap" />
+                                                                    <ProgressBar Margin="0,12,0,0"
+                                                                                 Maximum="100"
+                                                                                 Value="{Binding ImageExportProgressPercent, Mode=OneWay}"
+                                                                                 Style="{StaticResource V3dfyProgressBarStyle}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </Grid>
                                                     </Border>
-                                                    <Border Margin="5,0,0,5"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="24"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="TAB"
-                                                                   TextWrapping="Wrap" />
-                                                    </Border>
-                                                    <Border Margin="0,5,5,0"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="20"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="Anaglyph"
-                                                                   TextWrapping="Wrap" />
-                                                    </Border>
-                                                    <Border Margin="5,5,0,0"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontSize="20"
-                                                                   FontWeight="SemiBold"
-                                                                   Text="L / R"
-                                                                   TextWrapping="Wrap" />
-                                                    </Border>
-                                                </UniformGrid>
+                                                </Grid>
                                             </Grid>
                                         </Border>
-                                        <Grid Margin="0,12,0,0"
-                                              AutomationProperties.AutomationId="ImageStereoWideExportOptionsSummaryRow">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="12" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Border Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageGeneratedFilesTitleText}" />
-                                                    <TextBlock Margin="0,8,0,8"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageOutputPlanText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_sbs.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_tab.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_anaglyph.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_left.png" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="image_right.png" />
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Grid.Column="2"
-                                                    Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageOutputPanelTitleText}" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageSetupSummaryText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageNotImplementedStateText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Button Margin="0,12,0,0"
-                                                            Content="{Binding ImageExportActionText}"
-                                                            IsEnabled="False" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageOpenOutputFolderActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageNewConversionActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </Grid>
                                     </StackPanel>
                                 </Grid>
                             </Grid>
@@ -2326,12 +2250,12 @@
                         <RowDefinition Height="{Binding ImagePreviewExportStatusRowHeight}" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <Border AutomationProperties.AutomationId="ImagePreviewExportStatusCard"
+                    <Border AutomationProperties.AutomationId="ImageOutputPanelCard"
                             Style="{StaticResource CardStyle}"
                             Visibility="{Binding ImagePreviewExportStatusCardVisibility}">
                         <StackPanel>
                             <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                       Text="{Binding ImagePreviewExportStatusTitleText}" />
+                                       Text="{Binding ImageOutputPanelTitleText}" />
                             <TextBlock FontWeight="SemiBold"
                                        Margin="0,4,0,0"
                                        Text="{Binding ImageSelectedModeSummaryText}"
@@ -2340,25 +2264,77 @@
                                        Style="{StaticResource MutedTextStyle}"
                                        Text="{Binding ImagePreviewExportStatusText}"
                                        TextWrapping="Wrap" />
-                            <TextBlock Margin="0,12,0,0"
+                            <TextBlock Margin="0,8,0,0"
                                        Style="{StaticResource MutedTextStyle}"
                                        Text="{Binding ImagePlannedOutputFormatsText}"
                                        TextWrapping="Wrap" />
                             <TextBlock Margin="0,6,0,0"
                                        Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding ImageLocalModelReadinessNoteText}"
+                                       Text="{Binding ImageSelectedModelSummaryText}"
                                        TextWrapping="Wrap" />
-                            <Border Margin="0,12,0,0"
-                                    Padding="10"
-                                    Background="{DynamicResource InputBackgroundBrush}"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="6">
-                                <TextBlock FontWeight="SemiBold"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           Text="{Binding ImageNotImplementedStateText}"
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource MutedTextStyle}"
+                                       Text="{Binding ImageExpectedOutputPathText}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Margin="0,10,0,0"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding ImageGeneratedFilesTitleText}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ImageExportSuccessVisibility}" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource MutedTextStyle}"
+                                       Text="{Binding ImageGeneratedFilesText}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ImageExportSuccessVisibility}" />
+                            <TextBlock Margin="0,8,0,0"
+                                       Style="{StaticResource MutedTextStyle}"
+                                       Text="{Binding ImageStereoExportDisabledReasonText}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ImageStereoExportDisabledReasonVisibility}" />
+                            <TextBlock Margin="0,8,0,0"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       Text="{Binding ImageExportOutdatedText}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ImageExportOutdatedVisibility}" />
+                            <StackPanel Margin="0,10,0,0"
+                                        Visibility="{Binding ImageExportProgressVisibility}">
+                                <TextBlock Style="{StaticResource MutedTextStyle}"
+                                           Text="{Binding ImageExportStatusText}"
                                            TextWrapping="Wrap" />
-                            </Border>
+                                <ProgressBar Margin="0,8,0,0"
+                                             Maximum="100"
+                                             Value="{Binding ImageExportProgressPercent, Mode=OneWay}"
+                                             Style="{StaticResource V3dfyProgressBarStyle}" />
+                            </StackPanel>
+                            <TextBlock Margin="0,10,0,0"
+                                       Style="{StaticResource MutedTextStyle}"
+                                       Text="{Binding ImageLastExportedPathText}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ImageExportSuccessVisibility}" />
+                            <TextBlock Margin="0,10,0,0"
+                                       Style="{StaticResource MutedTextStyle}"
+                                       Text="{Binding ImageExportErrorText}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ImageExportFailureVisibility}" />
+                            <Button Margin="0,12,0,0"
+                                    AutomationProperties.AutomationId="ExportStereoscopicImageButton"
+                                    Command="{Binding ExportStereoscopicImageCommand}"
+                                    Content="{Binding ImageStereoExportActionText}"
+                                    IsEnabled="{Binding CanExportStereoscopicImage}"
+                                    Visibility="{Binding ImageStereoConvertButtonVisibility}" />
+                            <Button Margin="0,8,0,0"
+                                    AutomationProperties.AutomationId="OpenImageOutputFolderButton"
+                                    Command="{Binding OpenImageOutputFolderCommand}"
+                                    Content="{Binding ImageOpenOutputFolderActionText}"
+                                    IsEnabled="{Binding CanOpenImageOutputFolder}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Margin="0,8,0,0"
+                                    AutomationProperties.AutomationId="NewImageConversionButton"
+                                    Command="{Binding NewImageConversionCommand}"
+                                    Content="{Binding ImageNewConversionActionText}"
+                                    IsEnabled="{Binding CanStartNewImageConversion}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
                         </StackPanel>
                     </Border>
 
@@ -2803,7 +2779,7 @@
                                                Text="{Binding ImageComparisonTitleText}" />
                                     <TextBlock Margin="0,8,0,0"
                                                Style="{StaticResource MutedTextStyle}"
-                                               Text="SBS | TAB | Anaglyph | L/R pair"
+                                               Text="{Binding SelectedStereoOutputFormatDisplayText}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
@@ -2844,88 +2820,6 @@
                         </StackPanel>
                     </Grid>
 
-                    <Grid Margin="0,18,0,0"
-                          AutomationProperties.AutomationId="ImageStereoLegacyResultScaffold">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="16" />
-                            <ColumnDefinition Width="1*" />
-                        </Grid.ColumnDefinitions>
-                        <Border MinHeight="240"
-                                Style="{StaticResource CardStyle}">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-                                <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                           Text="{Binding ImageStereoResultTitleText}" />
-                                <Grid Grid.Row="1">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="10" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Background="{DynamicResource LogBackgroundBrush}"
-                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="6">
-                                        <TextBlock HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   Text="SBS"
-                                                   FontSize="24"
-                                                   FontWeight="SemiBold" />
-                                    </Border>
-                                    <Border Grid.Column="2"
-                                            Background="{DynamicResource LogBackgroundBrush}"
-                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="6">
-                                        <TextBlock HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   Text="TAB"
-                                                   FontSize="24"
-                                                   FontWeight="SemiBold" />
-                                    </Border>
-                                </Grid>
-                            </Grid>
-                        </Border>
-                        <StackPanel Grid.Column="2">
-                            <Border Style="{StaticResource CardStyle}">
-                                <StackPanel>
-                                    <TextBlock FontWeight="SemiBold"
-                                               Text="{Binding ImageGeneratedFilesTitleText}" />
-                                    <TextBlock Margin="0,8,0,0"
-                                               Style="{StaticResource MutedTextStyle}"
-                                               Text="image_sbs.png" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Style="{StaticResource MutedTextStyle}"
-                                               Text="image_tab.png" />
-                                    <TextBlock Margin="0,4,0,0"
-                                               Style="{StaticResource MutedTextStyle}"
-                                               Text="image_anaglyph.png" />
-                                </StackPanel>
-                            </Border>
-                            <Border Margin="0,12,0,0"
-                                    Style="{StaticResource CardStyle}">
-                                <StackPanel>
-                                    <TextBlock FontWeight="SemiBold"
-                                               Text="{Binding ImageOutputPanelTitleText}" />
-                                    <Button Margin="0,12,0,0"
-                                            Content="{Binding ImageExportActionText}"
-                                            IsEnabled="False" />
-                                    <Button Margin="0,8,0,0"
-                                            Content="{Binding ImageOpenOutputFolderActionText}"
-                                            IsEnabled="False"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                    <Button Margin="0,8,0,0"
-                                            Content="{Binding ImageNewConversionActionText}"
-                                            IsEnabled="False"
-                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Grid>
                 </StackPanel>
             </ScrollViewer>
 

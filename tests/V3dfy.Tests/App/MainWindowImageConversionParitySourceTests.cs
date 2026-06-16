@@ -84,6 +84,7 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("public Visibility ImageAnalysisResultsVisibility", source);
         Assert.Contains("HasImageMetadata ? Visibility.Visible : Visibility.Collapsed;", source);
         Assert.Contains("_selectedImageMetadata = null;", selectImageMethod);
+        Assert.Contains("AnalyzeImage();", selectImageMethod);
         Assert.DoesNotContain("ReadImageMetadata", selectImageMethod);
         Assert.Contains("_selectedImageMetadata = ReadImageMetadata(SelectedImagePath);", analyzeImageMethod);
     }
@@ -373,8 +374,11 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("ConverterParameter=LessThan:620", stereoSetup);
         Assert.True(IndexOf(stereoNarrow, "Text=\"{Binding ImageStereoPreviewTitleText}\"") <
             IndexOf(stereoNarrow, "Text=\"{Binding ImageStereoControlsTitleText}\""));
-        Assert.True(IndexOf(stereoNarrow, "Text=\"{Binding ImageComparisonTitleText}\"") <
-            IndexOf(stereoNarrow, "Text=\"{Binding ImageStereoControlsTitleText}\""));
+        Assert.DoesNotContain("Text=\"{Binding ImageComparisonTitleText}\"", stereoSetup);
+        Assert.Contains("Source=\"{Binding SelectedImagePath}\"", stereoSetup);
+        Assert.Contains("SelectedItem=\"{Binding SelectedStereoOutputFormatOption,", stereoSetup);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelector\"", stereoSetup);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelectorNarrow\"", stereoSetup);
         Assert.DoesNotContain("Canvas.", parallaxSetup);
         Assert.DoesNotContain("Canvas.", stereoSetup);
         Assert.DoesNotContain("Margin=\"-", parallaxSetup);
@@ -472,14 +476,11 @@ public sealed class MainWindowImageConversionParitySourceTests
             IndexOf(parallaxWideLayout, "Text=\"{Binding ImageResultSummaryTitleText}\""));
         Assert.Contains("<ColumnDefinition Width=\"*\" />", parallaxWideLayout);
         Assert.Contains("<ColumnDefinition Width=\"12\" />", parallaxWideLayout);
-        Assert.Contains("<ColumnDefinition Width=\"*\" />", stereoWideLayout);
-        Assert.Contains("<ColumnDefinition Width=\"12\" />", stereoWideLayout);
         Assert.True(IndexOf(stereoWideLayout, "Text=\"{Binding ImageStereoResultTitleText}\"") <
-            IndexOf(stereoWideLayout, "AutomationProperties.AutomationId=\"ImageStereoWideExportOptionsSummaryRow\""));
-        Assert.True(IndexOf(stereoWideLayout, "AutomationProperties.AutomationId=\"ImageStereoWideExportOptionsSummaryRow\"") <
-            IndexOf(stereoWideLayout, "Text=\"{Binding ImageGeneratedFilesTitleText}\""));
-        Assert.True(IndexOf(stereoWideLayout, "Text=\"{Binding ImageGeneratedFilesTitleText}\"") <
-            IndexOf(stereoWideLayout, "Text=\"{Binding ImageOutputPanelTitleText}\""));
+            IndexOf(stereoWideLayout, "Source=\"{Binding ImageStereoPreviewImagePath}\""));
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageStereoWideExportOptionsSummaryRow\"", stereoWideLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageGeneratedFilesTitleText}\"", stereoWideLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageOutputPanelTitleText}\"", stereoWideLayout);
         Assert.DoesNotContain("StartImageConversionCommand", source);
         Assert.DoesNotContain("RunImageConversionCommand", source);
         Assert.DoesNotContain("GenerateImagePreviewCommand", source);
@@ -508,39 +509,38 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Equal(1, CountOccurrences(xaml, "AutomationProperties.AutomationId=\"ImageStereoScaffold\""));
         Assert.Equal(1, CountOccurrences(xaml, "AutomationProperties.AutomationId=\"ImageStereoResultScaffold\""));
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoLegacyScaffold\"", xaml);
-        Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoLegacyResultScaffold\"", xaml);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageStereoLegacyResultScaffold\"", xaml);
 
         Assert.Contains("Visibility=\"{Binding ImageStereoPreviewExportVerticalLayoutVisibility}\"", verticalLayout);
-        Assert.Contains("<ColumnDefinition Width=\"2*\" />", verticalLayout);
-        Assert.Contains("Grid.Column=\"2\"", verticalLayout);
-        Assert.Contains("<UniformGrid Grid.Row=\"1\"", verticalLayout);
-        Assert.Contains("Columns=\"2\"", verticalLayout);
-        Assert.Contains("Rows=\"2\"", verticalLayout);
-        Assert.Contains("Text=\"SBS\"", verticalLayout);
-        Assert.Contains("Text=\"TAB\"", verticalLayout);
-        Assert.Contains("Text=\"Anaglyph\"", verticalLayout);
-        Assert.Contains("Text=\"L / R\"", verticalLayout);
-        Assert.Contains("Text=\"image_left.png\"", verticalLayout);
-        Assert.Contains("Text=\"image_right.png\"", verticalLayout);
-        Assert.Contains("Text=\"{Binding ImageGeneratedFilesTitleText}\"", verticalLayout);
-        Assert.Contains("Text=\"{Binding ImageOutputPanelTitleText}\"", verticalLayout);
+        Assert.Contains("Source=\"{Binding ImageStereoPreviewImagePath}\"", verticalLayout);
+        Assert.Contains("Text=\"{Binding SelectedStereoOutputFormatDisplayText}\"", verticalLayout);
+        Assert.Contains("Visibility=\"{Binding ImageExportProgressVisibility}\"", verticalLayout);
+        Assert.Contains("Text=\"{Binding ImageExportOverlayText}\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageExportProgressText}\"", verticalLayout);
+        Assert.Contains("Value=\"{Binding ImageExportProgressPercent, Mode=OneWay}\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"SBS\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"TAB\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"Anaglyph\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"L / R\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageGeneratedFilesText}\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageGeneratedFilesTitleText}\"", verticalLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageOutputPanelTitleText}\"", verticalLayout);
 
         Assert.Contains("Visibility=\"{Binding ImageStereoPreviewExportWideLayoutVisibility}\"", wideLayout);
-        Assert.Contains("<UniformGrid Grid.Row=\"1\"", wideLayout);
-        Assert.Contains("Columns=\"2\"", wideLayout);
-        Assert.Contains("Rows=\"2\"", wideLayout);
+        Assert.Contains("Source=\"{Binding ImageStereoPreviewImagePath}\"", wideLayout);
+        Assert.Contains("Text=\"{Binding SelectedStereoOutputFormatDisplayText}\"", wideLayout);
+        Assert.Contains("Visibility=\"{Binding ImageExportProgressVisibility}\"", wideLayout);
+        Assert.Contains("Text=\"{Binding ImageExportOverlayText}\"", wideLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageExportProgressText}\"", wideLayout);
+        Assert.Contains("Value=\"{Binding ImageExportProgressPercent, Mode=OneWay}\"", wideLayout);
         Assert.True(IndexOf(wideLayout, "Text=\"{Binding ImageStereoResultTitleText}\"") <
-            IndexOf(wideLayout, "AutomationProperties.AutomationId=\"ImageStereoWideExportOptionsSummaryRow\""));
-        Assert.True(IndexOf(wideLayout, "AutomationProperties.AutomationId=\"ImageStereoWideExportOptionsSummaryRow\"") <
-            IndexOf(wideLayout, "Text=\"{Binding ImageGeneratedFilesTitleText}\""));
-        Assert.True(IndexOf(wideLayout, "Text=\"{Binding ImageGeneratedFilesTitleText}\"") <
-            IndexOf(wideLayout, "Text=\"{Binding ImageOutputPanelTitleText}\""));
-        Assert.Contains("Text=\"SBS\"", wideLayout);
-        Assert.Contains("Text=\"TAB\"", wideLayout);
-        Assert.Contains("Text=\"Anaglyph\"", wideLayout);
-        Assert.Contains("Text=\"L / R\"", wideLayout);
-        Assert.Contains("Text=\"image_left.png\"", wideLayout);
-        Assert.Contains("Text=\"image_right.png\"", wideLayout);
+            IndexOf(wideLayout, "Source=\"{Binding ImageStereoPreviewImagePath}\""));
+        Assert.DoesNotContain("Text=\"SBS\"", wideLayout);
+        Assert.DoesNotContain("Text=\"TAB\"", wideLayout);
+        Assert.DoesNotContain("Text=\"Anaglyph\"", wideLayout);
+        Assert.DoesNotContain("Text=\"L / R\"", wideLayout);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageStereoWideExportOptionsSummaryRow\"", wideLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageGeneratedFilesText}\"", wideLayout);
         Assert.DoesNotContain("ExportImageCommand", source);
         Assert.DoesNotContain("StartImageExportCommand", source);
     }
@@ -559,11 +559,18 @@ public sealed class MainWindowImageConversionParitySourceTests
             "private void CopyFullLog()",
             "private void CopyPreviewLog()");
 
-        Assert.Contains("AutomationProperties.AutomationId=\"ImagePreviewExportStatusCard\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageOutputPanelCard\"", rightPanel);
         Assert.Contains("Visibility=\"{Binding ImagePreviewExportStatusCardVisibility}\"", rightPanel);
         Assert.Contains("public Visibility ImagePreviewExportStatusCardVisibility", source);
-        Assert.Contains("_hasEnteredImagePreviewExportStage ? Visibility.Visible : Visibility.Collapsed;", source);
-        Assert.Contains("_hasEnteredImagePreviewExportStage ? GridLength.Auto : new GridLength(0d);", source);
+        Assert.Contains("SelectedImageConversionStep != ImageConversionStep.ModeAndSource", source);
+        Assert.Contains("_hasEnteredImagePreviewExportStage", source);
+        Assert.Contains("HasCurrentImageConversionOutput", source);
+        Assert.Contains("? Visibility.Visible", source);
+        Assert.Contains("? GridLength.Auto", source);
+        Assert.Contains("Text=\"{Binding ImageOutputPanelTitleText}\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"ExportStereoscopicImageButton\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"OpenImageOutputFolderButton\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"NewImageConversionButton\"", rightPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageScaffoldLog\"", rightPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"ViewImageActivityLogButton\"", rightPanel);
         Assert.Contains("Command=\"{Binding ViewImageActivityLogCommand}\"", rightPanel);
@@ -588,7 +595,7 @@ public sealed class MainWindowImageConversionParitySourceTests
         var imageFooter = ExtractSourceRange(
             imageSection,
             "AutomationProperties.AutomationId=\"ImageWizardFooter\"",
-            "AutomationProperties.AutomationId=\"ImagePreviewExportStatusCard\"");
+            "AutomationProperties.AutomationId=\"ImageOutputPanelCard\"");
 
         Assert.Contains("Style=\"{StaticResource WizardFooterSecondaryButtonStyle}\"", imageFooter);
         Assert.Contains("Style=\"{StaticResource WizardFooterButtonStyle}\"", imageFooter);

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -14,6 +15,7 @@ using V3dfy.Core.Analysis;
 using V3dfy.Core.Diagnostics;
 using V3dfy.Core.Estimation;
 using V3dfy.Core.Execution;
+using V3dfy.Core.Image;
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
@@ -90,6 +92,7 @@ public enum ImageStereoOutputFormat
 public sealed class MainWindowViewModel : ObservableObject
 {
     private const string SetupHelperExecutableName = "V3dfy.SetupHelper.exe";
+    private const string SupportedStereoAnaglyphMode = "Red/Cyan";
 
     private enum TopToastKind
     {
@@ -102,6 +105,11 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         General,
         Image,
+    }
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 
     private static readonly TimeSpan LogCopyNotificationDuration = TimeSpan.FromSeconds(2);
@@ -170,6 +178,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IPreviewCacheFileService _previewCacheFileService;
     private readonly IPreviewCachePathProvider _previewCachePathProvider;
     private readonly PreviewOutputOpenService _previewOutputOpenService;
+    private readonly IImageStereoExporter _imageStereoExporter;
     private readonly ModelPackAppImportCoordinator _modelPackImportCoordinator;
     private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
@@ -232,6 +241,27 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _imageStereoSwapEyes;
     private string _selectedStereoAnaglyphMode = "Red/Cyan";
     private bool _hasEnteredImagePreviewExportStage;
+    private bool _isImageExportRunning;
+    private int _imageExportProgressPercent;
+    private string _imageExportProgressEnglishText = "No image conversion has run yet.";
+    private string _imageExportProgressSpanishText = "Aun no se ha ejecutado ninguna conversion de imagen.";
+    private string _lastImageExportPrimaryPath = string.Empty;
+    private string _lastImageExportOutputDirectory = string.Empty;
+    private IReadOnlyList<string> _lastImageExportGeneratedFiles = [];
+    private string _lastImageExportErrorEnglishText = string.Empty;
+    private string _lastImageExportErrorSpanishText = string.Empty;
+    private bool _isImageExportOutputOutdated;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<ImageStereoOutputFormat>> _allStereoOutputFormatOptions =
+    [
+        new(ImageStereoOutputFormat.SideBySide, "SBS", "SBS"),
+        new(ImageStereoOutputFormat.HalfTopBottom, "Half Top-Bottom / TAB", "Half Top-Bottom / TAB"),
+        new(ImageStereoOutputFormat.Anaglyph, "Anaglyph", "Anaglifo"),
+    ];
+
+    private bool HasAnyImageConversionOutput => !string.IsNullOrWhiteSpace(_lastImageExportPrimaryPath);
+
+    private bool HasCurrentImageConversionOutput => HasAnyImageConversionOutput && !IsImageExportOutputOutdated;
+
     private string _modelPackImportStatusEnglishText = "No model pack import has run yet.";
     private string _modelPackImportStatusSpanishText = "Aun no se ha importado ningun paquete de modelos.";
     private string _lastModelPackImportSummaryEnglishText = string.Empty;
@@ -321,6 +351,10 @@ public sealed class MainWindowViewModel : ObservableObject
         _previewOutputOpenService = new(
             new FileSystemConversionOutputFileService(),
             new ShellOutputFileOpenService());
+        _imageStereoExporter = new Iw3ImageStereoExporter(
+            processRunner: new BundledLocalProcessRunner(
+                new LocalProcessRunner(),
+                _toolPaths.Iw3EngineDirectory));
         _modelPackImportCoordinator = new ModelPackAppImportCoordinator(
             new ModelPackFilePicker(() => IsSpanish),
             confirmationService: new InAppModelPackImportConfirmationService(ConfirmModelPackImportAsync));
@@ -360,6 +394,15 @@ public sealed class MainWindowViewModel : ObservableObject
         ContinueWithImageConversionCommand = new RelayCommand(
             ContinueWithImageConversion,
             () => CanContinueWithImageConversion);
+        ExportStereoscopicImageCommand = new AsyncRelayCommand(
+            ExportStereoscopicImageAsync,
+            () => CanExportStereoscopicImage);
+        OpenImageOutputFolderCommand = new RelayCommand(
+            OpenImageOutputFolder,
+            () => CanOpenImageOutputFolder);
+        NewImageConversionCommand = new RelayCommand(
+            StartNewImageConversion,
+            () => CanStartNewImageConversion);
         OpenSettingsCommand = new RelayCommand(OpenSettings);
         OpenToolsEngineSettingsCommand = new RelayCommand(OpenToolsEngineSettings);
         CloseSettingsCommand = new RelayCommand(CloseSettings);
@@ -541,8 +584,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public string HomeImageCardTitleText => Text("Convert images to 3D", "Convertir imagenes a 3D");
 
     public string HomeImageCardBodyText => Text(
-        "Coming next: image depth, parallax motion, and 3D still-output formats.",
-        "Proximamente: profundidad de imagen, movimiento parallax y formatos 3D para imagen fija.");
+        "Next: verified bundled iw3 image-depth export, then parallax/2.5D workflow.",
+        "Siguiente: exportacion de imagen/profundidad iw3 incluida y verificada, luego flujo parallax/2.5D.");
 
     public string HomeSettingsCardTitleText => Text("Manage models/settings", "Administrar modelos/ajustes");
 
@@ -551,14 +594,14 @@ public sealed class MainWindowViewModel : ObservableObject
         "Revisa herramientas locales, modelos, diagnostico, idioma, tema y licencias.");
 
     public string HomeStatusSummaryText => Text(
-        "Video conversion is ready. Image conversion scaffolding is prepared for the next engine work.",
-        "La conversion de video esta lista. El scaffolding de imagen queda preparado para el siguiente trabajo de motor.");
+        "Video conversion is ready. Image conversion is gated on verified bundled iw3 image capability.",
+        "La conversion de video esta lista. La conversion de imagen depende de capacidad de imagen iw3 incluida verificada.");
 
     public string HomeLocalOnlyBadgeText => Text("Local/offline", "Local/offline");
 
     public string HomeVideoStatusText => Text("Video workflow ready", "Flujo de video listo");
 
-    public string HomeImageStatusText => Text("Image module scaffold", "Scaffold de imagen");
+    public string HomeImageStatusText => Text("Image engine-gated", "Imagen validada por motor");
 
     public string HomeModelsStatusText => Text("Models and tools", "Modelos y herramientas");
 
@@ -571,8 +614,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ImageConversionTitleText => Text("Image conversion", "Conversion de imagen");
 
     public string ImageConversionIntroText => Text(
-        "Select an image, inspect local metadata, choose a 3D image workflow, and prepare a preview/export plan. Engine conversion is not wired yet.",
-        "Selecciona una imagen, revisa metadata local, elige un flujo de imagen 3D y prepara un plan de preview/exportacion. La conversion de motor aun no esta conectada.");
+        "Select an image, inspect local metadata, choose a 3D image workflow, and prepare image conversion. Stereoscopic conversion requires verified bundled iw3 image support.",
+        "Selecciona una imagen, revisa metadata local, elige un flujo de imagen 3D y prepara conversion de imagen. La conversion estereoscopica requiere soporte de imagen iw3 incluido verificado.");
 
     public string ImageParallaxModeTitleText => Text("2.5D Photo", "Foto 2.5D");
 
@@ -583,8 +626,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public string Image3DOutputModeTitleText => Text("Stereoscopic image", "Imagen estereoscopica");
 
     public string Image3DOutputModeBodyText => Text(
-        "Planned: use local depth models to create SBS, Half Top-Bottom, and Anaglyph-style image outputs.",
-        "Planeado: usar modelos locales de profundidad para crear salidas de imagen SBS, Half Top-Bottom y estilo anaglifo.");
+        "Uses verified bundled iw3/depth support to create the selected stereoscopic still output when the bundle provides that image capability.",
+        "Usa soporte iw3/profundidad incluido y verificado para crear la salida estereoscopica fija seleccionada cuando el bundle ofrece esa capacidad de imagen.");
 
     public string DisabledPlaceholderText => Text("Disabled until implemented", "Deshabilitado hasta implementarse");
 
@@ -603,8 +646,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ImageScaffoldLogTitleText => Text("Module log", "Log del modulo");
 
     public string ImageScaffoldLogText => Text(
-        "Ready for UI validation. Image selection, model inference, preview rendering, and export commands are not connected yet.",
-        "Listo para validacion de UI. Seleccion de imagen, inferencia de modelo, preview y exportacion aun no estan conectados.");
+        "Tracks image analysis, setup, bundled iw3 export readiness, and export results.",
+        "Registra analisis de imagen, configuracion, disponibilidad de exportacion iw3 incluida y resultados.");
 
     public string ImageDepthParameterText => Text("Depth: medium", "Profundidad: media");
 
@@ -624,9 +667,115 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ImageExportActionText => Text("Export scaffold", "Scaffold de exportacion");
 
+    public string ImageStereoExportActionText => IsImageExportRunning
+        ? Text("Converting...", "Convirtiendo...")
+        : Text("Convert", "Convertir");
+
     public string ImageOpenOutputFolderActionText => Text("Open output folder", "Abrir carpeta de salida");
 
     public string ImageNewConversionActionText => Text("New conversion", "Nueva conversion");
+
+    public string ImageNoOutputYetText => Text("No image conversion output yet.", "Aun no hay salida de conversion de imagen.");
+
+    public string ImageGeneratedFilesText => _lastImageExportGeneratedFiles.Count == 0
+        ? ImageNoOutputYetText
+        : string.Join(Environment.NewLine, _lastImageExportGeneratedFiles.Select(Path.GetFileName));
+
+    public string ImageLastExportedPathText => string.IsNullOrWhiteSpace(_lastImageExportPrimaryPath)
+        ? ImageNoOutputYetText
+        : _lastImageExportPrimaryPath;
+
+    public string ImageExportProgressText => Text(_imageExportProgressEnglishText, _imageExportProgressSpanishText);
+
+    public string ImageExportOverlayText => Text("Converting...", "Convirtiendo...");
+
+    public string ImageExportStatusText => IsImageExportRunning
+        ? Text("Converting...", "Convirtiendo...")
+        : ImageExportProgressText;
+
+    public int ImageExportProgressPercent => _imageExportProgressPercent;
+
+    public Visibility ImageExportProgressVisibility => IsImageExportRunning ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ImageExportSuccessVisibility =>
+        !IsImageExportRunning && HasCurrentImageConversionOutput
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public bool IsImageExportOutputOutdated => _isImageExportOutputOutdated;
+
+    public string ImageExportOutdatedText => Text(
+        "Configuration changed. Convert again.",
+        "La configuracion cambio. Convierte de nuevo.");
+
+    public Visibility ImageExportOutdatedVisibility =>
+        !IsImageExportRunning && IsImageExportOutputOutdated
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageStereoConvertButtonVisibility =>
+        HasCurrentImageConversionOutput ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility ImageExportFailureVisibility =>
+        !IsImageExportRunning && !string.IsNullOrWhiteSpace(_lastImageExportErrorEnglishText)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string ImageStereoPreviewImagePath =>
+        HasCurrentImageConversionOutput
+            ? _lastImageExportPrimaryPath
+            : SelectedImagePath ?? string.Empty;
+
+    public string ImageExportErrorText =>
+        string.IsNullOrWhiteSpace(_lastImageExportErrorEnglishText)
+            ? string.Empty
+            : Text(_lastImageExportErrorEnglishText, _lastImageExportErrorSpanishText);
+
+    public string ImageStereoExportDisabledReasonText
+    {
+        get
+        {
+            if (CanExportStereoscopicImage)
+            {
+                return string.Empty;
+            }
+
+            if (IsImageExportRunning)
+            {
+                return Text("Image conversion is already running.", "La conversion de imagen ya se esta ejecutando.");
+            }
+
+            if (!HasSelectedImage || !HasImageMetadata)
+            {
+                return Text("Select and analyze an image first.", "Selecciona y analiza una imagen primero.");
+            }
+
+            if (!IsImageStereoModeSelected)
+            {
+                return Text("Choose the Stereoscopic image workflow.", "Elige el flujo de imagen estereoscopica.");
+            }
+
+            if (!IsImageSetupValid)
+            {
+                return Text("Complete the stereo setup before converting.", "Completa la configuracion estereo antes de convertir.");
+            }
+
+            if (SelectedImageConversionStep != ImageConversionStep.PreviewAndExport)
+            {
+                return Text("Continue to Preview/export before converting.", "Continua a Preview/exportacion antes de convertir.");
+            }
+
+            if (!_hasEnteredImagePreviewExportStage)
+            {
+                return Text("Prepare image conversion before converting.", "Prepara la conversion de imagen antes de convertir.");
+            }
+
+            return CreateImageStereoExportReadinessText();
+        }
+    }
+
+    public Visibility ImageStereoExportDisabledReasonVisibility =>
+        CanExportStereoscopicImage || HasCurrentImageConversionOutput ? Visibility.Collapsed : Visibility.Visible;
 
     public string ImageResultParallaxTitleText => Text("2.5D result/export", "Resultado/exportacion 2.5D");
 
@@ -638,13 +787,19 @@ public sealed class MainWindowViewModel : ObservableObject
         "Preview target: 1080p parallax video, loop-friendly motion, local depth model pending.",
         "Objetivo de preview: video parallax 1080p, movimiento para loop, modelo local pendiente.");
 
-    public string ImageStereoPreviewTitleText => Text("Stereo preview", "Preview estereo");
+    public string ImageStereoPreviewTitleText => Text("Source preview", "Preview de origen");
 
     public string ImageStereoControlsTitleText => Text("Stereo controls", "Controles estereo");
 
+    public string ImageModelSelectionLabelText => Text("Image depth model", "Modelo de profundidad de imagen");
+
+    public string ImageModelSelectionSharedNoteText => Text(
+        "Uses the same bundled model inventory as Video conversion.",
+        "Usa el mismo inventario de modelos incluidos que Conversion de video.");
+
     public string ImageStereoSummaryText => Text(
-        "Modes planned: SBS, Half Top-Bottom, Anaglyph, and L/R pair outputs.",
-        "Modos planeados: SBS, Half Top-Bottom, anaglifo y salidas par L/R.");
+        $"Selected output: {SelectedStereoOutputFormatDisplayText}. Conversion uses bundled iw3 depth processing when readiness is complete.",
+        $"Salida seleccionada: {SelectedStereoOutputFormatDisplayText}. La conversion usa procesamiento de profundidad iw3 incluido cuando la disponibilidad esta completa.");
 
     public string ImageStereoSeparationText => Text("Eye separation: 4.0%", "Separacion ocular: 4.0%");
 
@@ -658,7 +813,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ImageOutputPanelTitleText => Text("Output panel", "Panel de salida");
 
-    public string ImageComparisonTitleText => Text("Comparison views", "Vistas comparativas");
+    public string ImageComparisonTitleText => Text("Output format", "Formato de salida");
 
     public ImageConversionMode? SelectedImageConversionMode
     {
@@ -787,8 +942,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ChangeImageWorkflowText => Text("Change workflow", "Cambiar flujo");
 
     public string ImageModeSourceBodyText => Text(
-        "Select one local image first, then analyze it locally to unlock setup.",
-        "Selecciona primero una imagen local y luego analizala localmente para habilitar configuracion.");
+        "Select one local image. Metadata is analyzed locally as soon as the image is selected.",
+        "Selecciona una imagen local. La metadata se analiza localmente en cuanto se selecciona la imagen.");
 
     public string ImageSourceAnalysisTitleText => Text("Source image", "Imagen de origen");
 
@@ -800,7 +955,7 @@ public sealed class MainWindowViewModel : ObservableObject
         "Choose a workflow to configure image setup.",
         "Elige un flujo para configurar la imagen.");
 
-    public string AnalyzeImageText => Text("Analyze image", "Analizar imagen");
+    public string AnalyzeImageText => Text("Reanalyze image", "Reanalizar imagen");
 
     public string ImageAnalysisTitleText => Text("Image analysis", "Analisis de imagen");
 
@@ -837,16 +992,20 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ImagePlannedOutputFormatsText => IsImageParallaxModeSelected
         ? Text("Outputs planned: MP4 parallax, preview stills, project metadata", "Salidas planeadas: MP4 parallax, imagenes de preview, metadata de proyecto")
         : IsImageStereoModeSelected
-            ? Text("Outputs planned: SBS, Half Top-Bottom, Anaglyph, L/R pair", "Salidas planeadas: SBS, Half Top-Bottom, anaglifo, par L/R")
+            ? Text(
+                $"Selected stereo output: {SelectedStereoOutputFormatDisplayText}",
+                $"Salida estereo seleccionada: {SelectedStereoOutputFormatDisplayText}")
             : Text("Choose a mode to see planned outputs.", "Elige un modo para ver salidas planeadas.");
 
     public string ImageLocalModelReadinessNoteText => Text(
-        "Local depth model readiness will appear here when image processing is implemented.",
-        "La disponibilidad del modelo local de profundidad aparecera aqui cuando se implemente imagen.");
+        "Image export uses only bundled iw3 runtime files and bundled mapped depth models.",
+        "La exportacion de imagen usa solo archivos de runtime iw3 incluidos y modelos de profundidad incluidos mapeados.");
 
-    public string ImageNotImplementedStateText => Text(
-        "Scaffold only - no image processing command is wired yet.",
-        "Solo scaffold: aun no hay comandos de procesamiento de imagen conectados.");
+    public string ImageNotImplementedStateText => IsImageStereoModeSelected
+        ? CreateImageStereoExportReadinessText()
+        : Text(
+            "Scaffold only - no image processing command is wired yet.",
+            "Solo scaffold: aun no hay comandos de procesamiento de imagen conectados.");
 
     public string ImageActivityLogTitleText => Text("Image activity log", "Log de actividad de imagen");
 
@@ -921,10 +1080,56 @@ public sealed class MainWindowViewModel : ObservableObject
         SelectedImageConversionStep == ImageConversionStep.PreviewAndExport ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility ContinueWithImageConversionFooterVisibility =>
-        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport ? Visibility.Visible : Visibility.Collapsed;
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport && !_hasEnteredImagePreviewExportStage
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     public bool CanContinueWithImageConversion =>
-        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport && IsImageSetupValid;
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport &&
+        IsImageSetupValid &&
+        !_hasEnteredImagePreviewExportStage;
+
+    public bool IsImageExportRunning
+    {
+        get => _isImageExportRunning;
+        private set
+        {
+            if (SetProperty(ref _isImageExportRunning, value))
+            {
+                RaiseImageExportPropertiesChanged();
+            }
+        }
+    }
+
+    public bool CanExportStereoscopicImage =>
+        !IsImageExportRunning &&
+        !HasCurrentImageConversionOutput &&
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport &&
+        _hasEnteredImagePreviewExportStage &&
+        HasSelectedImage &&
+        HasImageMetadata &&
+        IsImageStereoModeSelected &&
+        IsImageSetupValid &&
+        ImageStereoExportReadinessCanExport;
+
+    public bool CanOpenImageOutputFolder =>
+        !IsImageExportRunning &&
+        HasCurrentImageConversionOutput &&
+        !string.IsNullOrWhiteSpace(_lastImageExportOutputDirectory) &&
+        Directory.Exists(_lastImageExportOutputDirectory);
+
+    public bool CanStartNewImageConversion =>
+        !IsImageExportRunning &&
+        (HasSelectedImage ||
+            HasImageMetadata ||
+            HasSelectedImageMode ||
+            _hasEnteredImagePreviewExportStage ||
+            !string.IsNullOrWhiteSpace(_lastImageExportPrimaryPath) ||
+            !string.IsNullOrWhiteSpace(_lastImageExportErrorEnglishText) ||
+            IsImageExportOutputOutdated);
+
+    public bool ImageStereoExportReadinessCanExport =>
+        EvaluateCurrentImageStereoExportReadiness()?.CanExport == true;
 
     public string ImageWizardNextToolTipText => CanMoveImageWizardNext
         ? string.Empty
@@ -933,11 +1138,16 @@ public sealed class MainWindowViewModel : ObservableObject
             : Text("Choose an image workflow before continuing.", "Elige un flujo de imagen antes de continuar.");
 
     public string ContinueWithImageConversionText => Text(
-        "Prepare image preview/export plan",
-        "Preparar plan de preview/exportacion de imagen");
+        "Prepare image conversion",
+        "Preparar conversion de imagen");
 
     public Visibility ImagePreviewExportStatusCardVisibility =>
-        _hasEnteredImagePreviewExportStage ? Visibility.Visible : Visibility.Collapsed;
+        SelectedImageConversionStep != ImageConversionStep.ModeAndSource &&
+        (_hasEnteredImagePreviewExportStage ||
+            IsImageExportRunning ||
+            HasCurrentImageConversionOutput)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     public Visibility ImageAnalysisResultsVisibility =>
         HasImageMetadata ? Visibility.Visible : Visibility.Collapsed;
@@ -984,18 +1194,26 @@ public sealed class MainWindowViewModel : ObservableObject
         ImagePreviewExportStatusRowHeight;
 
     public GridLength ImagePreviewExportStatusRowHeight =>
-        _hasEnteredImagePreviewExportStage ? GridLength.Auto : new GridLength(0d);
+        SelectedImageConversionStep != ImageConversionStep.ModeAndSource &&
+        (_hasEnteredImagePreviewExportStage ||
+            IsImageExportRunning ||
+            HasCurrentImageConversionOutput)
+            ? GridLength.Auto
+            : new GridLength(0d);
 
     public Thickness ImageActivityLogCardMargin =>
-        _hasEnteredImagePreviewExportStage ? new Thickness(0d, 14d, 0d, 0d) : new Thickness(0d);
+        SelectedImageConversionStep != ImageConversionStep.ModeAndSource &&
+        (_hasEnteredImagePreviewExportStage ||
+            IsImageExportRunning ||
+            HasCurrentImageConversionOutput)
+            ? new Thickness(0d, 14d, 0d, 0d)
+            : new Thickness(0d);
 
-    public string ImagePreviewExportStatusTitleText => Text(
-        "Image preview/export plan",
-        "Plan de preview/exportacion de imagen");
+    public string ImagePreviewExportStatusTitleText => ImageOutputPanelTitleText;
 
     public string ImagePreviewExportStatusText => _hasEnteredImagePreviewExportStage
-        ? Text("Plan prepared. Engine preview/export is not implemented yet.", "Plan preparado. Preview/exportacion con motor aun no esta implementado.")
-        : Text("Prepare the plan in Step 3 to see image preview/export status.", "Prepara el plan en el paso 3 para ver el estado de preview/exportacion de imagen.");
+        ? CreateImagePreviewExportStatusText()
+        : Text("Prepare conversion in Step 3 to see image conversion status.", "Prepara la conversion en el paso 3 para ver el estado de conversion de imagen.");
 
     public string ImageSupportedExtensionsText => Text(
         ".jpg, .jpeg, .png, .bmp, .tif, .tiff, .webp",
@@ -1026,7 +1244,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ImageOutputPlanText => IsImageParallaxModeSelected
         ? Text("Planned output: parallax preview/export next to the source image. Engine export is disabled.", "Salida planeada: preview/exportacion parallax junto a la imagen de origen. Exportacion de motor deshabilitada.")
         : IsImageStereoModeSelected
-            ? Text("Planned output: stereoscopic still formats next to the source image. Engine export is disabled.", "Salida planeada: formatos estereoscopicos de imagen fija junto a la imagen de origen. Exportacion de motor deshabilitada.")
+            ? Text("Output: stereoscopic still image in the same folder as the source image.", "Salida: imagen estereoscopica fija en la misma carpeta que la imagen de origen.")
             : Text("Choose an image workflow to prepare an output plan.", "Elige un flujo de imagen para preparar un plan de salida.");
 
     public string ImageSetupSummaryText => IsImageParallaxModeSelected
@@ -1038,6 +1256,57 @@ public sealed class MainWindowViewModel : ObservableObject
                 $"Stereo setup: {SelectedStereoOutputFormatDisplayText}, separation {SelectedStereoEyeSeparation}, convergence {SelectedStereoConvergence}.",
                 $"Configuracion estereo: {SelectedStereoOutputFormatDisplayText}, separacion {SelectedStereoEyeSeparation}, convergencia {SelectedStereoConvergence}.")
             : Text("Select a workflow mode before configuring image setup.", "Selecciona un modo de flujo antes de configurar imagen.");
+
+    public string ImageStereoReadinessSummaryTitleText => Text("Output readiness", "Disponibilidad de salida");
+
+    public string ImageSelectedModelSummaryText => SelectedLocalModelCandidate is null
+        ? Text(
+            "Model: no mapped bundled depth model selected.",
+            "Modelo: no hay modelo de profundidad incluido mapeado seleccionado.")
+        : Text(
+            $"Model: {SelectedLocalModelCandidate.DisplayName} ({SelectedLocalModelCandidate.Iw3DepthModelName ?? "iw3 model pending"})",
+            $"Modelo: {SelectedLocalModelCandidate.DisplayName} ({SelectedLocalModelCandidate.Iw3DepthModelName ?? "modelo iw3 pendiente"})");
+
+    public string ImageExpectedOutputFileText => SelectedImagePath is null
+        ? Text("Expected file: select an image first.", "Archivo esperado: selecciona una imagen primero.")
+        : Text(
+            $"Expected file: {Path.GetFileName(CreateExpectedImageStereoOutputPath())}",
+            $"Archivo esperado: {Path.GetFileName(CreateExpectedImageStereoOutputPath())}");
+
+    public string ImageExpectedOutputPathText => SelectedImagePath is null
+        ? Text("Output path: same folder as the selected source image.", "Ruta de salida: misma carpeta que la imagen de origen seleccionada.")
+        : Text(
+            $"Output path: {CreateExpectedImageStereoOutputPath()}",
+            $"Ruta de salida: {CreateExpectedImageStereoOutputPath()}");
+
+    public string ImageSaveLocationText => SelectedImagePath is null
+        ? Text("Save location: same folder as the source image.", "Ubicacion de guardado: misma carpeta que la imagen de origen.")
+        : Text(
+            $"Save location: same folder as source ({GetDefaultImageExportDirectory(SelectedImagePath)})",
+            $"Ubicacion de guardado: misma carpeta que el origen ({GetDefaultImageExportDirectory(SelectedImagePath)})");
+
+    public string ImageSupportedStereoFormatsText
+    {
+        get
+        {
+            var supportedOptions = StereoOutputFormatOptions;
+            if (supportedOptions.Count == 0)
+            {
+                return Text(
+                    "Verified output formats: none. Refresh System status or inspect IW3_CLI_CAPABILITIES.json.",
+                    "Formatos de salida verificados: ninguno. Actualiza Estado del sistema o revisa IW3_CLI_CAPABILITIES.json.");
+            }
+
+            var displayNames = string.Join(", ", supportedOptions.Select(option => option.DisplayName));
+            return Text(
+                $"Verified output formats: {displayNames}",
+                $"Formatos de salida verificados: {displayNames}");
+        }
+    }
+
+    public string ImageBundledIw3StereoNoteText => Text(
+        "Conversion uses the bundled iw3/depth runtime and local model; no system Python, PATH tools, pip, or downloads.",
+        "La conversion usa el runtime iw3/profundidad incluido y el modelo local; no usa Python del sistema, herramientas PATH, pip ni descargas.");
 
     public string ImageDepthIntensityLabelText => Text("Depth intensity", "Intensidad de profundidad");
 
@@ -1075,19 +1344,16 @@ public sealed class MainWindowViewModel : ObservableObject
     public IReadOnlyList<string> ParallaxLayerBehaviorOptions { get; } =
         ["Foreground / mid / background", "Depth slices", "Soft depth ramp"];
 
-    public IReadOnlyList<LocalizedOptionViewModel<ImageStereoOutputFormat>> StereoOutputFormatOptions { get; } =
-    [
-        new(ImageStereoOutputFormat.SideBySide, "SBS", "SBS"),
-        new(ImageStereoOutputFormat.HalfTopBottom, "Half Top-Bottom / TAB", "Half Top-Bottom / TAB"),
-        new(ImageStereoOutputFormat.Anaglyph, "Anaglyph", "Anaglifo"),
-        new(ImageStereoOutputFormat.LeftRightPair, "L/R pair", "Par L/R"),
-    ];
+    public IReadOnlyList<LocalizedOptionViewModel<ImageStereoOutputFormat>> StereoOutputFormatOptions =>
+        _allStereoOutputFormatOptions
+            .Where(option => IsImageStereoOutputFormatSelectable(option.Value))
+            .ToArray();
 
     public IReadOnlyList<string> StereoEyeSeparationOptions { get; } = ["2.0%", "4.0%", "6.0%", "8.0%"];
 
     public IReadOnlyList<string> StereoConvergenceOptions { get; } = ["Near", "Neutral", "Far"];
 
-    public IReadOnlyList<string> StereoAnaglyphModeOptions { get; } = ["Red/Cyan", "Green/Magenta", "Amber/Blue"];
+    public IReadOnlyList<string> StereoAnaglyphModeOptions { get; } = [SupportedStereoAnaglyphMode];
 
     public string SelectedParallaxDepthIntensity
     {
@@ -1132,13 +1398,32 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (SetProperty(ref _selectedStereoOutputFormat, value))
             {
+                NormalizeSelectedStereoAnaglyphMode();
                 ApplyImageSetupChanged();
             }
         }
     }
 
+    public LocalizedOptionViewModel<ImageStereoOutputFormat>? SelectedStereoOutputFormatOption
+    {
+        get => _allStereoOutputFormatOptions.FirstOrDefault(option => option.Value == SelectedStereoOutputFormat);
+        set
+        {
+            if (value is not null)
+            {
+                SelectedStereoOutputFormat = value.Value;
+            }
+        }
+    }
+
     public string SelectedStereoOutputFormatDisplayText =>
-        StereoOutputFormatOptions.First(option => option.Value == SelectedStereoOutputFormat).DisplayName;
+        _allStereoOutputFormatOptions.FirstOrDefault(option => option.Value == SelectedStereoOutputFormat)?.DisplayName ??
+        SelectedStereoOutputFormat.ToString();
+
+    public bool IsAnaglyphOutputSelected => SelectedStereoOutputFormat == ImageStereoOutputFormat.Anaglyph;
+
+    public Visibility ImageStereoAnaglyphModeVisibility =>
+        IsAnaglyphOutputSelected ? Visibility.Visible : Visibility.Collapsed;
 
     public string SelectedStereoEyeSeparation
     {
@@ -1167,7 +1452,14 @@ public sealed class MainWindowViewModel : ObservableObject
     public string SelectedStereoAnaglyphMode
     {
         get => _selectedStereoAnaglyphMode;
-        set => SetImageSetupString(ref _selectedStereoAnaglyphMode, value);
+        set
+        {
+            var normalized = NormalizeStereoAnaglyphMode(value);
+            if (SetProperty(ref _selectedStereoAnaglyphMode, normalized))
+            {
+                ApplyImageSetupChanged();
+            }
+        }
     }
 
     public string? SelectedVideoPath
@@ -3872,6 +4164,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public RelayCommand ContinueWithImageConversionCommand { get; }
 
+    public AsyncRelayCommand ExportStereoscopicImageCommand { get; }
+
+    public RelayCommand OpenImageOutputFolderCommand { get; }
+
+    public RelayCommand NewImageConversionCommand { get; }
+
     public RelayCommand OpenSettingsCommand { get; }
 
     public RelayCommand OpenToolsEngineSettingsCommand { get; }
@@ -4035,16 +4333,13 @@ public sealed class MainWindowViewModel : ObservableObject
         SelectedImagePath = path;
         _selectedImageMetadata = null;
         ResetImageSetupState();
+        ResetImageExportState();
         _hasEnteredImagePreviewExportStage = false;
         SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
         AddImageLog(
             $"Image selected: {Path.GetFileName(path)}",
             $"Imagen seleccionada: {Path.GetFileName(path)}");
-        AddImageLog(
-            "Analyze image to read metadata and unlock image setup.",
-            "Analiza la imagen para leer metadata y habilitar configuracion.");
-
-        RaiseImageConversionPropertiesChanged();
+        AnalyzeImage();
     }
 
     private void AnalyzeImage()
@@ -4060,6 +4355,7 @@ public sealed class MainWindowViewModel : ObservableObject
         try
         {
             _selectedImageMetadata = ReadImageMetadata(SelectedImagePath);
+            ResetImageExportState();
             _hasEnteredImagePreviewExportStage = false;
             SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
             AddImageLog(
@@ -4069,6 +4365,7 @@ public sealed class MainWindowViewModel : ObservableObject
         catch (Exception exception)
         {
             _selectedImageMetadata = null;
+            ResetImageExportState();
             AddImageLog(
                 $"Could not read image metadata: {exception.Message}",
                 $"No se pudo leer la metadata de imagen: {exception.Message}");
@@ -4266,8 +4563,10 @@ public sealed class MainWindowViewModel : ObservableObject
         _toolHealth = _dependencyHealth.Summary;
         UpdateLocalModelSelectionCandidates();
         UpdateToolStatuses();
+        EnsureSelectedStereoOutputFormatIsSupported();
         RaiseModelInventoryPropertiesChanged();
         UpdateConversionReadiness();
+        RaiseImageConversionPropertiesChanged();
         if (logRefresh)
         {
             AddLog(
@@ -5348,8 +5647,8 @@ public sealed class MainWindowViewModel : ObservableObject
         if (step == ImageConversionStep.PreviewAndExport && !CanOpenImagePreviewExportStep)
         {
             AddImageLog(
-                "Choose an image workflow and complete setup before opening the preview/export plan.",
-                "Elige un flujo de imagen y completa la configuracion antes de abrir el plan de preview/exportacion.");
+                "Choose an image workflow and complete setup before opening image conversion.",
+                "Elige un flujo de imagen y completa la configuracion antes de abrir la conversion de imagen.");
             return;
         }
 
@@ -5391,8 +5690,8 @@ public sealed class MainWindowViewModel : ObservableObject
         if (SelectedImageConversionStep == ImageConversionStep.PreviewAndExport)
         {
             AddImageLog(
-                "Image preview/export plan is ready for review.",
-                "El plan de preview/exportacion de imagen esta listo para revisar.");
+                "Image conversion setup is ready for review.",
+                "La configuracion de conversion de imagen esta lista para revisar.");
         }
     }
 
@@ -5401,38 +5700,495 @@ public sealed class MainWindowViewModel : ObservableObject
         if (!CanContinueWithImageConversion)
         {
             AddImageLog(
-                "Review image setup before preparing the preview/export plan.",
-                "Revisa la configuracion de imagen antes de preparar el plan de preview/exportacion.");
+                "Review image setup before preparing image conversion.",
+                "Revisa la configuracion de imagen antes de preparar la conversion de imagen.");
             return;
         }
 
         _hasEnteredImagePreviewExportStage = true;
-        AddImageLog(
-            "Image preview/export plan prepared. Engine processing is not implemented yet.",
-            "Plan de preview/exportacion de imagen preparado. El procesamiento de motor aun no esta implementado.");
-        ShowLogCopyNotification(
-            "Image preview/export plan prepared",
-            "Plan de preview/exportacion de imagen preparado");
-        RaiseImageConversionPropertiesChanged();
-    }
-
-    private void ApplyImageSetupChanged()
-    {
-        if (_hasEnteredImagePreviewExportStage)
+        if (IsImageStereoModeSelected)
         {
-            _hasEnteredImagePreviewExportStage = false;
-            ShowLogCopyNotification(
-                "Image setup changed. Preview/export plan reset.",
-                "La configuracion de imagen cambio. Plan de preview/exportacion restablecido.");
             AddImageLog(
-                "Image setup changed; preview/export plan reset.",
-                "La configuracion de imagen cambio; plan de preview/exportacion restablecido.");
+                "Image conversion prepared. Stereoscopic conversion requires verified bundled iw3 image capability and a bundled mapped depth model.",
+                "Conversion de imagen preparada. La conversion estereoscopica requiere capacidad de imagen iw3 incluida verificada y un modelo de profundidad incluido mapeado.");
         }
         else
         {
             AddImageLog(
-                "Image setup changed.",
-                "Configuracion de imagen cambiada.");
+                "Image conversion prepared. 2.5D engine processing is not implemented yet.",
+                "Conversion de imagen preparada. El procesamiento 2.5D con motor aun no esta implementado.");
+        }
+
+        ShowLogCopyNotification(
+            "Image conversion prepared",
+            "Conversion de imagen preparada");
+        RaiseImageConversionPropertiesChanged();
+    }
+
+    private string CreateImagePreviewExportStatusText()
+    {
+        if (IsImageExportRunning)
+        {
+            return ImageExportStatusText;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_lastImageExportErrorEnglishText))
+        {
+            return ImageExportErrorText;
+        }
+
+        if (IsImageExportOutputOutdated)
+        {
+            return ImageExportOutdatedText;
+        }
+
+        if (HasCurrentImageConversionOutput)
+        {
+            var fileName = Path.GetFileName(_lastImageExportPrimaryPath);
+            return Text(
+                $"Conversion completed: {fileName}",
+                $"Conversion completada: {fileName}");
+        }
+
+        return IsImageStereoModeSelected
+            ? $"{Text("Conversion prepared.", "Conversion preparada.")} {CreateImageStereoExportReadinessText()}"
+            : Text(
+                "Conversion prepared. 2.5D conversion is not implemented yet.",
+                "Conversion preparada. Conversion 2.5D aun no esta implementada.");
+    }
+
+    private Iw3ImageStereoExportReadiness? EvaluateCurrentImageStereoExportReadiness()
+    {
+        if (SelectedImagePath is null || _dependencyHealth is null)
+        {
+            return null;
+        }
+
+        var outputDirectory = GetDefaultImageExportDirectory(SelectedImagePath);
+        var request = CreateImageStereoExportRequest(outputDirectory);
+        return Iw3ImageStereoExporter.EvaluateReadiness(request);
+    }
+
+    private string CreateImageStereoExportReadinessText()
+    {
+        if (_dependencyHealth is null)
+        {
+            return Text(
+                "Refresh System status before exporting with bundled iw3.",
+                "Actualiza el estado del sistema antes de exportar con iw3 incluido.");
+        }
+
+        if (SelectedImagePath is null)
+        {
+            return Text(
+                "Select and analyze an image before exporting.",
+                "Selecciona y analiza una imagen antes de exportar.");
+        }
+
+        var readiness = EvaluateCurrentImageStereoExportReadiness();
+        if (readiness?.CanExport == true)
+        {
+            return Text(
+                "Ready to convert.",
+                "Listo para convertir.");
+        }
+
+        var firstIssue = readiness?.Issues.FirstOrDefault();
+        return firstIssue is null
+            ? Text(
+                "Bundled iw3 image export is not ready.",
+                "La exportacion de imagen con iw3 incluido no esta lista.")
+            : Text(firstIssue.EnglishMessage, firstIssue.SpanishMessage);
+    }
+
+    private async Task ExportStereoscopicImageAsync()
+    {
+        if (!CanExportStereoscopicImage || SelectedImagePath is null)
+        {
+            AddImageLog(
+                $"Stereoscopic image conversion is blocked: {ImageStereoExportDisabledReasonText}",
+                $"La conversion de imagen estereoscopica esta bloqueada: {ImageStereoExportDisabledReasonText}");
+            return;
+        }
+
+        ResetImageExportState();
+        IsImageExportRunning = true;
+        _imageExportProgressPercent = 0;
+        _imageExportProgressEnglishText = "Preparing bundled iw3 stereoscopic image conversion.";
+        _imageExportProgressSpanishText = "Preparando conversion estereoscopica de imagen con iw3 incluido.";
+        RaiseImageExportPropertiesChanged();
+
+        var outputDirectory = GetDefaultImageExportDirectory(SelectedImagePath);
+        var outputFormat = MapImageStereoExportFormat(SelectedStereoOutputFormat);
+        var selectedModel = CreateSelectedImageLocalModelSelection();
+        var plannedOutputPaths = ImageStereoExportPathBuilder.CreateOutputPaths(
+            SelectedImagePath,
+            outputDirectory,
+            outputFormat,
+            selectedModel?.MappingKey ?? selectedModel?.DisplayName,
+            File.Exists);
+        AddImageLog(
+            "Bundled iw3 image stereo export started.",
+            "Exportacion estereoscopica de imagen con iw3 incluido iniciada.");
+        AddImageLog(
+            $"Source image: {Path.GetFileName(SelectedImagePath)}",
+            $"Imagen de origen: {Path.GetFileName(SelectedImagePath)}");
+        AddImageLog(
+            $"Selected model: {selectedModel?.DisplayName ?? "none"}. iw3 depth model: {selectedModel?.Iw3DepthModelName ?? "-"}",
+            $"Modelo seleccionado: {selectedModel?.DisplayName ?? "ninguno"}. Modelo de profundidad iw3: {selectedModel?.Iw3DepthModelName ?? "-"}");
+        AddImageLog(
+            $"Stereo format: {SelectedStereoOutputFormatDisplayText}.",
+            $"Formato estereo: {SelectedStereoOutputFormatDisplayText}.");
+        AddImageLog(
+            $"Output path: {plannedOutputPaths.PrimaryOutputPath}",
+            $"Ruta de salida: {plannedOutputPaths.PrimaryOutputPath}");
+        AddImageLog(
+            $"Bundled Python: {_toolPaths.PythonExecutable}",
+            $"Python incluido: {_toolPaths.PythonExecutable}");
+        AddImageLog(
+            $"Bundled iw3 package: {_toolPaths.Iw3PackageDirectory}",
+            $"Paquete iw3 incluido: {_toolPaths.Iw3PackageDirectory}");
+
+        await Task.Yield();
+
+        try
+        {
+            var request = CreateImageStereoExportRequest(outputDirectory);
+            var progress = new InlineProgress<ImageStereoExportProgress>(ApplyImageExportProgress);
+            var result = await _imageStereoExporter.ExportAsync(request, progress);
+
+            if (!string.IsNullOrWhiteSpace(result.CommandPreview))
+            {
+                AddImageLog(
+                    $"iw3 command: {result.CommandPreview}",
+                    $"Comando iw3: {result.CommandPreview}");
+            }
+
+            if (result.ExitCode.HasValue)
+            {
+                AddImageLog(
+                    $"iw3 process exit code: {result.ExitCode.Value}",
+                    $"Codigo de salida del proceso iw3: {result.ExitCode.Value}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.StandardOutputSummary))
+            {
+                AddImageLog(
+                    $"iw3 stdout: {result.StandardOutputSummary}",
+                    $"stdout iw3: {result.StandardOutputSummary}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.StandardErrorSummary))
+            {
+                AddImageLog(
+                    $"iw3 stderr: {result.StandardErrorSummary}",
+                    $"stderr iw3: {result.StandardErrorSummary}");
+            }
+
+            if (result.Success)
+            {
+                _lastImageExportPrimaryPath = result.PrimaryOutputPath ?? string.Empty;
+                _lastImageExportOutputDirectory = result.OutputDirectory;
+                _lastImageExportGeneratedFiles = result.GeneratedFiles;
+                _lastImageExportErrorEnglishText = string.Empty;
+                _lastImageExportErrorSpanishText = string.Empty;
+                _isImageExportOutputOutdated = false;
+                AddImageLog(result.EnglishSummary, result.SpanishSummary);
+                foreach (var generatedFile in result.GeneratedFiles)
+                {
+                    AddImageLog(
+                        $"Generated image file: {generatedFile}",
+                        $"Archivo de imagen generado: {generatedFile}");
+                }
+            }
+            else
+            {
+                _lastImageExportErrorEnglishText = result.EnglishSummary;
+                _lastImageExportErrorSpanishText = result.SpanishSummary;
+                _lastImageExportGeneratedFiles = [];
+                _lastImageExportPrimaryPath = string.Empty;
+                _isImageExportOutputOutdated = false;
+                AddImageLog(result.EnglishSummary, result.SpanishSummary);
+                if (!string.IsNullOrWhiteSpace(result.TechnicalDetail))
+                {
+                    AddImageLog(
+                        $"Technical detail: {result.TechnicalDetail}",
+                        $"Detalle tecnico: {result.TechnicalDetail}");
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            _lastImageExportErrorEnglishText = $"Image conversion failed: {exception.Message}";
+            _lastImageExportErrorSpanishText = $"La conversion de imagen fallo: {exception.Message}";
+            _lastImageExportGeneratedFiles = [];
+            _lastImageExportPrimaryPath = string.Empty;
+            _isImageExportOutputOutdated = false;
+            AddImageLog(_lastImageExportErrorEnglishText, _lastImageExportErrorSpanishText);
+            AddImageLog(
+                $"Technical detail: {exception}",
+                $"Detalle tecnico: {exception}");
+        }
+        finally
+        {
+            IsImageExportRunning = false;
+            RaiseImageExportPropertiesChanged();
+        }
+    }
+
+    private ImageStereoExportRequest CreateImageStereoExportRequest(string outputDirectory)
+    {
+        if (SelectedImagePath is null)
+        {
+            throw new InvalidOperationException("A source image must be selected before image export.");
+        }
+
+        if (_dependencyHealth is null)
+        {
+            throw new InvalidOperationException("System status must be refreshed before image export.");
+        }
+
+        return new(
+            SourcePath: SelectedImagePath,
+            OutputDirectory: outputDirectory,
+            OutputFormat: MapImageStereoExportFormat(SelectedStereoOutputFormat),
+            EyeSeparationPercent: ParseStereoEyeSeparationPercent(SelectedStereoEyeSeparation),
+            Convergence: SelectedStereoConvergence,
+            SwapEyes: ImageStereoSwapEyes,
+            AnaglyphMode: NormalizeStereoAnaglyphMode(SelectedStereoAnaglyphMode),
+            ExpectedToolPaths: _toolPaths,
+            DependencyHealth: _dependencyHealth,
+            SelectedLocalModel: CreateSelectedImageLocalModelSelection());
+    }
+
+    private LocalModelPlanSelection? CreateSelectedImageLocalModelSelection() =>
+        SelectedLocalModelCandidate is null
+            ? null
+            : LocalModelPlanSelection.FromCandidate(SelectedLocalModelCandidate);
+
+    private void ApplyImageExportProgress(ImageStereoExportProgress progress)
+    {
+        _imageExportProgressPercent = Math.Clamp(progress.ProgressPercent, 0, 100);
+        _imageExportProgressEnglishText = progress.EnglishMessage;
+        _imageExportProgressSpanishText = progress.SpanishMessage;
+        AddImageLog(progress.EnglishMessage, progress.SpanishMessage);
+        RaiseImageExportPropertiesChanged();
+    }
+
+    private void OpenImageOutputFolder()
+    {
+        if (!CanOpenImageOutputFolder)
+        {
+            AddImageLog(
+                "No exported image output folder is available yet.",
+                "Aun no hay carpeta de salida de imagen exportada disponible.");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _lastImageExportOutputDirectory,
+                UseShellExecute = true,
+            });
+
+            AddImageLog(
+                $"Opened image output folder: {_lastImageExportOutputDirectory}",
+                $"Carpeta de salida de imagen abierta: {_lastImageExportOutputDirectory}");
+        }
+        catch (Exception exception)
+        {
+            AddImageLog(
+                $"Could not open image output folder: {exception.Message}",
+                $"No se pudo abrir la carpeta de salida de imagen: {exception.Message}");
+        }
+    }
+
+    private void StartNewImageConversion()
+    {
+        if (!CanStartNewImageConversion)
+        {
+            return;
+        }
+
+        SelectedImagePath = null;
+        _selectedImageMetadata = null;
+        ResetImageSetupState();
+        ResetImageExportState();
+        _hasEnteredImagePreviewExportStage = false;
+        SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
+        AddImageLog(
+            "Image conversion reset for a new source image.",
+            "Conversion de imagen restablecida para una nueva imagen de origen.");
+        RaiseImageConversionPropertiesChanged();
+    }
+
+    private void ResetImageExportState()
+    {
+        _imageExportProgressPercent = 0;
+        _imageExportProgressEnglishText = "No image conversion has run yet.";
+        _imageExportProgressSpanishText = "Aun no se ha ejecutado ninguna conversion de imagen.";
+        _lastImageExportPrimaryPath = string.Empty;
+        _lastImageExportOutputDirectory = string.Empty;
+        _lastImageExportGeneratedFiles = [];
+        _lastImageExportErrorEnglishText = string.Empty;
+        _lastImageExportErrorSpanishText = string.Empty;
+        _isImageExportOutputOutdated = false;
+        RaiseImageExportPropertiesChanged();
+    }
+
+    private void MarkImageExportOutputOutdated()
+    {
+        _imageExportProgressPercent = 0;
+        _imageExportProgressEnglishText = "Configuration changed. Convert again.";
+        _imageExportProgressSpanishText = "La configuracion cambio. Convierte de nuevo.";
+        _lastImageExportErrorEnglishText = string.Empty;
+        _lastImageExportErrorSpanishText = string.Empty;
+        _isImageExportOutputOutdated = true;
+        RaiseImageExportPropertiesChanged();
+    }
+
+    private static string GetDefaultImageExportDirectory(string sourceImagePath)
+    {
+        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourceImagePath));
+        if (!string.IsNullOrWhiteSpace(sourceDirectory))
+        {
+            return sourceDirectory;
+        }
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+    }
+
+    private string CreateExpectedImageStereoOutputPath()
+    {
+        if (SelectedImagePath is null)
+        {
+            return string.Empty;
+        }
+
+        var selectedModel = CreateSelectedImageLocalModelSelection();
+        var outputPaths = ImageStereoExportPathBuilder.CreateOutputPaths(
+            SelectedImagePath,
+            GetDefaultImageExportDirectory(SelectedImagePath),
+            MapImageStereoExportFormat(SelectedStereoOutputFormat),
+            selectedModel?.MappingKey ?? selectedModel?.DisplayName,
+            _ => false);
+        return outputPaths.PrimaryOutputPath;
+    }
+
+    private bool IsImageStereoOutputFormatSelectable(ImageStereoOutputFormat format)
+    {
+        if (format == ImageStereoOutputFormat.LeftRightPair)
+        {
+            return false;
+        }
+
+        if (_dependencyHealth is null)
+        {
+            return false;
+        }
+
+        return Iw3ImageStereoExporter.GetMissingImageCapabilityOptions(
+            _dependencyHealth.Iw3CliCapabilities,
+            MapImageStereoExportFormat(format)).Count == 0;
+    }
+
+    private void EnsureSelectedStereoOutputFormatIsSupported()
+    {
+        var normalizedAnaglyphMode = NormalizeSelectedStereoAnaglyphMode();
+        if (IsImageStereoOutputFormatSelectable(SelectedStereoOutputFormat))
+        {
+            if (normalizedAnaglyphMode)
+            {
+                ResetImageExportState();
+            }
+
+            return;
+        }
+
+        var firstSupportedOption = StereoOutputFormatOptions.FirstOrDefault();
+        if (firstSupportedOption is null)
+        {
+            return;
+        }
+
+        _selectedStereoOutputFormat = firstSupportedOption.Value;
+        ResetImageExportState();
+        OnPropertyChanged(nameof(SelectedStereoOutputFormat));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatOption));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatDisplayText));
+        OnPropertyChanged(nameof(ImageStereoSummaryText));
+        OnPropertyChanged(nameof(IsAnaglyphOutputSelected));
+        OnPropertyChanged(nameof(ImageStereoAnaglyphModeVisibility));
+    }
+
+    private static string NormalizeStereoAnaglyphMode(string? value) =>
+        string.Equals(value?.Trim(), SupportedStereoAnaglyphMode, StringComparison.OrdinalIgnoreCase)
+            ? SupportedStereoAnaglyphMode
+            : SupportedStereoAnaglyphMode;
+
+    private bool NormalizeSelectedStereoAnaglyphMode()
+    {
+        var normalized = NormalizeStereoAnaglyphMode(_selectedStereoAnaglyphMode);
+        if (string.Equals(_selectedStereoAnaglyphMode, normalized, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        _selectedStereoAnaglyphMode = normalized;
+        OnPropertyChanged(nameof(SelectedStereoAnaglyphMode));
+        return true;
+    }
+
+    private static ImageStereoExportFormat MapImageStereoExportFormat(ImageStereoOutputFormat format) =>
+        format switch
+        {
+            ImageStereoOutputFormat.SideBySide => ImageStereoExportFormat.SideBySide,
+            ImageStereoOutputFormat.HalfTopBottom => ImageStereoExportFormat.HalfTopBottom,
+            ImageStereoOutputFormat.Anaglyph => ImageStereoExportFormat.Anaglyph,
+            ImageStereoOutputFormat.LeftRightPair => ImageStereoExportFormat.LeftRightPair,
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
+        };
+
+    private static double ParseStereoEyeSeparationPercent(string value)
+    {
+        var normalized = value.Replace("%", string.Empty, StringComparison.Ordinal).Trim();
+        return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 4d;
+    }
+
+    private void ApplyImageSetupChanged()
+    {
+        if (HasAnyImageConversionOutput)
+        {
+            MarkImageExportOutputOutdated();
+        }
+        else
+        {
+            ResetImageExportState();
+        }
+
+        if (_hasEnteredImagePreviewExportStage)
+        {
+            _hasEnteredImagePreviewExportStage = false;
+            ShowLogCopyNotification(
+                "Image setup changed. Convert again.",
+                "La configuracion de imagen cambio. Convierte de nuevo.");
+            AddImageLog(
+                "Image conversion setup changed; previous image conversion output is outdated. Prepare conversion again.",
+                "La configuracion de conversion de imagen cambio; la salida de conversion anterior esta desactualizada. Prepara la conversion de nuevo.");
+        }
+        else
+        {
+            AddImageLog(
+                HasAnyImageConversionOutput
+                    ? "Image setup changed; previous image conversion output is outdated."
+                    : "Image setup changed.",
+                HasAnyImageConversionOutput
+                    ? "La configuracion de imagen cambio; la salida de conversion de imagen anterior esta desactualizada."
+                    : "Configuracion de imagen cambiada.");
         }
 
         RaiseImageConversionPropertiesChanged();
@@ -5452,7 +6208,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _selectedStereoEyeSeparation = "4.0%";
         _selectedStereoConvergence = "Neutral";
         _imageStereoSwapEyes = false;
-        _selectedStereoAnaglyphMode = "Red/Cyan";
+        _selectedStereoAnaglyphMode = SupportedStereoAnaglyphMode;
     }
 
     private void SetImageSetupString(
@@ -5991,9 +6747,43 @@ public sealed class MainWindowViewModel : ObservableObject
         _selectedLocalModelCandidate = candidate;
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
+        OnPropertyChanged(nameof(ImageSelectedModelSummaryText));
+        OnPropertyChanged(nameof(ImageExpectedOutputFileText));
+        OnPropertyChanged(nameof(ImageExpectedOutputPathText));
         OnPropertyChanged(nameof(HasUnmappedLocalModelCandidates));
         RaisePreflightEstimatePropertiesChanged();
         UpdateConversionReadiness();
+        if (!_isApplyingUiOnlyRefresh)
+        {
+            if (HasAnyImageConversionOutput)
+            {
+                MarkImageExportOutputOutdated();
+            }
+            else
+            {
+                ResetImageExportState();
+            }
+
+            if (_hasEnteredImagePreviewExportStage)
+            {
+                _hasEnteredImagePreviewExportStage = false;
+                AddImageLog(
+                    "Image model changed; previous image conversion output is outdated. Prepare conversion again.",
+                    "El modelo de imagen cambio; la salida de conversion de imagen anterior esta desactualizada. Prepara la conversion de nuevo.");
+            }
+            else if (HasAnyImageConversionOutput)
+            {
+                AddImageLog(
+                    "Image model changed; previous image conversion output is outdated.",
+                    "El modelo de imagen cambio; la salida de conversion de imagen anterior esta desactualizada.");
+            }
+        }
+        else
+        {
+            RaiseImageExportPropertiesChanged();
+        }
+
+        RaiseImageConversionPropertiesChanged();
 
         if (!regeneratePlan)
         {
@@ -8779,7 +9569,7 @@ public sealed class MainWindowViewModel : ObservableObject
             option.SetLanguage(IsSpanish);
         }
 
-        foreach (var option in StereoOutputFormatOptions)
+        foreach (var option in _allStereoOutputFormatOptions)
         {
             option.SetLanguage(IsSpanish);
         }
@@ -8857,6 +9647,19 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ImageSourceStatusText));
         OnPropertyChanged(nameof(ImageOutputPlanText));
         OnPropertyChanged(nameof(ImageSetupSummaryText));
+        OnPropertyChanged(nameof(ImageStereoReadinessSummaryTitleText));
+        OnPropertyChanged(nameof(ImageModelSelectionLabelText));
+        OnPropertyChanged(nameof(ImageModelSelectionSharedNoteText));
+        OnPropertyChanged(nameof(ImageSelectedModelSummaryText));
+        OnPropertyChanged(nameof(ImageExpectedOutputFileText));
+        OnPropertyChanged(nameof(ImageExpectedOutputPathText));
+        OnPropertyChanged(nameof(ImageSaveLocationText));
+        OnPropertyChanged(nameof(ImageSupportedStereoFormatsText));
+        OnPropertyChanged(nameof(ImageBundledIw3StereoNoteText));
+        OnPropertyChanged(nameof(StereoOutputFormatOptions));
+        OnPropertyChanged(nameof(ImageStereoSummaryText));
+        OnPropertyChanged(nameof(IsAnaglyphOutputSelected));
+        OnPropertyChanged(nameof(ImageStereoAnaglyphModeVisibility));
         OnPropertyChanged(nameof(SelectedImageConversionMode));
         OnPropertyChanged(nameof(SelectedImageConversionStep));
         OnPropertyChanged(nameof(IsImageParallaxModeSelected));
@@ -8883,6 +9686,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ImageSelectedModeSummaryText));
         OnPropertyChanged(nameof(ImageCurrentStepSummaryText));
         OnPropertyChanged(nameof(ImagePlannedOutputFormatsText));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatOption));
         OnPropertyChanged(nameof(SelectedStereoOutputFormatDisplayText));
         AnalyzeImageCommand.RaiseCanExecuteChanged();
         SelectImageSetupStepCommand.RaiseCanExecuteChanged();
@@ -8890,6 +9694,52 @@ public sealed class MainWindowViewModel : ObservableObject
         ImageWizardBackCommand.RaiseCanExecuteChanged();
         ImageWizardNextCommand.RaiseCanExecuteChanged();
         ContinueWithImageConversionCommand.RaiseCanExecuteChanged();
+        RaiseImageExportPropertiesChanged();
+    }
+
+    private void RaiseImageExportPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(IsImageExportRunning));
+        OnPropertyChanged(nameof(CanExportStereoscopicImage));
+        OnPropertyChanged(nameof(ImageStereoExportReadinessCanExport));
+        OnPropertyChanged(nameof(CanOpenImageOutputFolder));
+        OnPropertyChanged(nameof(CanStartNewImageConversion));
+        OnPropertyChanged(nameof(ImageStereoExportActionText));
+        OnPropertyChanged(nameof(ImageGeneratedFilesText));
+        OnPropertyChanged(nameof(ImageLastExportedPathText));
+        OnPropertyChanged(nameof(ImageExportProgressText));
+        OnPropertyChanged(nameof(ImageExportOverlayText));
+        OnPropertyChanged(nameof(ImageExportStatusText));
+        OnPropertyChanged(nameof(ImageExportProgressPercent));
+        OnPropertyChanged(nameof(ImageExportProgressVisibility));
+        OnPropertyChanged(nameof(ImageExportSuccessVisibility));
+        OnPropertyChanged(nameof(IsImageExportOutputOutdated));
+        OnPropertyChanged(nameof(ImageExportOutdatedText));
+        OnPropertyChanged(nameof(ImageExportOutdatedVisibility));
+        OnPropertyChanged(nameof(ImageStereoConvertButtonVisibility));
+        OnPropertyChanged(nameof(ImageExportFailureVisibility));
+        OnPropertyChanged(nameof(ImageExportErrorText));
+        OnPropertyChanged(nameof(ImageStereoExportDisabledReasonText));
+        OnPropertyChanged(nameof(ImageStereoExportDisabledReasonVisibility));
+        OnPropertyChanged(nameof(ImageNotImplementedStateText));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusText));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusCardVisibility));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusRowHeight));
+        OnPropertyChanged(nameof(ImageActivityLogCardMargin));
+        OnPropertyChanged(nameof(ImageExpectedOutputFileText));
+        OnPropertyChanged(nameof(ImageExpectedOutputPathText));
+        OnPropertyChanged(nameof(ImageSupportedStereoFormatsText));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatOption));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatDisplayText));
+        OnPropertyChanged(nameof(ImageStereoSummaryText));
+        OnPropertyChanged(nameof(IsAnaglyphOutputSelected));
+        OnPropertyChanged(nameof(ImageStereoAnaglyphModeVisibility));
+        OnPropertyChanged(nameof(SelectedStereoAnaglyphMode));
+        OnPropertyChanged(nameof(StereoAnaglyphModeOptions));
+        OnPropertyChanged(nameof(ImageStereoPreviewImagePath));
+        ExportStereoscopicImageCommand.RaiseCanExecuteChanged();
+        OpenImageOutputFolderCommand.RaiseCanExecuteChanged();
+        NewImageConversionCommand.RaiseCanExecuteChanged();
     }
 
     private void RaiseAppSectionPropertiesChanged()
@@ -8956,14 +9806,26 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ImageLayersParameterText));
         OnPropertyChanged(nameof(ImagePreviewActionText));
         OnPropertyChanged(nameof(ImageExportActionText));
+        OnPropertyChanged(nameof(ImageStereoExportActionText));
         OnPropertyChanged(nameof(ImageOpenOutputFolderActionText));
         OnPropertyChanged(nameof(ImageNewConversionActionText));
+        OnPropertyChanged(nameof(ImageNoOutputYetText));
+        OnPropertyChanged(nameof(ImageGeneratedFilesText));
+        OnPropertyChanged(nameof(ImageLastExportedPathText));
+        OnPropertyChanged(nameof(ImageExportProgressText));
+        OnPropertyChanged(nameof(ImageExportOverlayText));
+        OnPropertyChanged(nameof(ImageExportStatusText));
+        OnPropertyChanged(nameof(ImageExportOutdatedText));
+        OnPropertyChanged(nameof(ImageExportErrorText));
+        OnPropertyChanged(nameof(ImageStereoExportDisabledReasonText));
         OnPropertyChanged(nameof(ImageResultParallaxTitleText));
         OnPropertyChanged(nameof(ImageExportOptionsTitleText));
         OnPropertyChanged(nameof(ImageResultSummaryTitleText));
         OnPropertyChanged(nameof(ImageResultSummaryText));
         OnPropertyChanged(nameof(ImageStereoPreviewTitleText));
         OnPropertyChanged(nameof(ImageStereoControlsTitleText));
+        OnPropertyChanged(nameof(ImageModelSelectionLabelText));
+        OnPropertyChanged(nameof(ImageModelSelectionSharedNoteText));
         OnPropertyChanged(nameof(ImageStereoSummaryText));
         OnPropertyChanged(nameof(ImageStereoSeparationText));
         OnPropertyChanged(nameof(ImageStereoConvergenceText));
@@ -9017,6 +9879,13 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ImageSourceStatusText));
         OnPropertyChanged(nameof(ImageOutputPlanText));
         OnPropertyChanged(nameof(ImageSetupSummaryText));
+        OnPropertyChanged(nameof(ImageStereoReadinessSummaryTitleText));
+        OnPropertyChanged(nameof(ImageSelectedModelSummaryText));
+        OnPropertyChanged(nameof(ImageExpectedOutputFileText));
+        OnPropertyChanged(nameof(ImageExpectedOutputPathText));
+        OnPropertyChanged(nameof(ImageSaveLocationText));
+        OnPropertyChanged(nameof(ImageSupportedStereoFormatsText));
+        OnPropertyChanged(nameof(ImageBundledIw3StereoNoteText));
         OnPropertyChanged(nameof(ImageDepthIntensityLabelText));
         OnPropertyChanged(nameof(ImageMotionDirectionLabelText));
         OnPropertyChanged(nameof(ImageZoomAmplitudeLabelText));
@@ -9028,7 +9897,12 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ImageStereoConvergenceLabelText));
         OnPropertyChanged(nameof(ImageStereoSwapEyesLabelText));
         OnPropertyChanged(nameof(ImageStereoAnaglyphModeLabelText));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatOption));
         OnPropertyChanged(nameof(SelectedStereoOutputFormatDisplayText));
+        OnPropertyChanged(nameof(IsAnaglyphOutputSelected));
+        OnPropertyChanged(nameof(ImageStereoAnaglyphModeVisibility));
+        OnPropertyChanged(nameof(SelectedStereoAnaglyphMode));
+        OnPropertyChanged(nameof(StereoAnaglyphModeOptions));
     }
 
     private void RaiseLocalizedPropertiesChanged()

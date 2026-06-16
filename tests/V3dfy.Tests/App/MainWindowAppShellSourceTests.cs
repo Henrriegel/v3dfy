@@ -364,7 +364,7 @@ public sealed class MainWindowAppShellSourceTests
         var imageFooter = ExtractSourceRange(
             imageSection,
             "AutomationProperties.AutomationId=\"ImageWizardFooter\"",
-            "AutomationProperties.AutomationId=\"ImagePreviewExportStatusCard\"");
+            "AutomationProperties.AutomationId=\"ImageOutputPanelCard\"");
         var copyFullLogMethod = ExtractSourceRange(
             source,
             "private void CopyFullLog()",
@@ -446,7 +446,10 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoScaffold\"", imageSection);
         Assert.Contains("Visibility=\"{Binding ImageStereoSetupStepVisibility}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding StereoOutputFormatOptions}\"", imageSection);
-        Assert.Contains("SelectedValue=\"{Binding SelectedStereoOutputFormat}\"", imageSection);
+        Assert.Contains("SelectedItem=\"{Binding SelectedStereoOutputFormatOption,", imageSection);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelector\"", imageSection);
+        Assert.Contains("ItemsSource=\"{Binding LocalModelCandidates}\"", imageSection);
+        Assert.Contains("SelectedItem=\"{Binding SelectedLocalModelCandidate,", imageSection);
         Assert.Contains("ItemsSource=\"{Binding StereoEyeSeparationOptions}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding StereoConvergenceOptions}\"", imageSection);
         Assert.Contains("IsChecked=\"{Binding ImageStereoSwapEyes}\"", imageSection);
@@ -455,13 +458,20 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("Visibility=\"{Binding ImageStereoPreviewExportStepVisibility}\"", imageSection);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageConversionSummaryCard\"", imageSection);
         Assert.Contains("<RowDefinition Height=\"{Binding ImagePreviewExportStatusRowHeight}\" />", rightPanel);
-        Assert.Contains("AutomationProperties.AutomationId=\"ImagePreviewExportStatusCard\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageOutputPanelCard\"", rightPanel);
         Assert.Contains("Visibility=\"{Binding ImagePreviewExportStatusCardVisibility}\"", rightPanel);
-        Assert.Contains("Text=\"{Binding ImagePreviewExportStatusTitleText}\"", rightPanel);
+        Assert.Contains("Text=\"{Binding ImageOutputPanelTitleText}\"", rightPanel);
         Assert.Contains("Text=\"{Binding ImageSelectedModeSummaryText}\"", rightPanel);
         Assert.Contains("Text=\"{Binding ImagePreviewExportStatusText}\"", rightPanel);
         Assert.Contains("Text=\"{Binding ImagePlannedOutputFormatsText}\"", rightPanel);
-        Assert.Contains("Text=\"{Binding ImageLocalModelReadinessNoteText}\"", rightPanel);
+        Assert.Contains("Text=\"{Binding ImageSelectedModelSummaryText}\"", rightPanel);
+        Assert.Contains("Text=\"{Binding ImageExpectedOutputPathText}\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"ExportStereoscopicImageButton\"", rightPanel);
+        Assert.Contains("Command=\"{Binding ExportStereoscopicImageCommand}\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"OpenImageOutputFolderButton\"", rightPanel);
+        Assert.Contains("Command=\"{Binding OpenImageOutputFolderCommand}\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"NewImageConversionButton\"", rightPanel);
+        Assert.Contains("Command=\"{Binding NewImageConversionCommand}\"", rightPanel);
         Assert.DoesNotContain("Text=\"{Binding SelectedImageFileName}\"", rightPanel);
         Assert.DoesNotContain("Text=\"{Binding ImageMetadataSummaryText}\"", rightPanel);
         Assert.DoesNotContain("Text=\"{Binding ImageCurrentStepSummaryText}\"", rightPanel);
@@ -516,6 +526,7 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("private ImageMetadata? _selectedImageMetadata;", source);
         Assert.Contains("private ImageConversionMode? _selectedImageConversionMode;", source);
         Assert.Contains("private ImageConversionStep _selectedImageConversionStep = ImageConversionStep.ModeAndSource;", source);
+        Assert.Contains("public LocalizedOptionViewModel<ImageStereoOutputFormat>? SelectedStereoOutputFormatOption", source);
         Assert.Contains("public RelayCommand SelectImageCommand", source);
         Assert.Contains("public RelayCommand AnalyzeImageCommand", source);
         Assert.Contains("public RelayCommand ClearImageLogCommand", source);
@@ -525,10 +536,10 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("private void AnalyzeImage()", source);
         Assert.Contains("public void SelectDroppedImage(string path)", source);
         Assert.Contains("viewModel.SelectDroppedImage(files[0]);", codeBehind);
-        Assert.DoesNotContain("ReadImageMetadata", selectImageMethod);
         Assert.Contains("_selectedImageMetadata = null;", selectImageMethod);
         Assert.Contains("ResetImageSetupState();", selectImageMethod);
-        Assert.Contains("Analyze image to read metadata", selectImageMethod);
+        Assert.Contains("AnalyzeImage();", selectImageMethod);
+        Assert.DoesNotContain("ReadImageMetadata", selectImageMethod);
         Assert.Contains("ReadImageMetadata(SelectedImagePath)", analyzeImageMethod);
         Assert.Contains("BitmapDecoder.Create", source);
         Assert.Contains("PixelWidth", source);
@@ -572,9 +583,11 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("public Visibility ImageAnalysisResultsVisibility", source);
         Assert.Contains("HasImageMetadata ? Visibility.Visible : Visibility.Collapsed;", source);
         Assert.Contains("public GridLength ImagePreviewExportStatusRowHeight", source);
-        Assert.Contains("_hasEnteredImagePreviewExportStage ? GridLength.Auto : new GridLength(0d);", source);
+        Assert.Contains("SelectedImageConversionStep != ImageConversionStep.ModeAndSource", source);
+        Assert.Contains("HasCurrentImageConversionOutput", source);
+        Assert.Contains("? GridLength.Auto", source);
         Assert.Contains("public Thickness ImageActivityLogCardMargin", source);
-        Assert.Contains("_hasEnteredImagePreviewExportStage ? new Thickness(0d, 14d, 0d, 0d) : new Thickness(0d);", source);
+        Assert.Contains("? new Thickness(0d, 14d, 0d, 0d)", source);
         Assert.Contains("public Visibility ImageSetupStepVisibility", source);
         Assert.Contains("public Visibility ImageParallaxSetupStepVisibility", source);
         Assert.Contains("public Visibility ImageStereoSetupStepVisibility", source);
@@ -592,7 +605,7 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("ShowLogCopyNotification(", setupChangedMethod);
         Assert.Contains("2.5D Photo", source);
         Assert.Contains("Stereoscopic image", source);
-        Assert.Contains("SBS, Half Top-Bottom, and Anaglyph-style", source);
+        Assert.Contains("verified bundled iw3 image support", source);
         Assert.DoesNotContain("StartImageConversionCommand", source);
         Assert.DoesNotContain("RunImageConversionCommand", source);
         Assert.DoesNotContain("GenerateImagePreviewCommand", source);

@@ -5,12 +5,17 @@ public static class Iw3CliContract
     public const string PythonModuleSwitch = "-m";
     public const string ModuleName = "iw3";
     public const string InputSwitch = "-i";
+    public const string InputLongSwitch = "--input";
     public const string OutputSwitch = "-o";
+    public const string OutputLongSwitch = "--output";
     public const string DepthModelSwitch = "--depth-model";
+    public const string DivergenceSwitch = "--divergence";
+    public const string ConvergenceSwitch = "--convergence";
     public const string HalfSideBySideSwitch = "--half-sbs";
     public const string HalfTopBottomSwitch = "--half-tb";
     public const string TopBottomSwitch = "--tb";
     public const string AnaglyphSwitch = "--anaglyph";
+    public const string CrossEyedSwitch = "--cross-eyed";
 
     public static IReadOnlyList<string> ConfirmedBaseArgumentTemplate { get; } =
     [
