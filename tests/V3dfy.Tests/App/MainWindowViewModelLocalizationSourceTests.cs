@@ -176,7 +176,9 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.Contains("private void ShowLogCopySuccessNotification()", source);
         Assert.Contains("private void ShowLogCopyFailureNotification()", source);
         Assert.Contains("private void ShowLogCopyNotification(string englishText, string spanishText)", source);
-        Assert.Contains("Task.Delay(TimeSpan.FromSeconds(2)", source);
+        Assert.Contains("LogCopyNotificationDuration = TimeSpan.FromSeconds(2)", source);
+        Assert.Contains("PreviewStageResetNoticeDuration = TimeSpan.FromSeconds(4)", source);
+        Assert.Contains("Task.Delay(duration", source);
         Assert.Contains("_isLogCopyNotificationVisible = true;", source);
         Assert.Contains("_isLogCopyNotificationVisible = false;", source);
         Assert.Contains("OnPropertyChanged(nameof(LogCopyNotificationText));", source);

@@ -48,9 +48,28 @@ public sealed record SelectableModelInventoryRow(
     string Type,
     string Source);
 
+public enum SettingsSection
+{
+    VisualSettings,
+    Models,
+    ToolsEngine,
+    LogsDiagnostics,
+    AboutLicenses,
+}
+
 public sealed class MainWindowViewModel : ObservableObject
 {
     private const string SetupHelperExecutableName = "V3dfy.SetupHelper.exe";
+
+    private enum TopToastKind
+    {
+        None,
+        LogCopy,
+        PreviewStageReset,
+    }
+
+    private static readonly TimeSpan LogCopyNotificationDuration = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan PreviewStageResetNoticeDuration = TimeSpan.FromSeconds(4);
 
     private static readonly HashSet<string> SupportedVideoExtensions =
     [
@@ -134,6 +153,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _previewGpuMetricsStatusText = "GPU metrics: Detecting...";
     private string _previewStageEnglishText = "Preparing preview";
     private string _previewStageSpanishText = "Preparando vista previa";
+    private SettingsSection _selectedSettingsSection = SettingsSection.VisualSettings;
     private string _modelPackImportStatusEnglishText = "No model pack import has run yet.";
     private string _modelPackImportStatusSpanishText = "Aun no se ha importado ningun paquete de modelos.";
     private string _lastModelPackImportSummaryEnglishText = string.Empty;
@@ -147,18 +167,24 @@ public sealed class MainWindowViewModel : ObservableObject
     private ProcessMetricSample? _lastPreviewMetricSample;
     private PreviewCachePaths? _lastPreviewCachePaths;
     private TaskCompletionSource<bool>? _replaceVideoConfirmationCompletion;
+    private TaskCompletionSource<bool>? _previewInvalidationConfirmationCompletion;
+    private Action? _pendingPreviewInvalidatingChange;
     private TaskCompletionSource<bool>? _modelPackImportConfirmationCompletion;
     private ModelPackImportConfirmationPrompt? _modelPackImportConfirmationPrompt;
+    private SettingsSection? _settingsSectionToRestoreAfterChildModal;
     private bool _reopenModelInventoryAfterImport;
     private CancellationTokenSource? _conversionCancellationTokenSource;
     private CancellationTokenSource? _previewCancellationTokenSource;
     private CancellationTokenSource? _logCopyNotificationCancellationTokenSource;
+    private TopToastKind _activeTopToastKind;
     private bool _isUpdatingOutputPathText;
     private bool _isAnalyzing;
     private bool _isTechnicalDetailsModalOpen;
     private bool _isProfileDetailsModalOpen;
     private bool _isModelHelpModalOpen;
+    private bool _isSettingsModalOpen;
     private bool _isReplaceVideoConfirmationModalOpen;
+    private bool _isPreviewInvalidationConfirmationModalOpen;
     private bool _isModelPackImportConfirmationModalOpen;
     private bool _isModelInventoryModalOpen;
     private bool _isActivityLogModalOpen;
@@ -174,8 +200,10 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _isPreviewCancellationRequested;
     private bool _hasLoggedPreviewCancellationSummary;
     private bool _isApplyingUiOnlyRefresh;
+    private bool _isApplyingPreviewInvalidatingChange;
     private bool _isModelPackImportRunning;
     private bool _isGlobalBusyOverlayVisible;
+    private bool _hasEnteredPreviewConversionStage;
     private int _previewProgressPercent;
 
     public MainWindowViewModel()
@@ -228,6 +256,18 @@ public sealed class MainWindowViewModel : ObservableObject
         RefreshEngineStatusCommand = new AsyncRelayCommand(
             () => RefreshEngineStatusWithGlobalBusyAsync(logRefresh: true),
             () => CanUseSystemStatusActions);
+        OpenSettingsCommand = new RelayCommand(OpenSettings);
+        OpenToolsEngineSettingsCommand = new RelayCommand(OpenToolsEngineSettings);
+        CloseSettingsCommand = new RelayCommand(CloseSettings);
+        WizardBackCommand = new RelayCommand(
+            MoveWizardBack,
+            () => CanMoveWizardBack);
+        WizardNextCommand = new RelayCommand(
+            MoveWizardNext,
+            () => CanMoveWizardNext);
+        ContinueWithConversionCommand = new RelayCommand(
+            ContinueWithConversion,
+            () => CanEnterPreviewConversionStage);
         OpenEngineFolderCommand = new RelayCommand(OpenEngineFolder);
         OpenModelsFolderCommand = new RelayCommand(OpenModelsFolder);
         ShowModelInventoryCommand = new RelayCommand(
@@ -275,6 +315,8 @@ public sealed class MainWindowViewModel : ObservableObject
         CancelModelPackImportCommand = new RelayCommand(CancelModelPackImport);
         ConfirmReplaceVideoCommand = new RelayCommand(ConfirmReplaceVideo);
         CancelReplaceVideoCommand = new RelayCommand(CancelReplaceVideo);
+        ConfirmPreviewInvalidationCommand = new RelayCommand(ConfirmPreviewInvalidation);
+        CancelPreviewInvalidationCommand = new RelayCommand(CancelPreviewInvalidation);
         AcceptConversionCompletedCommand = new RelayCommand(AcceptConversionCompleted);
 
         _themeService.Apply(_selectedTheme);
@@ -296,6 +338,9 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(SelectedVideoDisplayPath));
                 OnPropertyChanged(nameof(HasSelectedVideo));
+                OnPropertyChanged(nameof(SourceAnalysisEmptyHintVisibility));
+                OnPropertyChanged(nameof(VideoAnalysisSectionVisibility));
+                OnPropertyChanged(nameof(VideoAnalysisPendingStatusVisibility));
                 OnPropertyChanged(nameof(ConversionReadinessVisibility));
             }
         }
@@ -312,14 +357,17 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (_workflowState.SetHasCompletedAnalysis(value, out var selectedTabIndexChanged))
             {
+                if (value && _conversionPlan is not null)
+                {
+                    _workflowState.SetCanOpenConversionPlanStep(true, out _);
+                }
+
                 OnPropertyChanged();
                 if (selectedTabIndexChanged)
                 {
-                    OnPropertyChanged(nameof(SelectedWorkflowTabIndex));
+                    OnPropertyChanged(nameof(SelectedWizardStepIndex));
                 }
 
-                OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
-                OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
                 RaiseWorkflowAvailabilityPropertiesChanged();
                 RaiseConversionReadinessPropertiesChanged();
                 RaisePreviewPropertiesChanged();
@@ -352,6 +400,15 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public IReadOnlyList<string> ThemeOptions { get; } = ["Dark", "Light"];
 
+    public IReadOnlyList<LocalizedOptionViewModel<SettingsSection>> SettingsSectionOptions { get; } =
+    [
+        new(SettingsSection.VisualSettings, "Visual settings", "Ajustes visuales"),
+        new(SettingsSection.Models, "Models", "Modelos"),
+        new(SettingsSection.ToolsEngine, "Tools & Engine", "Herramientas y motor"),
+        new(SettingsSection.LogsDiagnostics, "Logs & Diagnostics", "Logs y diagnostico"),
+        new(SettingsSection.AboutLicenses, "About / Licenses", "Acerca de / licencias"),
+    ];
+
     public string SelectedTheme
     {
         get => _selectedTheme;
@@ -373,9 +430,158 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ThemeLabel => Text("Theme", "Tema");
 
+    public string SettingsText => Text("Settings", "Ajustes");
+
+    public string SettingsTitleText => Text("Settings", "Ajustes");
+
+    public string SettingsSideMenuTitleText => Text("Settings", "Ajustes");
+
+    public SettingsSection SelectedSettingsSection
+    {
+        get => _selectedSettingsSection;
+        set
+        {
+            if (SetProperty(ref _selectedSettingsSection, value))
+            {
+                RaiseSettingsSectionPropertiesChanged();
+            }
+        }
+    }
+
+    public Visibility VisualSettingsSectionVisibility =>
+        SelectedSettingsSection == SettingsSection.VisualSettings ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ModelsSettingsSectionVisibility =>
+        SelectedSettingsSection == SettingsSection.Models ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ToolsEngineSettingsSectionVisibility =>
+        SelectedSettingsSection == SettingsSection.ToolsEngine ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility LogsDiagnosticsSettingsSectionVisibility =>
+        SelectedSettingsSection == SettingsSection.LogsDiagnostics ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility AboutLicensesSettingsSectionVisibility =>
+        SelectedSettingsSection == SettingsSection.AboutLicenses ? Visibility.Visible : Visibility.Collapsed;
+
+    public string VisualSettingsTitleText => Text("Visual settings", "Ajustes visuales");
+
+    public string ModelsSettingsTitleText => Text("Models", "Modelos");
+
+    public string ToolsEngineSettingsTitleText => Text(
+        "Tools & Engine",
+        "Herramientas y motor");
+
+    public string LogsDiagnosticsSettingsTitleText => Text(
+        "Logs & Diagnostics",
+        "Logs y diagnostico");
+
+    public string AboutLicensesSettingsTitleText => Text(
+        "About / Licenses",
+        "Acerca de / licencias");
+
+    public string ModelsSettingsIntroText => Text(
+        "Review detected local models or import a reviewed model pack.",
+        "Revisa modelos locales detectados o importa un paquete de modelos revisado.");
+
+    public string ToolsEngineSettingsIntroText => Text(
+        "Local tool and engine status for the published runtime layout.",
+        "Estado de herramientas y motor locales para el layout publicado.");
+
+    public string LogsDiagnosticsSettingsIntroText => Text(
+        "Technical details for local tools, model inventory, and conversion readiness.",
+        "Detalles tecnicos de herramientas locales, inventario de modelos y estado de conversion.");
+
+    public string AboutLicensesText => Text(
+        $"v3dfy version: {GetCurrentV3dfyVersion()}{Environment.NewLine}Licenses and notices are bundled under licenses/ when release payloads are prepared. Review docs/legal-notes.md before distributing an installer.",
+        $"Version de v3dfy: {GetCurrentV3dfyVersion()}{Environment.NewLine}Las licencias y avisos se incluyen en licenses/ cuando se preparan los paquetes de release. Revisa docs/legal-notes.md antes de distribuir un instalador.");
+
+    public string AboutModelNoticesTitleText => Text("Model notices", "Avisos de modelos");
+
+    public string AboutModelNoticesText => CreateModelLicenseNoticeSummaryText();
+
+    public string SourceAndAnalysisStepTitle => Text(
+        "Source & analysis",
+        "Fuente y analisis");
+
+    public string ThreeDSetupStepTitle => Text(
+        "3D setup",
+        "Configuracion 3D");
+
+    public string WizardConversionPlanStepTitle => ConversionPlanTitle;
+
+    public int SelectedWizardStepIndex
+    {
+        get => _workflowState.SelectedStepIndex;
+        set
+        {
+            if (_workflowState.SetSelectedStepIndex(value))
+            {
+                RaiseWizardPropertiesChanged();
+            }
+        }
+    }
+
+    public bool CanOpenSourceAndAnalysisStep => true;
+
+    public bool CanOpenThreeDSetupStep => _workflowState.CanOpenThreeDSetupStep;
+
+    public bool CanOpenConversionPlanStep => _workflowState.CanOpenConversionPlanStep;
+
+    public bool CanMoveWizardBack => _workflowState.CanGoBack;
+
+    public bool CanMoveWizardNext => _workflowState.CanGoNext;
+
+    public Visibility WizardBackButtonVisibility =>
+        CanMoveWizardBack ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility WizardNextButtonVisibility =>
+        SelectedWizardStepIndex == ConversionWorkflowState.ConversionPlanStepIndex
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+    public string WizardBackText => Text("Back", "Atras");
+
+    public string WizardNextText => Text("Next", "Siguiente");
+
+    public string WizardNextToolTipText => CanMoveWizardNext
+        ? string.Empty
+        : SelectedWizardStepIndex switch
+        {
+            ConversionWorkflowState.SourceAndAnalysisStepIndex => Text(
+                "Analyze a video before continuing.",
+                "Analiza un video antes de continuar."),
+            ConversionWorkflowState.ThreeDSetupStepIndex => Text(
+                "Complete a valid 3D setup before opening the conversion plan.",
+                "Completa una configuracion 3D valida antes de abrir el plan de conversion."),
+            _ => string.Empty,
+        };
+
+    public Visibility SourceAndAnalysisStepVisibility =>
+        _workflowState.IsSourceAndAnalysisStepSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ThreeDSetupStepVisibility =>
+        _workflowState.IsThreeDSetupStepSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility WizardConversionPlanStepVisibility =>
+        _workflowState.IsConversionPlanStepSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public string SourceAndAnalysisStepState => GetWizardStepState(ConversionWorkflowState.SourceAndAnalysisStepIndex);
+
+    public string ThreeDSetupStepState => GetWizardStepState(ConversionWorkflowState.ThreeDSetupStepIndex);
+
+    public string ConversionPlanStepState => GetWizardStepState(ConversionWorkflowState.ConversionPlanStepIndex);
+
+    public string SourceAndAnalysisStepMarkerText =>
+        SelectedWizardStepIndex > ConversionWorkflowState.SourceAndAnalysisStepIndex ? "\u2713" : "1";
+
+    public string ThreeDSetupStepMarkerText =>
+        SelectedWizardStepIndex > ConversionWorkflowState.ThreeDSetupStepIndex ? "\u2713" : "2";
+
+    public string ConversionPlanStepMarkerText => "3";
+
     public string SelectSourceTitle => Text(
-        "1. Select source video",
-        "1. Selecciona el video de origen");
+        "Source video",
+        "Video de origen");
 
     public string DropVideoText => Text(
         "Drop one video file here or browse for a file.",
@@ -384,6 +590,13 @@ public sealed class MainWindowViewModel : ObservableObject
     public string NoVideoSelectedText => Text(
         "No video selected yet.",
         "Aún no hay video seleccionado.");
+
+    public string SourceAnalysisEmptyHintText => Text(
+        "Select a source video to analyze its duration, resolution, streams, and HDR metadata.",
+        "Selecciona un video fuente para analizar duracion, resolucion, pistas y metadatos HDR.");
+
+    public Visibility SourceAnalysisEmptyHintVisibility =>
+        HasSelectedVideo ? Visibility.Collapsed : Visibility.Visible;
 
     public string SelectVideoText => Text("Select video", "Seleccionar video");
 
@@ -402,8 +615,20 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _selectedOutputPreset;
         set
         {
+            if (ReferenceEquals(_selectedOutputPreset, value))
+            {
+                return;
+            }
+
+            if (TryDeferPreviewInvalidatingChange(() => SelectedOutputPreset = value))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (SetProperty(ref _selectedOutputPreset, value))
             {
+                ResetPreviewConversionStageForPreviewAffectingChange();
                 ApplyPresetDefaults(value);
                 RegenerateRecommendationAndPlan();
                 RaisePresetPropertiesChanged();
@@ -447,6 +672,17 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _planOptionState.OutputContainer;
         set
         {
+            if (_planOptionState.OutputContainer == value)
+            {
+                return;
+            }
+
+            if (TryDeferPreviewInvalidatingChange(() => SelectedOutputContainer = value))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (_planOptionState.SetOutputContainer(value))
             {
                 OnPropertyChanged();
@@ -462,6 +698,17 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _planOptionState.QualityPreset;
         set
         {
+            if (_planOptionState.QualityPreset == value)
+            {
+                return;
+            }
+
+            if (TryDeferPreviewInvalidatingChange(() => SelectedQualityPreset = value))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (_planOptionState.SetQualityPreset(value))
             {
                 OnPropertyChanged();
@@ -477,6 +724,17 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _planOptionState.Intensity;
         set
         {
+            if (_planOptionState.Intensity == value)
+            {
+                return;
+            }
+
+            if (TryDeferPreviewInvalidatingChange(() => SelectedThreeDIntensity = value))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (_planOptionState.SetIntensity(value))
             {
                 OnPropertyChanged();
@@ -492,6 +750,17 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _planOptionState.ThreeDOutputFormat;
         set
         {
+            if (_planOptionState.ThreeDOutputFormat == value)
+            {
+                return;
+            }
+
+            if (TryDeferPreviewInvalidatingChange(() => SelectedThreeDOutputFormat = value))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (_planOptionState.SetThreeDOutputFormat(value))
             {
                 OnPropertyChanged();
@@ -538,7 +807,8 @@ public sealed class MainWindowViewModel : ObservableObject
                         : "LG-compatible MP4 copy disabled.",
                     value
                         ? "Copia MP4 compatible con LG activada."
-                        : "Copia MP4 compatible con LG desactivada.");
+                        : "Copia MP4 compatible con LG desactivada.",
+                    affectsPreview: false);
             }
         }
     }
@@ -567,7 +837,8 @@ public sealed class MainWindowViewModel : ObservableObject
                         : "Primary output selected as preferred open target.",
                     value
                         ? "Copia compatible con LG seleccionada como destino preferido al abrir."
-                        : "Salida principal seleccionada como destino preferido al abrir.");
+                        : "Salida principal seleccionada como destino preferido al abrir.",
+                    affectsPreview: false);
             }
         }
     }
@@ -588,13 +859,11 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public int SelectedWorkflowTabIndex
     {
-        get => _workflowState.SelectedTabIndex;
+        get => SelectedWizardStepIndex;
         set
         {
-            if (_workflowState.SetSelectedTabIndex(value))
-            {
-                OnPropertyChanged();
-            }
+            SelectedWizardStepIndex = value;
+            OnPropertyChanged();
         }
     }
 
@@ -630,6 +899,8 @@ public sealed class MainWindowViewModel : ObservableObject
             {
                 AnalyzeCommand.RaiseCanExecuteChanged();
                 OnPropertyChanged(nameof(AnalysisStatusText));
+                OnPropertyChanged(nameof(VideoAnalysisPendingStatusText));
+                OnPropertyChanged(nameof(VideoAnalysisPendingStatusVisibility));
                 RaiseModelPackImportAvailabilityPropertiesChanged();
             }
         }
@@ -710,6 +981,19 @@ public sealed class MainWindowViewModel : ObservableObject
         : _analysis is null
             ? Text("No analysis yet.", "Aún no hay análisis.")
             : Text("Analysis completed.", "Análisis completado.");
+
+    public string VideoAnalysisPendingStatusText => IsAnalyzing
+        ? Text("Analyzing the selected video...", "Analizando el video seleccionado...")
+        : Text("Video selected. Run analysis to continue.", "Video seleccionado. Ejecuta el analisis para continuar.");
+
+    public Visibility VideoAnalysisSectionVisibility =>
+        HasSelectedVideo ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility VideoAnalysisPendingStatusVisibility =>
+        HasSelectedVideo && _analysis is null ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility VideoAnalysisResultsVisibility =>
+        _analysis is null ? Visibility.Collapsed : Visibility.Visible;
 
     public string AnalysisDurationText => LabelValue(
         "Duration",
@@ -867,7 +1151,19 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _selectedLocalModelCandidate;
         set
         {
+            if (ReferenceEquals(_selectedLocalModelCandidate, value))
+            {
+                return;
+            }
+
             if (_isApplyingUiOnlyRefresh && value is null)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (!_isApplyingUiOnlyRefresh &&
+                TryDeferPreviewInvalidatingChange(() => SelectedLocalModelCandidate = value))
             {
                 OnPropertyChanged();
                 return;
@@ -976,6 +1272,73 @@ public sealed class MainWindowViewModel : ObservableObject
         "Performance history is stored locally on this device to improve future time estimates. No telemetry or file paths are stored.",
         "El historial de rendimiento se guarda localmente en este equipo para mejorar futuros tiempos estimados. No se guarda telemetria ni rutas de archivos.");
 
+    public string CompactEstimateTimeConfidenceText
+    {
+        get
+        {
+            var estimate = CreateCurrentConversionTimeEstimate();
+            var estimateText = estimate.IsAvailable
+                ? FormatEstimateRange(estimate.Low, estimate.High)
+                : Text("not enough information yet", "aun sin informacion suficiente");
+            return Text(
+                $"Estimated time: {estimateText} \u00b7 Confidence: {ConfidenceText(estimate.Confidence, useSpanish: false)}",
+                $"Tiempo estimado: {estimateText} \u00b7 Confianza: {ConfidenceText(estimate.Confidence, useSpanish: true)}");
+        }
+    }
+
+    public string CompactOutputSizeFreeSpaceText
+    {
+        get
+        {
+            var estimate = CreateCurrentOutputSizeEstimate();
+            if (!estimate.IsAvailable)
+            {
+                return Text(
+                    "Output size: depends on final encoding settings \u00b7 Free space: check destination drive",
+                    "Tamano de salida: depende de la codificacion final \u00b7 Espacio libre: revisa la unidad destino");
+            }
+
+            return Text(
+                $"Output size: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)} \u00b7 Free space: at least {FormatBytes(estimate.RecommendedFreeBytes)}",
+                $"Tamano de salida: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)} \u00b7 Espacio libre: al menos {FormatBytes(estimate.RecommendedFreeBytes)}");
+        }
+    }
+
+    public string CompactSelectedModelGuidanceText
+    {
+        get
+        {
+            if (SelectedLocalModelCandidate is null)
+            {
+                return Text(
+                    "Model: included base model when available \u00b7 Speed: Medium \u00b7 Quality: Usable",
+                    "Modelo: modelo base incluido cuando este disponible \u00b7 Velocidad: Media \u00b7 Calidad: Utilizable");
+            }
+
+            var entry = FindRegistryEntry(SelectedLocalModelCandidate);
+            var guidance = _modelGuidanceService.Create(
+                SelectedLocalModelCandidate.MappingKey,
+                SelectedLocalModelCandidate.Iw3DepthModelName,
+                SelectedLocalModelCandidate.DisplayName,
+                entry?.IsEmbeddedBase == true);
+            return Text(
+                $"Model: {guidance.EnglishHeadline} \u00b7 Speed: {guidance.EnglishSpeed} \u00b7 Quality: {guidance.EnglishQuality}",
+                $"Modelo: {guidance.SpanishHeadline} \u00b7 Velocidad: {guidance.SpanishSpeed} \u00b7 Calidad: {guidance.SpanishQuality}");
+        }
+    }
+
+    public string CompactPresetGuidanceText => Text(
+        $"Preset: {SelectedOutputPreset.BestFor}",
+        $"Perfil: {SelectedOutputPreset.SpanishBestFor}");
+
+    public string EstimateDetailsTitleText => Text(
+        "Estimate details",
+        "Detalles de estimacion");
+
+    public string GuidanceDetailsTitleText => Text(
+        "Model and preset details",
+        "Detalles de modelo y perfil");
+
     public bool HasUnmappedLocalModelCandidates =>
         Iw3DepthModelMapper.GetUnmappedCandidates(
             _dependencyHealth?.ModelInventory.SelectionCandidates ?? []).Count > 0;
@@ -1044,6 +1407,16 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public IReadOnlyList<SelectableModelInventoryRow> SelectableModelInventoryRows =>
         CreateSelectableModelInventoryRows();
+
+    public Visibility SettingsSelectableModelsTableVisibility =>
+        SelectableModelInventoryRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility SettingsSelectableModelsEmptyVisibility =>
+        SelectableModelInventoryRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public string SettingsSelectableModelsEmptyText => Text(
+        "No selectable models are available yet.",
+        "Aun no hay modelos seleccionables disponibles.");
 
     public string DiagnosticModelsSectionTitleText => Text(
         "Detected but not selectable",
@@ -1200,6 +1573,109 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ConversionPlanCommandPreviewText => _conversionPlan?.CommandPreview ?? "-";
 
+    public string ConversionPlanTechnicalDetailsTitleText => Text(
+        "Technical details",
+        "Detalles tecnicos");
+
+    public string ReadyForConversionSummaryText => Text(
+        "Ready for conversion",
+        "Listo para convertir");
+
+    public bool HasEnteredPreviewConversionStage => _hasEnteredPreviewConversionStage;
+
+    public bool CanEnterPreviewConversionStage =>
+        SelectedWizardStepIndex == ConversionWorkflowState.ConversionPlanStepIndex &&
+        CanOpenConversionPlanStep &&
+        _conversionPlan is not null &&
+        !IsConversionRunning &&
+        !IsPreviewGenerating &&
+        !IsModelPackImportRunning;
+
+    public Visibility ContinueWithConversionActionVisibility =>
+        HasEnteredPreviewConversionStage ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility ContinueWithConversionFooterVisibility =>
+        SelectedWizardStepIndex == ConversionWorkflowState.ConversionPlanStepIndex &&
+        !HasEnteredPreviewConversionStage
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string ContinueWithConversionText => Text(
+        "Continue with conversion",
+        "Continuar con la conversion");
+
+    public Visibility PreviewConversionStatusCardVisibility =>
+        HasEnteredPreviewConversionStage ? Visibility.Visible : Visibility.Collapsed;
+
+    public GridLength PreviewConversionRowHeight =>
+        HasEnteredPreviewConversionStage ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+    public Thickness ActivityLogCardMargin =>
+        HasEnteredPreviewConversionStage ? new Thickness(0, 6, 0, 0) : new Thickness(0);
+
+    public string PreviewStageResetNoticeText => Text(
+        "Review the conversion plan again, then press Continue with conversion.",
+        "Revisa de nuevo el plan de conversion y presiona Continuar con la conversion.");
+
+    public string PreviewConversionStatusTitleText => Text(
+        "Preview & conversion",
+        "Preview y conversion");
+
+    public string PreviewConversionStatusText
+    {
+        get
+        {
+            if (IsConversionRunning)
+            {
+                return ConversionExecutionStatusText;
+            }
+
+            if (IsPreviewGenerating)
+            {
+                return PreviewStatusValueText;
+            }
+
+            return _conversionExecutionState.Status switch
+            {
+                ConversionExecutionStatus.Completed => Text("Conversion completed", "Conversion finalizada"),
+                ConversionExecutionStatus.Canceled => Text("Conversion canceled", "Conversion cancelada"),
+                ConversionExecutionStatus.Failed => Text("Conversion failed", "Conversion fallida"),
+                _ when IsCurrentPreviewAccepted => ConversionReadyTitleText,
+                _ => PreviewStatusValueText,
+            };
+        }
+    }
+
+    public string PreviewConversionStatusDetailText
+    {
+        get
+        {
+            if (!HasCompletedAnalysis)
+            {
+                return Text(
+                    "Select and analyze a source video to prepare preview and conversion.",
+                    "Selecciona y analiza un video fuente para preparar preview y conversion.");
+            }
+
+            if (IsConversionRunning)
+            {
+                return ConversionExecutionDetailText;
+            }
+
+            if (IsPreviewGenerating)
+            {
+                return PreviewModalDetailText;
+            }
+
+            if (IsCurrentPreviewAccepted)
+            {
+                return ConversionReadyBodyText;
+            }
+
+            return PreviewRequiredInstructionText;
+        }
+    }
+
     public string PreviewTitleText => Text("Preview", "Vista previa");
 
     public string PreviewRequiredTitleText => Text("Preview required", "Vista previa requerida");
@@ -1222,17 +1698,17 @@ public sealed class MainWindowViewModel : ObservableObject
             "Genera y revisa una vista previa corta antes de la conversion final.");
 
     public Visibility PreviewRequirementVisibility =>
-        IsConversionRunning || IsPreviewGenerating || IsCurrentPreviewAccepted
+        !HasEnteredPreviewConversionStage || IsConversionRunning || IsPreviewGenerating || IsCurrentPreviewAccepted
             ? Visibility.Collapsed
             : Visibility.Visible;
 
     public Visibility GeneratePreviewPrimaryActionVisibility =>
-        !IsConversionRunning && !IsPreviewGenerating && !IsCurrentPreviewAccepted
+        HasEnteredPreviewConversionStage && !IsConversionRunning && !IsPreviewGenerating && !IsCurrentPreviewAccepted
             ? Visibility.Visible
             : Visibility.Collapsed;
 
     public Visibility ConvertPrimaryActionVisibility =>
-        IsCurrentPreviewAccepted && !IsConversionRunning && !IsPreviewGenerating
+        HasEnteredPreviewConversionStage && IsCurrentPreviewAccepted && !IsConversionRunning && !IsPreviewGenerating
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -1414,6 +1890,17 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _previewFromText;
         set
         {
+            if (string.Equals(_previewFromText, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (TryDeferPreviewInvalidatingChange(() => PreviewFromText = value))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (SetProperty(ref _previewFromText, value))
             {
                 PreviewTimeRangeChanged();
@@ -1426,6 +1913,17 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _previewToText;
         set
         {
+            if (string.Equals(_previewToText, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (TryDeferPreviewInvalidatingChange(() => PreviewToText = value))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
             if (SetProperty(ref _previewToText, value))
             {
                 PreviewTimeRangeChanged();
@@ -1482,6 +1980,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public bool IsPreviewGenerating => _previewState.IsGenerating;
 
     public bool CanGeneratePreview =>
+        HasEnteredPreviewConversionStage &&
         CanEditPreviewTimeRange &&
         _previewCancellationTokenSource is null &&
         CurrentPreviewTimeRangeValidation.IsValid &&
@@ -1539,6 +2038,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IsProfileDetailsModalOpen ||
         IsModelHelpModalOpen ||
         IsReplaceVideoConfirmationModalOpen ||
+        IsPreviewInvalidationConfirmationModalOpen ||
         IsModelInventoryModalOpen ||
         IsModelPackImportConfirmationModalOpen ||
         IsActivityLogModalOpen ||
@@ -1749,6 +2249,18 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ReplaceVideoConfirmText => Text("Replace", "Reemplazar");
 
+    public string PreviewInvalidationConfirmationTitleText => Text(
+        "Changing this setting requires a new preview",
+        "Este cambio requiere generar un nuevo preview");
+
+    public string PreviewInvalidationConfirmationBodyText => Text(
+        "You already generated a preview for the current setup. Changing this setting will invalidate that preview and you will need to generate it again before final conversion.",
+        "Ya generaste un preview para la configuracion actual. Si cambias esta opcion, ese preview dejara de ser valido y tendras que generarlo de nuevo antes de la conversion final.");
+
+    public string PreviewInvalidationConfirmText => Text(
+        "Change setting",
+        "Cambiar configuracion");
+
     public string ModelPackImportConfirmationTitleText => Text(
         _modelPackImportConfirmationPrompt?.EnglishTitle ?? "Confirm model pack import",
         _modelPackImportConfirmationPrompt?.SpanishTitle ?? "Confirmar importacion de paquete de modelos");
@@ -1833,9 +2345,19 @@ public sealed class MainWindowViewModel : ObservableObject
                 return ActivityLogTitle;
             }
 
+            if (IsSettingsModalOpen)
+            {
+                return SettingsTitleText;
+            }
+
             if (IsReplaceVideoConfirmationModalOpen)
             {
                 return ReplaceSelectedVideoTitleText;
+            }
+
+            if (IsPreviewInvalidationConfirmationModalOpen)
+            {
+                return PreviewInvalidationConfirmationTitleText;
             }
 
             if (IsModelPackImportConfirmationModalOpen)
@@ -1868,7 +2390,9 @@ public sealed class MainWindowViewModel : ObservableObject
         IsTechnicalDetailsModalOpen ||
         IsProfileDetailsModalOpen ||
         IsModelHelpModalOpen ||
+        IsSettingsModalOpen ||
         IsReplaceVideoConfirmationModalOpen ||
+        IsPreviewInvalidationConfirmationModalOpen ||
         IsModelInventoryModalOpen ||
         IsModelPackImportConfirmationModalOpen ||
         IsConversionCompletedModalOpen ||
@@ -1879,7 +2403,9 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility ModalOverlayVisibility =>
         IsAnyModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
-    public double ActiveModalWidth => IsModelInventoryModalOpen || IsModelHelpModalOpen ? 1000d : 760d;
+    public double ActiveModalWidth => IsModelInventoryModalOpen || IsModelHelpModalOpen || IsSettingsModalOpen ? 1000d : 760d;
+
+    public double ActiveModalHeight => IsSettingsModalOpen ? 650d : double.NaN;
 
     public bool IsTechnicalDetailsModalOpen
     {
@@ -1917,12 +2443,36 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    public bool IsSettingsModalOpen
+    {
+        get => _isSettingsModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isSettingsModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
     public bool IsReplaceVideoConfirmationModalOpen
     {
         get => _isReplaceVideoConfirmationModalOpen;
         private set
         {
             if (SetProperty(ref _isReplaceVideoConfirmationModalOpen, value))
+            {
+                RaiseModalStatePropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsPreviewInvalidationConfirmationModalOpen
+    {
+        get => _isPreviewInvalidationConfirmationModalOpen;
+        private set
+        {
+            if (SetProperty(ref _isPreviewInvalidationConfirmationModalOpen, value))
             {
                 RaiseModalStatePropertiesChanged();
             }
@@ -2010,8 +2560,14 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility ModelHelpModalContentVisibility =>
         IsModelHelpModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
+    public Visibility SettingsModalContentVisibility =>
+        IsSettingsModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
     public Visibility ReplaceVideoConfirmationModalContentVisibility =>
         IsReplaceVideoConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility PreviewInvalidationConfirmationModalContentVisibility =>
+        IsPreviewInvalidationConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility ModelPackImportConfirmationModalContentVisibility =>
         IsModelPackImportConfirmationModalOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -2036,6 +2592,12 @@ public sealed class MainWindowViewModel : ObservableObject
         get => _technicalDetailsBodyText;
         private set => SetProperty(ref _technicalDetailsBodyText, value);
     }
+
+    public string LogsDiagnosticsTechnicalDetailsTitleText => Text(
+        "Technical details",
+        "Detalles tecnicos");
+
+    public string LogsDiagnosticsTechnicalDetailsText => CreateSystemStatusTechnicalDetailsText();
 
     public string ProfileDetailsBodyText => string.Join(
         Environment.NewLine,
@@ -2084,6 +2646,19 @@ public sealed class MainWindowViewModel : ObservableObject
         ShouldShowConversionMissingRequirements()
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+    public Visibility PreviewConversionMissingToolsVisibility =>
+        HasEnteredPreviewConversionStage && ShouldShowConversionMissingRequirements()
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string PreviewConversionMissingToolsText => Text(
+        "Open Settings to review missing tools.",
+        "Abre Ajustes para revisar herramientas faltantes.");
+
+    public string OpenSettingsForToolsText => Text(
+        "Open Settings",
+        "Abrir ajustes");
 
     public string ConversionReadinessStatusText
     {
@@ -2310,6 +2885,7 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public bool CanStartConversion =>
+        HasEnteredPreviewConversionStage &&
         _conversionExecutionState.Status is not ConversionExecutionStatus.Running and
             not ConversionExecutionStatus.Canceling &&
         !IsPreviewGenerating &&
@@ -2410,6 +2986,18 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public AsyncRelayCommand RefreshEngineStatusCommand { get; }
 
+    public RelayCommand OpenSettingsCommand { get; }
+
+    public RelayCommand OpenToolsEngineSettingsCommand { get; }
+
+    public RelayCommand CloseSettingsCommand { get; }
+
+    public RelayCommand WizardBackCommand { get; }
+
+    public RelayCommand WizardNextCommand { get; }
+
+    public RelayCommand ContinueWithConversionCommand { get; }
+
     public RelayCommand OpenEngineFolderCommand { get; }
 
     public RelayCommand OpenModelsFolderCommand { get; }
@@ -2467,6 +3055,10 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand ConfirmReplaceVideoCommand { get; }
 
     public RelayCommand CancelReplaceVideoCommand { get; }
+
+    public RelayCommand ConfirmPreviewInvalidationCommand { get; }
+
+    public RelayCommand CancelPreviewInvalidationCommand { get; }
 
     public RelayCommand AcceptConversionCompletedCommand { get; }
 
@@ -2551,7 +3143,19 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         var replacingVideo = HasSelectedVideo;
-        if (replacingVideo && !await ConfirmReplaceSelectedVideoAsync())
+        if (replacingVideo &&
+            ShouldConfirmPreviewInvalidatingChange() &&
+            !await ConfirmPreviewInvalidatingChangeAsync())
+        {
+            AddLog(
+                "Video replacement canceled.",
+                "Reemplazo de video cancelado.");
+            return;
+        }
+
+        if (replacingVideo &&
+            !ShouldConfirmPreviewInvalidatingChange() &&
+            !await ConfirmReplaceSelectedVideoAsync())
         {
             AddLog(
                 "Video replacement canceled.",
@@ -2713,6 +3317,12 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (IsSettingsModalOpen)
+        {
+            CaptureSettingsReturnContext();
+            IsSettingsModalOpen = false;
+        }
+
         _reopenModelInventoryAfterImport = IsModelInventoryModalOpen;
         IsModelPackImportRunning = true;
         ShowGlobalBusyOverlay(
@@ -2755,6 +3365,10 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_reopenModelInventoryAfterImport && !IsAnyModalOpen)
             {
                 IsModelInventoryModalOpen = true;
+            }
+            else if (!_reopenModelInventoryAfterImport && !IsAnyModalOpen)
+            {
+                RestoreSettingsAfterChildModalIfNeeded();
             }
 
             _reopenModelInventoryAfterImport = false;
@@ -3066,6 +3680,142 @@ public sealed class MainWindowViewModel : ObservableObject
     private LocalModelInventory GetCurrentModelInventory() =>
         _dependencyHealth?.ModelInventory ??
         LocalModelInventory.Empty(_toolPaths.ModelsDirectory);
+
+    private string CreateModelLicenseNoticeSummaryText()
+    {
+        var candidates = GetCurrentModelInventory().SelectionCandidates;
+        if (candidates.Count == 0)
+        {
+            return Text(
+                "No installed or imported models were detected.",
+                "No se detectaron modelos instalados o importados.");
+        }
+
+        var lines = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            var entry = FindRegistryEntry(candidate);
+            lines.Add($"- {GetCandidateDisplayName(candidate)}");
+            lines.Add(Text(
+                $"  File/pack identity: {candidate.RelativePath}",
+                $"  Identidad de archivo/paquete: {candidate.RelativePath}"));
+            if (entry is not null)
+            {
+                lines.Add(Text(
+                    $"  Catalog notice status: {ModelNoticeStatusText(entry.RedistributionDecision, useSpanish: false)}",
+                    $"  Estado de avisos del catalogo: {ModelNoticeStatusText(entry.RedistributionDecision, useSpanish: true)}"));
+            }
+
+            var noticeFiles = FindMatchingModelNoticeFiles(candidate, entry);
+            lines.Add(noticeFiles.Count > 0
+                ? Text(
+                    $"  License/notice files: {string.Join(", ", noticeFiles)}",
+                    $"  Archivos de licencia/avisos: {string.Join(", ", noticeFiles)}")
+                : Text(
+                    "  License metadata not available",
+                    "  Metadatos de licencia no disponibles"));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private IReadOnlyList<string> FindMatchingModelNoticeFiles(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry)
+    {
+        if (!Directory.Exists(_toolPaths.ModelsDirectory))
+        {
+            return [];
+        }
+
+        var terms = CreateModelNoticeSearchTerms(candidate, entry);
+        if (terms.Count == 0)
+        {
+            return [];
+        }
+
+        try
+        {
+            return Directory
+                .EnumerateFiles(_toolPaths.ModelsDirectory, "*", SearchOption.AllDirectories)
+                .Where(IsNoticeFileName)
+                .Select(path => Path.GetRelativePath(_toolPaths.ModelsDirectory, path))
+                .Where(relativePath => terms.Any(term =>
+                    NormalizeNoticeSearchText(relativePath).Contains(term, StringComparison.OrdinalIgnoreCase)))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .Take(4)
+                .ToArray();
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<string> CreateModelNoticeSearchTerms(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry)
+    {
+        var values = new[]
+        {
+            Path.GetFileNameWithoutExtension(candidate.FileName),
+            candidate.MappingKey,
+            candidate.Iw3DepthModelName,
+            candidate.Id,
+            entry?.Key,
+            entry?.SharedCheckpointGroupId,
+        };
+
+        return values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => NormalizeNoticeSearchText(value!))
+            .Where(value => value.Length >= 4)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsNoticeFileName(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        return fileName.Contains("license", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("notice", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Equals("SOURCE.txt", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Equals("README.md", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Equals("MODEL_CARD.md", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeNoticeSearchText(string value) =>
+        value
+            .Replace('\\', '/')
+            .Replace('_', '-')
+            .Replace(' ', '-')
+            .ToLowerInvariant();
+
+    private static string ModelNoticeStatusText(
+        Iw3DepthModelRedistributionDecision decision,
+        bool useSpanish) => decision switch
+    {
+        Iw3DepthModelRedistributionDecision.SafeForPublicRelease => useSpanish
+            ? "apto para release publico"
+            : "safe for public release",
+        Iw3DepthModelRedistributionDecision.SafeWithNotice => useSpanish
+            ? "apto con avisos"
+            : "safe with notices",
+        Iw3DepthModelRedistributionDecision.UserDownloadOnly => useSpanish
+            ? "solo descarga/importacion del usuario"
+            : "user download/import only",
+        Iw3DepthModelRedistributionDecision.ExcludeNonCommercial => useSpanish
+            ? "excluido por restriccion no comercial"
+            : "excluded due to non-commercial restriction",
+        Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => useSpanish
+            ? "bloqueado por licencia no clara"
+            : "blocked by unclear license",
+        Iw3DepthModelRedistributionDecision.NotAModelPackTarget => useSpanish
+            ? "no es objetivo de paquete de modelos"
+            : "not a model-pack target",
+        _ => useSpanish ? "desconocido" : "unknown",
+    };
 
     private IReadOnlyList<SelectableModelInventoryRow> CreateSelectableModelInventoryRows()
     {
@@ -3519,6 +4269,93 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void OpenSettings()
+    {
+        if (IsConversionRunning ||
+            IsPreviewGenerating ||
+            IsReplaceVideoConfirmationModalOpen ||
+            IsPreviewInvalidationConfirmationModalOpen ||
+            IsModelPackImportConfirmationModalOpen ||
+            IsPreviewReadyModalOpen ||
+            IsConversionCompletedModalOpen)
+        {
+            return;
+        }
+
+        IsTechnicalDetailsModalOpen = false;
+        IsProfileDetailsModalOpen = false;
+        IsModelHelpModalOpen = false;
+        IsModelInventoryModalOpen = false;
+        IsActivityLogModalOpen = false;
+        RaiseSettingsSectionPropertiesChanged();
+        IsSettingsModalOpen = true;
+    }
+
+    private void OpenToolsEngineSettings()
+    {
+        SelectedSettingsSection = SettingsSection.ToolsEngine;
+        OpenSettings();
+    }
+
+    private void CloseSettings()
+    {
+        IsSettingsModalOpen = false;
+    }
+
+    private void CaptureSettingsReturnContext()
+    {
+        if (IsSettingsModalOpen)
+        {
+            _settingsSectionToRestoreAfterChildModal = SelectedSettingsSection;
+        }
+    }
+
+    private void RestoreSettingsAfterChildModalIfNeeded()
+    {
+        if (_settingsSectionToRestoreAfterChildModal is not { } section)
+        {
+            return;
+        }
+
+        _settingsSectionToRestoreAfterChildModal = null;
+        SelectedSettingsSection = section;
+        RaiseSettingsSectionPropertiesChanged();
+        IsSettingsModalOpen = true;
+    }
+
+    private void MoveWizardBack()
+    {
+        if (_workflowState.MoveBack())
+        {
+            RaiseWizardPropertiesChanged();
+        }
+    }
+
+    private void MoveWizardNext()
+    {
+        if (_workflowState.MoveNext())
+        {
+            RaiseWizardPropertiesChanged();
+        }
+    }
+
+    private void ContinueWithConversion()
+    {
+        if (!CanEnterPreviewConversionStage)
+        {
+            AddLog(
+                "Review the conversion plan before generating a preview.",
+                "Revisa el plan de conversion antes de generar una vista previa.");
+            return;
+        }
+
+        SetHasEnteredPreviewConversionStage(true);
+        ClearPreviewStageResetNotice();
+        AddLog(
+            "Preview and conversion controls are ready.",
+            "Los controles de preview y conversion estan listos.");
+    }
+
     private void ShowModelInventory()
     {
         if (IsConversionRunning ||
@@ -3527,6 +4364,7 @@ public sealed class MainWindowViewModel : ObservableObject
             IsProfileDetailsModalOpen ||
             IsModelHelpModalOpen ||
             IsReplaceVideoConfirmationModalOpen ||
+            IsPreviewInvalidationConfirmationModalOpen ||
             IsModelPackImportConfirmationModalOpen ||
             IsActivityLogModalOpen ||
             IsPreviewReadyModalOpen ||
@@ -3536,12 +4374,15 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         RaiseModelInventoryPropertiesChanged();
+        CaptureSettingsReturnContext();
+        IsSettingsModalOpen = false;
         IsModelInventoryModalOpen = true;
     }
 
     private void CloseModelInventory()
     {
         IsModelInventoryModalOpen = false;
+        RestoreSettingsAfterChildModalIfNeeded();
     }
 
     private void ShowModelHelp()
@@ -3586,6 +4427,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         TechnicalDetailsBodyText = CreateSystemStatusTechnicalDetailsText();
+        IsSettingsModalOpen = false;
         IsTechnicalDetailsModalOpen = true;
     }
 
@@ -3621,6 +4463,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ViewActivityLog()
     {
         ActivityLogModalText = CreateFullActivityLogText();
+        IsSettingsModalOpen = false;
         IsActivityLogModalOpen = true;
     }
 
@@ -3694,6 +4537,36 @@ public sealed class MainWindowViewModel : ObservableObject
         CompleteReplaceVideoConfirmation(replaceVideo: false);
     }
 
+    private void ConfirmPreviewInvalidation()
+    {
+        var pendingChange = _pendingPreviewInvalidatingChange;
+        var completion = _previewInvalidationConfirmationCompletion;
+        ResetPreviewInvalidationConfirmationModal();
+        completion?.TrySetResult(true);
+
+        if (pendingChange is null)
+        {
+            return;
+        }
+
+        _isApplyingPreviewInvalidatingChange = true;
+        try
+        {
+            pendingChange();
+        }
+        finally
+        {
+            _isApplyingPreviewInvalidatingChange = false;
+        }
+    }
+
+    private void CancelPreviewInvalidation()
+    {
+        var completion = _previewInvalidationConfirmationCompletion;
+        ResetPreviewInvalidationConfirmationModal();
+        completion?.TrySetResult(false);
+    }
+
     private void ConfirmModelPackImport()
     {
         CompleteModelPackImportConfirmation(confirmImport: true);
@@ -3728,6 +4601,57 @@ public sealed class MainWindowViewModel : ObservableObject
         _replaceVideoConfirmationCompletion?.TrySetResult(replaceVideo);
         _replaceVideoConfirmationCompletion = null;
     }
+
+    private bool TryDeferPreviewInvalidatingChange(Action applyChange)
+    {
+        if (_isApplyingPreviewInvalidatingChange ||
+            !ShouldConfirmPreviewInvalidatingChange())
+        {
+            return false;
+        }
+
+        _pendingPreviewInvalidatingChange = applyChange;
+        ShowPreviewInvalidationConfirmationModal();
+        return true;
+    }
+
+    private Task<bool> ConfirmPreviewInvalidatingChangeAsync()
+    {
+        if (!ShouldConfirmPreviewInvalidatingChange())
+        {
+            return Task.FromResult(true);
+        }
+
+        _pendingPreviewInvalidatingChange = null;
+        ShowPreviewInvalidationConfirmationModal();
+        return _previewInvalidationConfirmationCompletion!.Task;
+    }
+
+    private void ShowPreviewInvalidationConfirmationModal()
+    {
+        IsTechnicalDetailsModalOpen = false;
+        IsProfileDetailsModalOpen = false;
+        IsModelHelpModalOpen = false;
+        IsSettingsModalOpen = false;
+        IsActivityLogModalOpen = false;
+        IsPreviewReadyModalOpen = false;
+        _previewInvalidationConfirmationCompletion =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        IsPreviewInvalidationConfirmationModalOpen = true;
+    }
+
+    private void ResetPreviewInvalidationConfirmationModal()
+    {
+        IsPreviewInvalidationConfirmationModalOpen = false;
+        _pendingPreviewInvalidatingChange = null;
+        _previewInvalidationConfirmationCompletion = null;
+    }
+
+    private bool ShouldConfirmPreviewInvalidatingChange() =>
+        !IsConversionRunning &&
+        !IsPreviewGenerating &&
+        _previewState.Status is PreviewGenerationStatus.Ready or PreviewGenerationStatus.Accepted &&
+        IsPreviewFingerprintCurrent();
 
     private void UpdateConversionReadiness()
     {
@@ -3823,6 +4747,7 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        ResetPreviewConversionStageForPreviewAffectingChange();
         ResetConversionExecutionState();
         if (RegenerateConversionPlan())
         {
@@ -4357,6 +5282,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void SetSelectedVideo(string path, bool replacingVideo)
     {
         SelectedWorkflowTabIndex = 0;
+        ResetPreviewConversionStageForPreviewAffectingChange(showNoticeWhenNoPreview: false);
         var cleanupPaths = CreateCurrentPreviewCleanupPaths();
         _ = DeletePreviewFilesAsync(cleanupPaths, logDeletion: false);
         SetPreviewTimeRangeText(PreviewTimeRangeService.CreateDefaultRange(null));
@@ -4374,11 +5300,13 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ResetAnalysisState(bool clearOutputPath)
     {
+        ResetPreviewConversionStageForPreviewAffectingChange(showNoticeWhenNoPreview: false);
         ResetConversionExecutionState();
         HasCompletedAnalysis = false;
         _analysis = null;
         _conversionRecommendation = null;
         _conversionPlan = null;
+        SetCanOpenConversionPlanStep(false);
 
         if (clearOutputPath)
         {
@@ -4492,6 +5420,15 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private async Task GeneratePreviewCoreAsync()
     {
+        if (!HasEnteredPreviewConversionStage)
+        {
+            AddLog(
+                "Open the conversion plan and continue before generating a preview.",
+                "Abre el plan de conversion y continua antes de generar una vista previa.");
+            RaisePreviewPropertiesChanged();
+            return;
+        }
+
         if (IsConversionRunning)
         {
             AddLog(
@@ -4884,6 +5821,51 @@ public sealed class MainWindowViewModel : ObservableObject
             timeRangeValidation.Range);
     }
 
+    private void SetHasEnteredPreviewConversionStage(bool value)
+    {
+        if (_hasEnteredPreviewConversionStage == value)
+        {
+            return;
+        }
+
+        _hasEnteredPreviewConversionStage = value;
+        RaisePreviewConversionStagePropertiesChanged();
+    }
+
+    private void ResetPreviewConversionStageForPreviewAffectingChange(
+        bool showNoticeWhenNoPreview = true)
+    {
+        var shouldShowNotice =
+            showNoticeWhenNoPreview &&
+            HasEnteredPreviewConversionStage &&
+            !ShouldConfirmPreviewInvalidatingChange();
+
+        SetHasEnteredPreviewConversionStage(false);
+
+        if (shouldShowNotice)
+        {
+            ShowPreviewStageResetNotice();
+        }
+        else if (!showNoticeWhenNoPreview)
+        {
+            ClearPreviewStageResetNotice();
+        }
+    }
+
+    private void ShowPreviewStageResetNotice()
+    {
+        ShowLogCopyNotification(
+            "Review the conversion plan again, then press Continue with conversion.",
+            "Revisa de nuevo el plan de conversion y presiona Continuar con la conversion.",
+            PreviewStageResetNoticeDuration,
+            TopToastKind.PreviewStageReset);
+    }
+
+    private void ClearPreviewStageResetNotice()
+    {
+        HideLogCopyNotification(TopToastKind.PreviewStageReset);
+    }
+
     private void MarkPreviewOutdatedIfNeeded(bool logChange = true)
     {
         var configuration = CreateCurrentPreviewConfiguration();
@@ -4960,6 +5942,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void PreviewTimeRangeChanged()
     {
         _hasUserEditedPreviewRange = true;
+        ResetPreviewConversionStageForPreviewAffectingChange();
         if (CreateCurrentPreviewConfiguration() is null)
         {
             MarkPreviewOutdatedForCurrentSettings();
@@ -5114,6 +6097,14 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        if (!HasEnteredPreviewConversionStage)
+        {
+            AddLog(
+                "Open the conversion plan and continue before starting final conversion.",
+                "Abre el plan de conversion y continua antes de iniciar la conversion final.");
+            return;
+        }
+
         var startGate = EvaluateConversionStartGate();
         if (!startGate.CanStart)
         {
@@ -5149,7 +6140,6 @@ public sealed class MainWindowViewModel : ObservableObject
             DetailEnglish: "Launching bundled local iw3 process.",
             DetailSpanish: "Iniciando el proceso local iw3 incluido.",
             StartedAt: startedAt);
-        SelectedSystemStatusTabIndex = 1;
         RaiseConversionExecutionPropertiesChanged();
         RaiseConversionRunningModePropertiesChanged();
         AddLog(
@@ -5727,6 +6717,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _conversionRecommendation = null;
         _conversionPlan = null;
         _conversionReadiness = null;
+        SetCanOpenConversionPlanStep(false);
         _outputPathState.ClearCustomOutputPath();
         OnPropertyChanged(nameof(HasCustomOutputPath));
         SetOutputPathText(string.Empty);
@@ -5741,8 +6732,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _lastConversionOutputLine = string.Empty;
         ResetConversionTimingEstimate();
         _conversionExecutionState = ConversionExecutionState.NotStarted();
-        SelectedWorkflowTabIndex = 0;
-        SelectedSystemStatusTabIndex = 0;
+        SelectedWizardStepIndex = ConversionWorkflowState.SourceAndAnalysisStepIndex;
         UpdateConversionReadiness();
         RaiseAnalysisPropertiesChanged();
         RaiseRecommendationPropertiesChanged();
@@ -5841,13 +6831,24 @@ public sealed class MainWindowViewModel : ObservableObject
         !string.IsNullOrWhiteSpace(path) &&
         SupportedVideoExtensions.Contains(Path.GetExtension(path));
 
-    private void PlanOptionChanged(string englishMessage, string spanishMessage)
+    private void PlanOptionChanged(
+        string englishMessage,
+        string spanishMessage,
+        bool affectsPreview = true)
     {
         ResetConversionExecutionState();
+        if (affectsPreview)
+        {
+            ResetPreviewConversionStageForPreviewAffectingChange();
+        }
 
         if (RegenerateConversionPlan())
         {
-            MarkPreviewOutdatedIfNeeded();
+            if (affectsPreview)
+            {
+                MarkPreviewOutdatedIfNeeded();
+            }
+
             AddLog(englishMessage, spanishMessage);
         }
     }
@@ -6046,6 +7047,7 @@ public sealed class MainWindowViewModel : ObservableObject
             _toolPaths,
             _toolHealth ?? _healthChecker.Check(_toolPaths),
             SelectedLocalModelCandidate);
+        SetCanOpenConversionPlanStep(true);
         RaiseConversionPlanPropertiesChanged();
         SetOutputPathText(_conversionPlan.SuggestedOutputPath);
         RaiseConversionReadinessPropertiesChanged();
@@ -6230,13 +7232,27 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ShowLogCopyNotification(string englishText, string spanishText)
     {
-        if (DispatchToUiThreadIfNeeded(() => ShowLogCopyNotification(englishText, spanishText)))
+        ShowLogCopyNotification(
+            englishText,
+            spanishText,
+            LogCopyNotificationDuration,
+            TopToastKind.LogCopy);
+    }
+
+    private void ShowLogCopyNotification(
+        string englishText,
+        string spanishText,
+        TimeSpan duration,
+        TopToastKind toastKind)
+    {
+        if (DispatchToUiThreadIfNeeded(() => ShowLogCopyNotification(englishText, spanishText, duration, toastKind)))
         {
             return;
         }
 
         _logCopyNotificationEnglishText = englishText;
         _logCopyNotificationSpanishText = spanishText;
+        _activeTopToastKind = toastKind;
         _isLogCopyNotificationVisible = true;
         OnPropertyChanged(nameof(LogCopyNotificationText));
         OnPropertyChanged(nameof(LogCopyNotificationVisibility));
@@ -6245,15 +7261,16 @@ public sealed class MainWindowViewModel : ObservableObject
         _logCopyNotificationCancellationTokenSource?.Dispose();
         var cancellationTokenSource = new CancellationTokenSource();
         _logCopyNotificationCancellationTokenSource = cancellationTokenSource;
-        _ = HideLogCopyNotificationAfterDelayAsync(cancellationTokenSource);
+        _ = HideLogCopyNotificationAfterDelayAsync(cancellationTokenSource, duration);
     }
 
     private async Task HideLogCopyNotificationAfterDelayAsync(
-        CancellationTokenSource cancellationTokenSource)
+        CancellationTokenSource cancellationTokenSource,
+        TimeSpan duration)
     {
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(2), cancellationTokenSource.Token);
+            await Task.Delay(duration, cancellationTokenSource.Token);
         }
         catch (OperationCanceledException)
         {
@@ -6268,6 +7285,21 @@ public sealed class MainWindowViewModel : ObservableObject
         HideLogCopyNotification(cancellationTokenSource);
     }
 
+    private void HideLogCopyNotification(TopToastKind toastKind)
+    {
+        if (_activeTopToastKind != toastKind)
+        {
+            return;
+        }
+
+        _logCopyNotificationCancellationTokenSource?.Cancel();
+        _logCopyNotificationCancellationTokenSource?.Dispose();
+        _logCopyNotificationCancellationTokenSource = null;
+        _activeTopToastKind = TopToastKind.None;
+        _isLogCopyNotificationVisible = false;
+        OnPropertyChanged(nameof(LogCopyNotificationVisibility));
+    }
+
     private void HideLogCopyNotification(CancellationTokenSource cancellationTokenSource)
     {
         if (!ReferenceEquals(_logCopyNotificationCancellationTokenSource, cancellationTokenSource))
@@ -6276,6 +7308,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         _isLogCopyNotificationVisible = false;
+        _activeTopToastKind = TopToastKind.None;
         _logCopyNotificationCancellationTokenSource = null;
         cancellationTokenSource.Dispose();
         OnPropertyChanged(nameof(LogCopyNotificationVisibility));
@@ -6410,6 +7443,11 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             option.SetLanguage(IsSpanish);
         }
+
+        foreach (var option in SettingsSectionOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
     }
 
     private void RaiseLocalizedPropertiesChanged()
@@ -6417,9 +7455,16 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SubtitleText));
         OnPropertyChanged(nameof(LanguageLabel));
         OnPropertyChanged(nameof(ThemeLabel));
+        OnPropertyChanged(nameof(SettingsText));
+        OnPropertyChanged(nameof(SettingsTitleText));
+        OnPropertyChanged(nameof(SettingsSideMenuTitleText));
+        RaiseSettingsSectionPropertiesChanged();
+        RaiseWizardPropertiesChanged();
         OnPropertyChanged(nameof(SelectSourceTitle));
         OnPropertyChanged(nameof(DropVideoText));
         OnPropertyChanged(nameof(NoVideoSelectedText));
+        OnPropertyChanged(nameof(SourceAnalysisEmptyHintText));
+        OnPropertyChanged(nameof(SourceAnalysisEmptyHintVisibility));
         OnPropertyChanged(nameof(SelectedVideoDisplayPath));
         OnPropertyChanged(nameof(SelectVideoText));
         OnPropertyChanged(nameof(AnalyzeText));
@@ -6447,6 +7492,11 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LogCopyNotificationText));
         OnPropertyChanged(nameof(GlobalBusyText));
         OnPropertyChanged(nameof(ClearText));
+        OnPropertyChanged(nameof(AboutModelNoticesTitleText));
+        OnPropertyChanged(nameof(AboutModelNoticesText));
+        OnPropertyChanged(nameof(LogsDiagnosticsTechnicalDetailsTitleText));
+        OnPropertyChanged(nameof(LogsDiagnosticsTechnicalDetailsText));
+        OnPropertyChanged(nameof(PreviewStageResetNoticeText));
         RaisePresetPropertiesChanged();
     }
 
@@ -6487,6 +7537,10 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseAnalysisPropertiesChanged()
     {
         OnPropertyChanged(nameof(AnalysisStatusText));
+        OnPropertyChanged(nameof(VideoAnalysisPendingStatusText));
+        OnPropertyChanged(nameof(VideoAnalysisSectionVisibility));
+        OnPropertyChanged(nameof(VideoAnalysisPendingStatusVisibility));
+        OnPropertyChanged(nameof(VideoAnalysisResultsVisibility));
         OnPropertyChanged(nameof(AnalysisDurationText));
         OnPropertyChanged(nameof(AnalysisResolutionText));
         OnPropertyChanged(nameof(AnalysisFpsText));
@@ -6550,6 +7604,12 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(EstimatedOutputSizeText));
         OnPropertyChanged(nameof(RecommendedFreeSpaceText));
         OnPropertyChanged(nameof(PerformanceHistoryPrivacyText));
+        OnPropertyChanged(nameof(CompactEstimateTimeConfidenceText));
+        OnPropertyChanged(nameof(CompactOutputSizeFreeSpaceText));
+        OnPropertyChanged(nameof(CompactSelectedModelGuidanceText));
+        OnPropertyChanged(nameof(CompactPresetGuidanceText));
+        OnPropertyChanged(nameof(EstimateDetailsTitleText));
+        OnPropertyChanged(nameof(GuidanceDetailsTitleText));
     }
 
     private void RaiseConversionPlanPropertiesChanged()
@@ -6600,6 +7660,11 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ConversionPlanStepsText));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewTitle));
         OnPropertyChanged(nameof(ConversionPlanCommandPreviewText));
+        OnPropertyChanged(nameof(ConversionPlanTechnicalDetailsTitleText));
+        OnPropertyChanged(nameof(ReadyForConversionSummaryText));
+        OnPropertyChanged(nameof(PreviewConversionStatusTitleText));
+        OnPropertyChanged(nameof(PreviewConversionStatusText));
+        OnPropertyChanged(nameof(PreviewConversionStatusDetailText));
         RaisePreviewPropertiesChanged();
         OnPropertyChanged(nameof(ProfileDetailsBodyText));
         OnPropertyChanged(nameof(ConversionSummaryPresetText));
@@ -6611,6 +7676,8 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseConversionExecutionPropertiesChanged()
     {
         OnPropertyChanged(nameof(ShowConversionProgressCard));
+        OnPropertyChanged(nameof(PreviewConversionStatusText));
+        OnPropertyChanged(nameof(PreviewConversionStatusDetailText));
         OnPropertyChanged(nameof(ConversionProgressVisibility));
         OnPropertyChanged(nameof(ShowConversionReadinessCard));
         OnPropertyChanged(nameof(ConversionReadinessVisibility));
@@ -6659,9 +7726,39 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseModelPackImportAvailabilityPropertiesChanged();
     }
 
+    private void RaisePreviewConversionStagePropertiesChanged()
+    {
+        OnPropertyChanged(nameof(HasEnteredPreviewConversionStage));
+        OnPropertyChanged(nameof(CanEnterPreviewConversionStage));
+        OnPropertyChanged(nameof(ContinueWithConversionActionVisibility));
+        OnPropertyChanged(nameof(ContinueWithConversionFooterVisibility));
+        OnPropertyChanged(nameof(ContinueWithConversionText));
+        OnPropertyChanged(nameof(PreviewConversionStatusCardVisibility));
+        OnPropertyChanged(nameof(PreviewConversionRowHeight));
+        OnPropertyChanged(nameof(ActivityLogCardMargin));
+        OnPropertyChanged(nameof(PreviewStageResetNoticeText));
+        OnPropertyChanged(nameof(PreviewConversionMissingToolsVisibility));
+        OnPropertyChanged(nameof(PreviewConversionMissingToolsText));
+        OnPropertyChanged(nameof(OpenSettingsForToolsText));
+        ContinueWithConversionCommand.RaiseCanExecuteChanged();
+        RaisePreviewPropertiesChanged();
+    }
+
     private void RaisePreviewPropertiesChanged()
     {
         OnPropertyChanged(nameof(PreviewTitleText));
+        OnPropertyChanged(nameof(HasEnteredPreviewConversionStage));
+        OnPropertyChanged(nameof(CanEnterPreviewConversionStage));
+        OnPropertyChanged(nameof(ContinueWithConversionActionVisibility));
+        OnPropertyChanged(nameof(ContinueWithConversionFooterVisibility));
+        OnPropertyChanged(nameof(ContinueWithConversionText));
+        OnPropertyChanged(nameof(PreviewConversionStatusCardVisibility));
+        OnPropertyChanged(nameof(PreviewConversionRowHeight));
+        OnPropertyChanged(nameof(ActivityLogCardMargin));
+        OnPropertyChanged(nameof(PreviewStageResetNoticeText));
+        OnPropertyChanged(nameof(PreviewConversionStatusTitleText));
+        OnPropertyChanged(nameof(PreviewConversionStatusText));
+        OnPropertyChanged(nameof(PreviewConversionStatusDetailText));
         OnPropertyChanged(nameof(PreviewRequiredTitleText));
         OnPropertyChanged(nameof(PreviewAcceptedTitleText));
         OnPropertyChanged(nameof(PreviewStepTitleText));
@@ -6670,6 +7767,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(PreviewRequirementVisibility));
         OnPropertyChanged(nameof(ConversionReadySummaryVisibility));
         OnPropertyChanged(nameof(ConversionMissingRequirementsVisibility));
+        OnPropertyChanged(nameof(PreviewConversionMissingToolsVisibility));
+        OnPropertyChanged(nameof(PreviewConversionMissingToolsText));
+        OnPropertyChanged(nameof(OpenSettingsForToolsText));
         OnPropertyChanged(nameof(GeneratePreviewPrimaryActionVisibility));
         OnPropertyChanged(nameof(ConvertPrimaryActionVisibility));
         OnPropertyChanged(nameof(CancelConversionPrimaryActionVisibility));
@@ -6735,6 +7835,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanStartConversion));
         OnPropertyChanged(nameof(CanStartOrCancelConversion));
         GeneratePreviewCommand.RaiseCanExecuteChanged();
+        ContinueWithConversionCommand.RaiseCanExecuteChanged();
         CancelPreviewCommand.RaiseCanExecuteChanged();
         OpenPreviewCommand.RaiseCanExecuteChanged();
         DeletePreviewCommand.RaiseCanExecuteChanged();
@@ -6803,9 +7904,84 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseWorkflowAvailabilityPropertiesChanged()
     {
         OnPropertyChanged(nameof(HasCompletedAnalysis));
+        OnPropertyChanged(nameof(CanOpenSourceAndAnalysisStep));
+        OnPropertyChanged(nameof(CanOpenThreeDSetupStep));
+        OnPropertyChanged(nameof(CanOpenConversionPlanStep));
         OnPropertyChanged(nameof(CanOpenRecommendedSetupTab));
         OnPropertyChanged(nameof(CanOpenConversionPlanTab));
         OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
+        RaiseWizardPropertiesChanged();
+    }
+
+    private void SetCanOpenConversionPlanStep(bool value)
+    {
+        if (_workflowState.SetCanOpenConversionPlanStep(value, out var selectedStepIndexChanged))
+        {
+            if (selectedStepIndexChanged)
+            {
+                OnPropertyChanged(nameof(SelectedWizardStepIndex));
+                OnPropertyChanged(nameof(SelectedWorkflowTabIndex));
+            }
+
+            RaiseWorkflowAvailabilityPropertiesChanged();
+        }
+    }
+
+    private void RaiseWizardPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedWizardStepIndex));
+        OnPropertyChanged(nameof(SelectedWorkflowTabIndex));
+        OnPropertyChanged(nameof(SourceAndAnalysisStepTitle));
+        OnPropertyChanged(nameof(ThreeDSetupStepTitle));
+        OnPropertyChanged(nameof(WizardConversionPlanStepTitle));
+        OnPropertyChanged(nameof(CanOpenSourceAndAnalysisStep));
+        OnPropertyChanged(nameof(CanOpenThreeDSetupStep));
+        OnPropertyChanged(nameof(CanOpenConversionPlanStep));
+        OnPropertyChanged(nameof(CanMoveWizardBack));
+        OnPropertyChanged(nameof(CanMoveWizardNext));
+        OnPropertyChanged(nameof(WizardBackButtonVisibility));
+        OnPropertyChanged(nameof(WizardNextButtonVisibility));
+        OnPropertyChanged(nameof(WizardBackText));
+        OnPropertyChanged(nameof(WizardNextText));
+        OnPropertyChanged(nameof(WizardNextToolTipText));
+        OnPropertyChanged(nameof(SourceAndAnalysisStepVisibility));
+        OnPropertyChanged(nameof(ThreeDSetupStepVisibility));
+        OnPropertyChanged(nameof(WizardConversionPlanStepVisibility));
+        OnPropertyChanged(nameof(SourceAndAnalysisStepState));
+        OnPropertyChanged(nameof(ThreeDSetupStepState));
+        OnPropertyChanged(nameof(ConversionPlanStepState));
+        OnPropertyChanged(nameof(SourceAndAnalysisStepMarkerText));
+        OnPropertyChanged(nameof(ThreeDSetupStepMarkerText));
+        OnPropertyChanged(nameof(ConversionPlanStepMarkerText));
+        OnPropertyChanged(nameof(CanEnterPreviewConversionStage));
+        OnPropertyChanged(nameof(ContinueWithConversionActionVisibility));
+        OnPropertyChanged(nameof(ContinueWithConversionFooterVisibility));
+        OnPropertyChanged(nameof(ContinueWithConversionText));
+        OnPropertyChanged(nameof(PreviewStageResetNoticeText));
+        WizardBackCommand.RaiseCanExecuteChanged();
+        WizardNextCommand.RaiseCanExecuteChanged();
+        ContinueWithConversionCommand.RaiseCanExecuteChanged();
+    }
+
+    private string GetWizardStepState(int stepIndex)
+    {
+        if (SelectedWizardStepIndex == stepIndex)
+        {
+            return "Active";
+        }
+
+        if (SelectedWizardStepIndex > stepIndex)
+        {
+            return "Completed";
+        }
+
+        return stepIndex switch
+        {
+            ConversionWorkflowState.SourceAndAnalysisStepIndex => "Pending",
+            ConversionWorkflowState.ThreeDSetupStepIndex when CanOpenThreeDSetupStep => "Pending",
+            ConversionWorkflowState.ConversionPlanStepIndex when CanOpenConversionPlanStep => "Pending",
+            _ => "Locked",
+        };
     }
 
     private void RaiseSystemStatusPropertiesChanged()
@@ -6822,6 +7998,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ReplaceSelectedVideoTitleText));
         OnPropertyChanged(nameof(ReplaceSelectedVideoBodyText));
         OnPropertyChanged(nameof(ReplaceVideoConfirmText));
+        OnPropertyChanged(nameof(PreviewInvalidationConfirmationTitleText));
+        OnPropertyChanged(nameof(PreviewInvalidationConfirmationBodyText));
+        OnPropertyChanged(nameof(PreviewInvalidationConfirmText));
         OnPropertyChanged(nameof(ConversionCompletedTitleText));
         OnPropertyChanged(nameof(ConversionCompletedBodyText));
         OnPropertyChanged(nameof(ConversionCompletedOutputPathText));
@@ -6829,6 +8008,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseModelPackImportConfirmationPropertiesChanged();
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsBodyText));
+        OnPropertyChanged(nameof(LogsDiagnosticsTechnicalDetailsText));
         OnPropertyChanged(nameof(ProfileDetailsBodyText));
         OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
         OnPropertyChanged(nameof(CanOpenSystemStatusToolsTab));
@@ -6845,11 +8025,45 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ModelPackImportStatusText));
         OnPropertyChanged(nameof(LastModelPackImportSummary));
         OnPropertyChanged(nameof(LastModelPackImportSummaryVisibility));
+        OnPropertyChanged(nameof(AboutModelNoticesText));
         OnPropertyChanged(nameof(LogCopiedText));
         OnPropertyChanged(nameof(CouldNotCopyLogText));
         OnPropertyChanged(nameof(LogCopyNotificationText));
         RaiseModelPackImportAvailabilityPropertiesChanged();
         ShowModelInventoryCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseSettingsSectionPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SettingsSectionOptions));
+        OnPropertyChanged(nameof(SelectedSettingsSection));
+        OnPropertyChanged(nameof(VisualSettingsSectionVisibility));
+        OnPropertyChanged(nameof(ModelsSettingsSectionVisibility));
+        OnPropertyChanged(nameof(ToolsEngineSettingsSectionVisibility));
+        OnPropertyChanged(nameof(LogsDiagnosticsSettingsSectionVisibility));
+        OnPropertyChanged(nameof(AboutLicensesSettingsSectionVisibility));
+        OnPropertyChanged(nameof(VisualSettingsTitleText));
+        OnPropertyChanged(nameof(ModelsSettingsTitleText));
+        OnPropertyChanged(nameof(ToolsEngineSettingsTitleText));
+        OnPropertyChanged(nameof(LogsDiagnosticsSettingsTitleText));
+        OnPropertyChanged(nameof(AboutLicensesSettingsTitleText));
+        OnPropertyChanged(nameof(ModelsSettingsIntroText));
+        OnPropertyChanged(nameof(ToolsEngineSettingsIntroText));
+        OnPropertyChanged(nameof(LogsDiagnosticsSettingsIntroText));
+        OnPropertyChanged(nameof(AboutLicensesText));
+        OnPropertyChanged(nameof(AboutModelNoticesTitleText));
+        OnPropertyChanged(nameof(AboutModelNoticesText));
+        OnPropertyChanged(nameof(LogsDiagnosticsTechnicalDetailsTitleText));
+        OnPropertyChanged(nameof(LogsDiagnosticsTechnicalDetailsText));
+        OnPropertyChanged(nameof(ToolStatusTitle));
+        OnPropertyChanged(nameof(RefreshText));
+        OnPropertyChanged(nameof(ViewModelsText));
+        OnPropertyChanged(nameof(ViewModelsToolTipText));
+        OnPropertyChanged(nameof(ModelPackImportInstructionText));
+        OnPropertyChanged(nameof(ModelPackImportStatusText));
+        OnPropertyChanged(nameof(LastModelPackImportSummary));
+        OnPropertyChanged(nameof(LastModelPackImportSummaryVisibility));
+        OnPropertyChanged(nameof(ConversionPlanTechnicalDetailsTitleText));
     }
 
     private void RaiseModelPackImportAvailabilityPropertiesChanged()
@@ -6882,11 +8096,14 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(IsAnyModalOpen));
         OnPropertyChanged(nameof(ModalOverlayVisibility));
         OnPropertyChanged(nameof(ActiveModalWidth));
+        OnPropertyChanged(nameof(ActiveModalHeight));
         OnPropertyChanged(nameof(ActiveModalTitleText));
         OnPropertyChanged(nameof(TechnicalDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ProfileDetailsModalContentVisibility));
         OnPropertyChanged(nameof(ModelHelpModalContentVisibility));
+        OnPropertyChanged(nameof(SettingsModalContentVisibility));
         OnPropertyChanged(nameof(ReplaceVideoConfirmationModalContentVisibility));
+        OnPropertyChanged(nameof(PreviewInvalidationConfirmationModalContentVisibility));
         OnPropertyChanged(nameof(ModelPackImportConfirmationModalContentVisibility));
         OnPropertyChanged(nameof(ConversionCompletedModalContentVisibility));
         OnPropertyChanged(nameof(ModelInventoryModalContentVisibility));
@@ -6912,12 +8129,16 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectableModelTypeHeaderText));
         OnPropertyChanged(nameof(SelectableModelSourceHeaderText));
         OnPropertyChanged(nameof(SelectableModelInventoryRows));
+        OnPropertyChanged(nameof(SettingsSelectableModelsTableVisibility));
+        OnPropertyChanged(nameof(SettingsSelectableModelsEmptyVisibility));
+        OnPropertyChanged(nameof(SettingsSelectableModelsEmptyText));
         OnPropertyChanged(nameof(DiagnosticModelsSectionTitleText));
         OnPropertyChanged(nameof(DiagnosticModelsInventoryText));
         OnPropertyChanged(nameof(RuntimeDependenciesSectionTitleText));
         OnPropertyChanged(nameof(RuntimeDependenciesInventoryText));
         OnPropertyChanged(nameof(ModelInventoryActionsTitleText));
         OnPropertyChanged(nameof(OpenModelsFolderText));
+        OnPropertyChanged(nameof(AboutModelNoticesText));
         OnPropertyChanged(nameof(ActiveModalTitleText));
     }
 

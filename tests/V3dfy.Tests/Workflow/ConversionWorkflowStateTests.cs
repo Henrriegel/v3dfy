@@ -6,99 +6,88 @@ namespace V3dfy.Tests.Workflow;
 public sealed class ConversionWorkflowStateTests
 {
     [Fact]
-    public void Defaults_StartOnFirstTabWithAnalysisTabsDisabled()
+    public void Defaults_StartOnSourceStepWithLaterStepsDisabled()
     {
         var state = new ConversionWorkflowState();
 
-        Assert.Equal(0, state.SelectedTabIndex);
-        Assert.Equal(
-            ConversionWorkflowState.SystemStatusToolsTabIndex,
-            state.SelectedSystemStatusTabIndex);
-        Assert.False(state.HasCompletedAnalysis);
-        Assert.False(state.CanOpenRecommendedSetupTab);
-        Assert.False(state.CanOpenConversionPlanTab);
-        Assert.False(state.CanOpenSystemStatusConversionTab);
+        Assert.Equal(ConversionWorkflowState.SourceAndAnalysisStepIndex, state.SelectedStepIndex);
+        Assert.True(state.CanOpenSourceAndAnalysisStep);
+        Assert.False(state.CanOpenThreeDSetupStep);
+        Assert.False(state.CanOpenConversionPlanStep);
+        Assert.False(state.CanGoBack);
+        Assert.False(state.CanGoNext);
     }
 
     [Fact]
-    public void SetHasCompletedAnalysis_True_EnablesAnalysisTabs()
+    public void SetHasCompletedAnalysis_True_Enables3dSetupButNotPlan()
     {
         var state = new ConversionWorkflowState();
 
-        var changed = state.SetHasCompletedAnalysis(
-            true,
-            out var selectedTabIndexChanged);
+        var changed = state.SetHasCompletedAnalysis(true, out var selectedStepChanged);
 
         Assert.True(changed);
-        Assert.False(selectedTabIndexChanged);
-        Assert.True(state.HasCompletedAnalysis);
-        Assert.True(state.CanOpenRecommendedSetupTab);
-        Assert.True(state.CanOpenConversionPlanTab);
-        Assert.True(state.CanOpenSystemStatusConversionTab);
-        Assert.Equal(
-            ConversionWorkflowState.SystemStatusConversionTabIndex,
-            state.SelectedSystemStatusTabIndex);
+        Assert.False(selectedStepChanged);
+        Assert.True(state.CanOpenThreeDSetupStep);
+        Assert.False(state.CanOpenConversionPlanStep);
+        Assert.True(state.CanGoNext);
     }
 
     [Fact]
-    public void SetHasCompletedAnalysis_False_ResetsSelectedTab()
+    public void SetCanOpenConversionPlanStep_RequiresCompletedAnalysis()
+    {
+        var state = new ConversionWorkflowState();
+
+        state.SetCanOpenConversionPlanStep(true, out _);
+
+        Assert.False(state.CanOpenConversionPlanStep);
+
+        state.SetHasCompletedAnalysis(true, out _);
+        state.SetCanOpenConversionPlanStep(true, out var selectedStepChanged);
+
+        Assert.False(selectedStepChanged);
+        Assert.True(state.CanOpenConversionPlanStep);
+    }
+
+    [Fact]
+    public void MoveNextAndBack_RespectAvailableSteps()
+    {
+        var state = new ConversionWorkflowState();
+
+        Assert.False(state.MoveNext());
+
+        state.SetHasCompletedAnalysis(true, out _);
+        Assert.True(state.MoveNext());
+        Assert.Equal(ConversionWorkflowState.ThreeDSetupStepIndex, state.SelectedStepIndex);
+        Assert.True(state.MoveBack());
+        Assert.Equal(ConversionWorkflowState.SourceAndAnalysisStepIndex, state.SelectedStepIndex);
+    }
+
+    [Fact]
+    public void SetSelectedStepIndex_DoesNotJumpForwardToUnavailableStep()
+    {
+        var state = new ConversionWorkflowState();
+
+        var changed = state.SetSelectedStepIndex(ConversionWorkflowState.ConversionPlanStepIndex);
+
+        Assert.False(changed);
+        Assert.Equal(ConversionWorkflowState.SourceAndAnalysisStepIndex, state.SelectedStepIndex);
+    }
+
+    [Fact]
+    public void ClearingAnalysis_ResetsSelectedStepToSource()
     {
         var state = new ConversionWorkflowState();
         state.SetHasCompletedAnalysis(true, out _);
-        state.SetSelectedTabIndex(2);
+        state.SetCanOpenConversionPlanStep(true, out _);
+        state.SetSelectedStepIndex(ConversionWorkflowState.ConversionPlanStepIndex);
 
-        var changed = state.SetHasCompletedAnalysis(
-            false,
-            out var selectedTabIndexChanged);
-
-        Assert.True(changed);
-        Assert.True(selectedTabIndexChanged);
-        Assert.False(state.HasCompletedAnalysis);
-        Assert.Equal(0, state.SelectedTabIndex);
-        Assert.Equal(
-            ConversionWorkflowState.SystemStatusToolsTabIndex,
-            state.SelectedSystemStatusTabIndex);
-    }
-
-    [Fact]
-    public void SetSelectedSystemStatusTabIndex_ConversionBeforeAnalysis_KeepsToolsTab()
-    {
-        var state = new ConversionWorkflowState();
-
-        var changed = state.SetSelectedSystemStatusTabIndex(
-            ConversionWorkflowState.SystemStatusConversionTabIndex);
-
-        Assert.False(changed);
-        Assert.Equal(
-            ConversionWorkflowState.SystemStatusToolsTabIndex,
-            state.SelectedSystemStatusTabIndex);
-    }
-
-    [Fact]
-    public void SetSelectedSystemStatusTabIndex_ConversionAfterAnalysis_SelectsConversionTab()
-    {
-        var state = new ConversionWorkflowState();
-        state.SetHasCompletedAnalysis(true, out _);
-        state.SetSelectedSystemStatusTabIndex(ConversionWorkflowState.SystemStatusToolsTabIndex);
-
-        var changed = state.SetSelectedSystemStatusTabIndex(
-            ConversionWorkflowState.SystemStatusConversionTabIndex);
+        var changed = state.SetHasCompletedAnalysis(false, out var selectedStepChanged);
 
         Assert.True(changed);
-        Assert.Equal(
-            ConversionWorkflowState.SystemStatusConversionTabIndex,
-            state.SelectedSystemStatusTabIndex);
-    }
-
-    [Fact]
-    public void SetSelectedTabIndex_SameValue_ReturnsFalse()
-    {
-        var state = new ConversionWorkflowState();
-
-        var changed = state.SetSelectedTabIndex(0);
-
-        Assert.False(changed);
-        Assert.Equal(0, state.SelectedTabIndex);
+        Assert.True(selectedStepChanged);
+        Assert.Equal(ConversionWorkflowState.SourceAndAnalysisStepIndex, state.SelectedStepIndex);
+        Assert.False(state.CanOpenThreeDSetupStep);
+        Assert.False(state.CanOpenConversionPlanStep);
     }
 
     [Theory]

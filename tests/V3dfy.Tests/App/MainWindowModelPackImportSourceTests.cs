@@ -208,25 +208,26 @@ public sealed class MainWindowModelPackImportSourceTests
     }
 
     [Fact]
-    public void MainWindowXaml_MovesModelPackImportSurfaceIntoModelInventoryModal()
+    public void MainWindowXaml_ExposesModelPackImportFromModelInventoryModalOnly()
     {
         var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
-        var toolsTab = ExtractSourceRange(
-            xaml,
-            "<TabItem Header=\"{Binding SystemStatusToolsTabTitle}\"",
-            "<TabItem Header=\"{Binding SystemStatusConversionTabTitle}\"");
         var inventoryModal = ExtractSourceRange(
             xaml,
             "Visibility=\"{Binding ModelInventoryModalContentVisibility}\"",
             "Visibility=\"{Binding ModelPackImportConfirmationModalContentVisibility}\"");
+        var settingsModelsSection = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"ModelsSettingsSection\"",
+            "AutomationProperties.AutomationId=\"ToolsEngineSettingsSection\"");
 
-        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImportModelPackButton\"", toolsTab);
-        Assert.DoesNotContain("Text=\"{Binding ModelPackImportStatusText}\"", toolsTab);
-        Assert.DoesNotContain("Text=\"{Binding LastModelPackImportSummary}\"", toolsTab);
         Assert.Contains("AutomationProperties.AutomationId=\"ImportModelPackButton\"", xaml);
         Assert.Contains("Command=\"{Binding ImportModelPackCommand}\"", xaml);
         Assert.Contains("Content=\"{Binding ImportModelPackText}\"", xaml);
         Assert.Contains("IsEnabled=\"{Binding CanImportModelPack}\"", xaml);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SettingsImportModelPackButton\"", settingsModelsSection);
+        Assert.Contains("Command=\"{Binding ShowModelInventoryCommand}\"", settingsModelsSection);
+        Assert.Contains("Text=\"{Binding ModelPackImportStatusText}\"", settingsModelsSection);
+        Assert.Contains("Text=\"{Binding LastModelPackImportSummary}\"", settingsModelsSection);
         Assert.Contains("Text=\"{Binding ModelPackImportInstructionText}\"", inventoryModal);
         Assert.Contains("Text=\"{Binding ModelPackImportStatusText}\"", inventoryModal);
         Assert.Contains("Text=\"{Binding LastModelPackImportSummary}\"", inventoryModal);
@@ -356,7 +357,7 @@ public sealed class MainWindowModelPackImportSourceTests
         Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", xaml);
         Assert.Contains("Style=\"{StaticResource V3dfyModalCardStyle}\"", xaml);
         Assert.Contains("Width=\"{Binding ActiveModalWidth}\"", xaml);
-        Assert.Contains("ActiveModalWidth => IsModelInventoryModalOpen || IsModelHelpModalOpen ? 1000d : 760d", source);
+        Assert.Contains("ActiveModalWidth => IsModelInventoryModalOpen || IsModelHelpModalOpen || IsSettingsModalOpen ? 1000d : 760d", source);
         Assert.Contains("Text=\"{Binding ModelInventoryIntroText}\"", modalBody);
         Assert.Contains("Text=\"{Binding ModelInventoryFolderPathText}\"", modalBody);
         Assert.Contains("Text=\"{Binding SelectableModelsSectionTitleText}\"", modalBody);
@@ -503,6 +504,37 @@ public sealed class MainWindowModelPackImportSourceTests
         Assert.Contains("IsModelInventoryModalOpen = true;", method);
         Assert.Contains("IsModelInventoryModalOpen = false;", confirmationMethod);
         Assert.Contains("RefreshEngineStatusAsync(logRefresh: true)", source);
+    }
+
+    [Fact]
+    public void ModelInventoryOpenedFromSettings_ReturnsToSettingsModelsOnClose()
+    {
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var showModelInventory = ExtractSourceRange(
+            source,
+            "private void ShowModelInventory()",
+            "private void CloseModelInventory()");
+        var closeModelInventory = ExtractSourceRange(
+            source,
+            "private void CloseModelInventory()",
+            "private void ShowModelHelp()");
+        var importMethod = ExtractSourceRange(
+            source,
+            "private async Task ImportModelPackAsync()",
+            "private ModelPackAppImportRequest CreateModelPackAppImportRequest");
+
+        Assert.Contains("SettingsSection? _settingsSectionToRestoreAfterChildModal", source);
+        Assert.Contains("private void CaptureSettingsReturnContext()", source);
+        Assert.Contains("private void RestoreSettingsAfterChildModalIfNeeded()", source);
+        Assert.Contains("CaptureSettingsReturnContext();", showModelInventory);
+        Assert.Contains("IsSettingsModalOpen = false;", showModelInventory);
+        Assert.Contains("IsModelInventoryModalOpen = true;", showModelInventory);
+        Assert.Contains("RestoreSettingsAfterChildModalIfNeeded();", closeModelInventory);
+        Assert.Contains("SelectedSettingsSection = section;", source);
+        Assert.Contains("IsSettingsModalOpen = true;", source);
+        Assert.Contains("if (IsSettingsModalOpen)", importMethod);
+        Assert.Contains("CaptureSettingsReturnContext();", importMethod);
+        Assert.Contains("RestoreSettingsAfterChildModalIfNeeded();", importMethod);
     }
 
     private static string ReadRepoFile(params string[] relativePath)

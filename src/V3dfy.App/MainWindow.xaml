@@ -63,81 +63,170 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
-        <Style x:Key="WorkflowTabControlStyle" TargetType="TabControl">
+        <Style x:Key="WizardStepPillStyle" TargetType="Border">
+            <Setter Property="Padding" Value="10,8" />
             <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TabControl">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <TabPanel Background="Transparent"
-                                      IsItemsHost="True" />
-                            <Border Grid.Row="1"
-                                    Padding="14"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}">
-                                <ContentPresenter x:Name="PART_SelectedContentHost"
-                                                  ContentSource="SelectedContent" />
-                            </Border>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Opacity" Value="0.72" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="Active">
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                    <Setter Property="Opacity" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="Completed">
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                    <Setter Property="Opacity" Value="1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="Locked">
+                    <Setter Property="Opacity" Value="0.48" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
-        <Style x:Key="WorkflowTabItemStyle" TargetType="TabItem">
-            <Setter Property="Foreground" Value="{DynamicResource TabUnselectedForegroundBrush}" />
-            <Setter Property="Background" Value="{DynamicResource TabUnselectedBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
-            <Setter Property="Padding" Value="12,7" />
-            <Setter Property="FontWeight" Value="Normal" />
+        <Style x:Key="WizardStepMarkerStyle" TargetType="Border">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Background" Value="{DynamicResource CardBorderBrush}" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Border}}" Value="Active">
+                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=Border}}" Value="Completed">
+                    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="WizardFooterButtonStyle"
+               BasedOn="{StaticResource {x:Type Button}}"
+               TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="MinWidth" Value="88" />
+        </Style>
+        <Style x:Key="WizardFooterSecondaryButtonStyle"
+               BasedOn="{StaticResource SecondaryButtonStyle}"
+               TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="MinWidth" Value="88" />
+        </Style>
+        <Style x:Key="SettingsMenuListBoxItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="TabBorder"
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="ItemBorder"
                                 Padding="{TemplateBinding Padding}"
                                 Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1,1,1,0"
-                                CornerRadius="5,5,0,0">
-                            <Grid>
-                                <Border x:Name="AccentLine"
-                                        Height="3"
-                                        VerticalAlignment="Top"
-                                        Background="{DynamicResource TabAccentBrush}"
-                                        CornerRadius="3,3,0,0"
-                                        Opacity="0" />
-                                <ContentPresenter Margin="0,2,0,0"
-                                                  ContentSource="Header"
-                                                  TextElement.FontWeight="{TemplateBinding FontWeight}"
-                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
-                            </Grid>
+                                BorderBrush="Transparent"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="TabBorder"
+                                <Setter TargetName="ItemBorder"
                                         Property="Background"
                                         Value="{DynamicResource ComboBoxHoverBrush}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Foreground"
-                                        Value="{DynamicResource TabSelectedForegroundBrush}" />
-                                <Setter Property="FontWeight" Value="SemiBold" />
-                                <Setter TargetName="TabBorder"
+                                <Setter TargetName="ItemBorder"
                                         Property="Background"
-                                        Value="{DynamicResource TabSelectedBackgroundBrush}" />
-                                <Setter TargetName="TabBorder"
+                                        Value="{DynamicResource InputBackgroundBrush}" />
+                                <Setter TargetName="ItemBorder"
                                         Property="BorderBrush"
-                                        Value="{DynamicResource TabSelectedBorderBrush}" />
-                                <Setter TargetName="AccentLine"
-                                        Property="Opacity"
-                                        Value="1" />
+                                        Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource DisabledTextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="V3dfyExpanderStyle" TargetType="Expander">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Expander">
+                        <DockPanel>
+                            <ToggleButton x:Name="HeaderSite"
+                                          DockPanel.Dock="Top"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsExpanded,
+                                                              RelativeSource={RelativeSource TemplatedParent},
+                                                              Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="HeaderBorder"
+                                                Padding="10,8"
+                                                Background="{DynamicResource InputBackgroundBrush}"
+                                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="5">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="22"
+                                                        Height="22"
+                                                        Background="{DynamicResource CardBackgroundBrush}"
+                                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="11">
+                                                    <TextBlock x:Name="Chevron"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="11"
+                                                               FontWeight="Bold"
+                                                               Foreground="{DynamicResource AccentBrush}"
+                                                               Text=">" />
+                                                </Border>
+                                                <ContentPresenter Grid.Column="1"
+                                                                  Margin="8,0,0,0"
+                                                                  VerticalAlignment="Center"
+                                                                  Content="{TemplateBinding Content}"
+                                                                  RecognizesAccessKey="True"
+                                                                  TextElement.Foreground="{DynamicResource PrimaryTextBrush}" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="HeaderBorder"
+                                                        Property="BorderBrush"
+                                                        Value="{DynamicResource AccentBrush}" />
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="HeaderBorder"
+                                                        Property="BorderBrush"
+                                                        Value="{DynamicResource AccentBrush}" />
+                                                <Setter TargetName="Chevron"
+                                                        Property="Text"
+                                                        Value="v" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <ContentPresenter ContentSource="Header" />
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ExpandSite"
+                                              Margin="0,8,0,0"
+                                              ContentSource="Content"
+                                              Visibility="Collapsed" />
+                        </DockPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="True">
+                                <Setter TargetName="ExpandSite"
+                                        Property="Visibility"
+                                        Value="Visible" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -170,19 +259,13 @@
                                Text="{Binding SubtitleText}" />
                 </StackPanel>
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Margin="0,0,8,0"
-                           VerticalAlignment="Center"
-                           Text="{Binding LanguageLabel}" />
-                <ComboBox Margin="0,0,16,0"
-                          ItemsSource="{Binding LanguageOptions}"
-                          SelectedItem="{Binding SelectedLanguage}" />
-                <TextBlock Margin="0,0,8,0"
-                           VerticalAlignment="Center"
-                           Text="{Binding ThemeLabel}" />
-                <ComboBox ItemsSource="{Binding ThemeOptions}"
-                          SelectedItem="{Binding SelectedTheme}" />
-            </StackPanel>
+            <Button Grid.Column="1"
+                    AutomationProperties.AutomationId="SettingsButton"
+                    AutomationProperties.Name="{Binding SettingsText}"
+                    Command="{Binding OpenSettingsCommand}"
+                    Content="&#xE713;"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTip="{Binding SettingsText}" />
         </Grid>
 
         <Grid Grid.Row="1">
@@ -192,411 +275,534 @@
                 <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
 
-            <ScrollViewer Margin="0,0,4,0"
-                          HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto"
-                          Visibility="{Binding NormalSetupVisibility}">
-                <ScrollViewer.Resources>
-                    <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
-                           TargetType="ScrollBar" />
-                </ScrollViewer.Resources>
-                <Grid Margin="0,0,8,0">
+            <Border Margin="0,0,4,0"
+                    AutomationProperties.AutomationId="MainWorkflowWizard"
+                    Style="{StaticResource CardStyle}"
+                    Visibility="{Binding NormalSetupVisibility}">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="18" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                <Border Style="{StaticResource CardStyle}">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                   Text="{Binding SelectSourceTitle}" />
-                        <Border Padding="20"
-                                Background="{DynamicResource InputBackgroundBrush}"
-                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="6">
-                            <StackPanel>
-                                <TextBlock FontWeight="SemiBold"
-                                           Text="{Binding DropVideoText}" />
-                                <TextBlock Margin="0,6,0,14"
-                                           Style="{StaticResource MutedTextStyle}"
-                                           Text=".mp4, .mkv, .avi, .mov, .m4v, .webm" />
-                                <TextBlock Margin="0,0,0,14"
-                                           Text="{Binding SelectedVideoDisplayPath}"
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="8" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Tag="{Binding SourceAndAnalysisStepState}"
+                                Style="{StaticResource WizardStepPillStyle}">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Tag="{Binding SourceAndAnalysisStepState}"
+                                        Style="{StaticResource WizardStepMarkerStyle}">
+                                    <TextBlock HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource ButtonForegroundBrush}"
+                                               Text="{Binding SourceAndAnalysisStepMarkerText}" />
+                                </Border>
+                                <TextBlock Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding SourceAndAnalysisStepTitle}"
                                            TextWrapping="Wrap" />
-                                <StackPanel Orientation="Horizontal">
-                                    <Button Command="{Binding SelectVideoCommand}"
-                                            Content="{Binding SelectVideoText}" />
-                                    <Button Margin="10,0,0,0"
-                                            Command="{Binding AnalyzeCommand}"
-                                            Content="{Binding AnalyzeText}" />
-                                </StackPanel>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
-                </Border>
-
-                <Border Grid.Row="2" Style="{StaticResource CardStyle}">
-                    <TabControl SelectedIndex="{Binding SelectedWorkflowTabIndex,
-                                                        Mode=TwoWay}"
-                                Style="{StaticResource WorkflowTabControlStyle}">
-                        <TabItem Header="{Binding VideoAnalysisTitle}"
-                                 Style="{StaticResource WorkflowTabItemStyle}">
-                            <StackPanel>
-                                <TextBlock Margin="0,0,0,8"
-                                           Style="{StaticResource MutedTextStyle}"
-                                           Text="{Binding AnalysisStatusText}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding AnalysisDurationText}" />
-                                        <TextBlock Text="{Binding AnalysisResolutionText}" />
-                                        <TextBlock Text="{Binding AnalysisFpsText}" />
-                                        <TextBlock Text="{Binding AnalysisCodecText}" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{Binding AnalysisContainerText}" />
-                                        <TextBlock Text="{Binding AnalysisAudioStreamsText}" />
-                                        <TextBlock Text="{Binding AnalysisSubtitleStreamsText}" />
-                                        <TextBlock Text="{Binding AnalysisHdrText}" />
-                                    </StackPanel>
-                                </Grid>
-                                <TextBlock Margin="0,8,0,0"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           Text="{Binding AnalysisCompatibilityText}"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                        </TabItem>
-                        <TabItem Header="{Binding RecommendedSetupTitle}"
-                                 IsEnabled="{Binding CanOpenRecommendedSetupTab}"
-                                 Style="{StaticResource WorkflowTabItemStyle}">
-                            <StackPanel>
-                                <TextBlock Margin="0,0,0,8"
-                                           Style="{StaticResource MutedTextStyle}"
-                                           Text="{Binding RecommendedSetupStatusText}" />
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding RecommendedOutputContainerText}" />
-                                        <TextBlock Text="{Binding RecommendedVideoCodecText}" />
-                                        <TextBlock Text="{Binding RecommendedAudioCodecText}" />
-                                        <TextBlock Text="{Binding RecommendedResolutionText}" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{Binding RecommendedThreeDLayoutText}" />
-                                        <TextBlock Text="{Binding RecommendedQualityText}" />
-                                        <TextBlock Text="{Binding RecommendedIntensityText}" />
-                                    </StackPanel>
-                                </Grid>
-                                <TextBlock Margin="0,10,0,4"
+                        <Border Grid.Column="2"
+                                Tag="{Binding ThreeDSetupStepState}"
+                                Style="{StaticResource WizardStepPillStyle}">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Tag="{Binding ThreeDSetupStepState}"
+                                        Style="{StaticResource WizardStepMarkerStyle}">
+                                    <TextBlock HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource ButtonForegroundBrush}"
+                                               Text="{Binding ThreeDSetupStepMarkerText}" />
+                                </Border>
+                                <TextBlock Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
                                            FontWeight="SemiBold"
-                                           Text="{Binding RecommendedNotesTitle}" />
-                                <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
-                                           Text="{Binding RecommendedNotesText}"
+                                           Text="{Binding ThreeDSetupStepTitle}"
                                            TextWrapping="Wrap" />
                             </StackPanel>
-                        </TabItem>
-                        <TabItem Header="{Binding ConversionPlanTitle}"
-                                 IsEnabled="{Binding CanOpenConversionPlanTab}"
-                                 Style="{StaticResource WorkflowTabItemStyle}">
-                            <StackPanel>
-                                <Border Margin="0,0,0,10"
-                                        Padding="10"
-                                        Background="{DynamicResource CardBackgroundBrush}"
+                        </Border>
+                        <Border Grid.Column="4"
+                                Tag="{Binding ConversionPlanStepState}"
+                                Style="{StaticResource WizardStepPillStyle}">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Tag="{Binding ConversionPlanStepState}"
+                                        Style="{StaticResource WizardStepMarkerStyle}">
+                                    <TextBlock HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource ButtonForegroundBrush}"
+                                               Text="{Binding ConversionPlanStepMarkerText}" />
+                                </Border>
+                                <TextBlock Margin="8,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding WizardConversionPlanStepTitle}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  VerticalScrollBarVisibility="Auto">
+                        <ScrollViewer.Resources>
+                            <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                                   TargetType="ScrollBar" />
+                        </ScrollViewer.Resources>
+                        <Grid Margin="0,0,8,0">
+                            <StackPanel AutomationProperties.AutomationId="SourceAndAnalysisStepContent"
+                                        Visibility="{Binding SourceAndAnalysisStepVisibility}">
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="{Binding SelectSourceTitle}" />
+                                <Border Padding="16"
+                                        Background="{DynamicResource InputBackgroundBrush}"
                                         BorderBrush="{DynamicResource CardBorderBrush}"
                                         BorderThickness="1"
-                                        CornerRadius="5">
+                                        CornerRadius="6">
                                     <StackPanel>
-                                        <TextBlock Margin="0,0,0,8"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding PlanOptionsTitle}" />
-                                        <StackPanel Margin="0,0,0,10">
-                                            <TextBlock Margin="0,0,0,4"
-                                                       Style="{StaticResource MutedTextStyle}"
-                                                       Text="{Binding OutputPresetLabel}" />
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="8" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <ComboBox DisplayMemberPath="DisplayName"
-                                                          ItemsSource="{Binding OutputPresetOptions}"
-                                                          SelectedValue="{Binding SelectedOutputPreset}"
-                                                          SelectedValuePath="Value" />
-                                                <Button Grid.Column="2"
-                                                        MinWidth="30"
-                                                        Padding="8,5"
-                                                        AutomationProperties.AutomationId="ShowProfileDetailsButton"
-                                                        Command="{Binding ShowProfileDetailsCommand}"
-                                                        Content="{Binding ProfileDetailsButtonText}"
-                                                        Style="{StaticResource SecondaryButtonStyle}" />
-                                            </Grid>
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Text="{Binding DropVideoText}" />
+                                        <TextBlock Margin="0,6,0,12"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text=".mp4, .mkv, .avi, .mov, .m4v, .webm" />
+                                        <TextBlock Margin="0,0,0,12"
+                                                   Text="{Binding SelectedVideoDisplayPath}"
+                                                   TextWrapping="Wrap" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Command="{Binding SelectVideoCommand}"
+                                                    Content="{Binding SelectVideoText}" />
+                                            <Button Margin="10,0,0,0"
+                                                    Command="{Binding AnalyzeCommand}"
+                                                    Content="{Binding AnalyzeText}" />
                                         </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Margin="0,10,0,0"
+                                           Style="{StaticResource MutedTextStyle}"
+                                           Text="{Binding SourceAnalysisEmptyHintText}"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding SourceAnalysisEmptyHintVisibility}" />
+
+                                <StackPanel AutomationProperties.AutomationId="VideoAnalysisSection"
+                                            Margin="0,16,0,0"
+                                            Visibility="{Binding VideoAnalysisSectionVisibility}">
+                                    <TextBlock Margin="0,0,0,8"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="{Binding VideoAnalysisTitle}" />
+                                    <Border Padding="10"
+                                            Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5"
+                                            Visibility="{Binding VideoAnalysisPendingStatusVisibility}">
+                                        <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding VideoAnalysisPendingStatusText}"
+                                                   TextWrapping="Wrap" />
+                                    </Border>
+                                    <StackPanel Visibility="{Binding VideoAnalysisResultsVisibility}">
+                                        <TextBlock Margin="0,0,0,8"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding AnalysisStatusText}" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="10" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="10" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
                                             <StackPanel>
-                                                <TextBlock Margin="0,0,0,4"
-                                                           Style="{StaticResource MutedTextStyle}"
-                                                           Text="{Binding OutputContainerOptionLabel}" />
-                                                <ComboBox DisplayMemberPath="DisplayName"
-                                                          ItemsSource="{Binding OutputContainerOptions}"
-                                                          SelectedValue="{Binding SelectedOutputContainer}"
-                                                          SelectedValuePath="Value" />
+                                                <TextBlock Text="{Binding AnalysisDurationText}" />
+                                                <TextBlock Text="{Binding AnalysisResolutionText}" />
+                                                <TextBlock Text="{Binding AnalysisFpsText}" />
+                                                <TextBlock Text="{Binding AnalysisCodecText}" />
                                             </StackPanel>
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Margin="0,0,0,4"
-                                                           Style="{StaticResource MutedTextStyle}"
-                                                           Text="{Binding QualityOptionLabel}" />
-                                                <ComboBox DisplayMemberPath="DisplayName"
-                                                          ItemsSource="{Binding QualityPresetOptions}"
-                                                          SelectedValue="{Binding SelectedQualityPreset}"
-                                                          SelectedValuePath="Value" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Row="2">
-                                                <TextBlock Margin="0,0,0,4"
-                                                           Style="{StaticResource MutedTextStyle}"
-                                                           Text="{Binding ThreeDIntensityOptionLabel}" />
-                                                <ComboBox DisplayMemberPath="DisplayName"
-                                                          ItemsSource="{Binding ThreeDIntensityOptions}"
-                                                          SelectedValue="{Binding SelectedThreeDIntensity}"
-                                                          SelectedValuePath="Value" />
-                                            </StackPanel>
-                                            <StackPanel Grid.Row="2" Grid.Column="2">
-                                                <TextBlock Margin="0,0,0,4"
-                                                           Style="{StaticResource MutedTextStyle}"
-                                                           Text="{Binding ThreeDOutputFormatOptionLabel}" />
-                                                <ComboBox DisplayMemberPath="DisplayName"
-                                                          ItemsSource="{Binding ThreeDOutputFormatOptions}"
-                                                          SelectedValue="{Binding SelectedThreeDOutputFormat}"
-                                                          SelectedValuePath="Value" />
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding AnalysisContainerText}" />
+                                                <TextBlock Text="{Binding AnalysisAudioStreamsText}" />
+                                                <TextBlock Text="{Binding AnalysisSubtitleStreamsText}" />
+                                                <TextBlock Text="{Binding AnalysisHdrText}" />
                                             </StackPanel>
                                         </Grid>
-                                        <StackPanel Margin="0,10,0,0">
-                                            <Grid Margin="0,0,0,4">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                 </Grid.ColumnDefinitions>
-                                                 <TextBlock VerticalAlignment="Center"
-                                                            Style="{StaticResource MutedTextStyle}"
-                                                            Text="{Binding LocalModelSelectionLabel}" />
-                                                 <Button Grid.Column="1"
-                                                         MinWidth="30"
-                                                         Padding="8,5"
-                                                         AutomationProperties.AutomationId="ModelHelpButton"
-                                                         AutomationProperties.Name="{Binding ModelHelpButtonToolTipText}"
-                                                         Command="{Binding ShowModelHelpCommand}"
-                                                         Content="?"
-                                                         IsEnabled="{Binding CanShowModelHelp}"
-                                                         Style="{StaticResource SecondaryButtonStyle}"
-                                                         ToolTip="{Binding ModelHelpButtonToolTipText}" />
-                                             </Grid>
-                                            <ComboBox DisplayMemberPath="DisplayName"
-                                                      IsEnabled="{Binding HasLocalModelSelectionCandidates}"
-                                                      ItemsSource="{Binding LocalModelCandidates}"
-                                                      SelectedItem="{Binding SelectedLocalModelCandidate,
-                                                                             Mode=TwoWay}" />
-                                            <TextBlock Margin="0,4,0,0"
-                                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       Text="{Binding LocalModelSelectionStatusText}"
-                                                       TextWrapping="Wrap" />
-                                            <TextBlock Margin="0,4,0,0"
-                                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       Text="{Binding SelectedModelGuidanceText}"
-                                                       TextWrapping="Wrap" />
-                                        </StackPanel>
-                                        <Border Margin="0,10,0,0"
-                                                Padding="10"
-                                                Background="{DynamicResource InputBackgroundBrush}"
-                                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="5"
-                                                AutomationProperties.AutomationId="ConversionPreflightEstimates">
-                                            <StackPanel>
-                                                <TextBlock FontWeight="SemiBold"
-                                                           Text="{Binding EstimatedConversionTimeText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Text="{Binding EstimateConfidenceText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           Text="{Binding EstimateBasisText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,8,0,0"
-                                                           Text="{Binding EstimatedOutputSizeText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,4,0,0"
-                                                           Text="{Binding RecommendedFreeSpaceText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,8,0,0"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           Text="{Binding PresetGuidanceText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,8,0,0"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           Text="{Binding PerformanceHistoryPrivacyText}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Border>
-                                        <Border Margin="0,10,0,0"
-                                                Padding="10"
-                                                Background="{DynamicResource InputBackgroundBrush}"
-                                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="5"
-                                                Visibility="{Binding LgCompatibilityOptionsVisibility}">
-                                            <StackPanel>
-                                                <TextBlock Margin="0,0,0,8"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           Text="{Binding LgCompatibilityCopyExplanationText}"
-                                                           TextWrapping="Wrap" />
-                                                <CheckBox Content="{Binding CreateLgCompatibilityCopyText}"
-                                                          IsChecked="{Binding CreateLgCompatibilityCopy,
-                                                                              Mode=TwoWay}"
-                                                          IsEnabled="{Binding CanChangeLgCompatibilityCopyOptions}" />
-                                                <CheckBox Margin="0,6,0,0"
-                                                          Content="{Binding PreferLgCompatibilityCopyWhenOpeningText}"
-                                                          IsChecked="{Binding PreferLgCompatibilityCopyWhenOpening,
-                                                                              Mode=TwoWay}"
-                                                          IsEnabled="{Binding CanPreferLgCompatibilityCopyWhenOpening}" />
-                                            </StackPanel>
-                                        </Border>
-                                        <CheckBox Margin="0,10,0,0"
-                                                  Content="{Binding OpenOutputWhenFinishedText}"
-                                                  IsChecked="{Binding OpenOutputWhenFinished,
-                                                                      Mode=TwoWay}"
-                                                  IsEnabled="{Binding CanChangeOpenOutputWhenFinished}" />
+                                        <TextBlock Margin="0,8,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding AnalysisCompatibilityText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,8,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding RecommendedNotesText}"
+                                                   TextWrapping="Wrap" />
                                     </StackPanel>
-                                </Border>
-                                <Border Margin="0,0,0,10"
-                                        Padding="10"
-                                        Background="{DynamicResource CardBackgroundBrush}"
-                                        BorderBrush="{DynamicResource CardBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="5">
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel AutomationProperties.AutomationId="ThreeDSetupStepContent"
+                                        Visibility="{Binding ThreeDSetupStepVisibility}">
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="{Binding ThreeDSetupStepTitle}" />
+                                <TextBlock Margin="0,0,0,10"
+                                           Style="{StaticResource MutedTextStyle}"
+                                           Text="{Binding RecommendedSetupStatusText}"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Margin="0,0,0,10">
+                                    <TextBlock Margin="0,0,0,4"
+                                               Style="{StaticResource MutedTextStyle}"
+                                               Text="{Binding OutputPresetLabel}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox DisplayMemberPath="DisplayName"
+                                                  ItemsSource="{Binding OutputPresetOptions}"
+                                                  SelectedValue="{Binding SelectedOutputPreset}"
+                                                  SelectedValuePath="Value" />
+                                        <Button Grid.Column="2"
+                                                MinWidth="30"
+                                                Padding="8,5"
+                                                AutomationProperties.AutomationId="ShowProfileDetailsButton"
+                                                Command="{Binding ShowProfileDetailsCommand}"
+                                                Content="{Binding ProfileDetailsButtonText}"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </Grid>
+                                </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="10" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
                                     <StackPanel>
-                                        <TextBlock Margin="0,0,0,8"
-                                                   FontWeight="SemiBold"
-                                                   Text="{Binding OutputLocationTitle}" />
                                         <TextBlock Margin="0,0,0,4"
                                                    Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding OutputPathLabel}" />
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="8" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBox Text="{Binding OutputPathText}" />
-                                            <Button Grid.Column="2"
-                                                    Padding="10,5"
-                                                    Command="{Binding BrowseOutputFolderCommand}"
-                                                    Content="{Binding BrowseOutputFolderText}" />
-                                            <Button Grid.Column="4"
-                                                    Padding="10,5"
-                                                    Command="{Binding ResetOutputPathCommand}"
-                                                    Content="{Binding ResetOutputPathText}" />
-                                        </Grid>
+                                                   Text="{Binding OutputContainerOptionLabel}" />
+                                        <ComboBox DisplayMemberPath="DisplayName"
+                                                  ItemsSource="{Binding OutputContainerOptions}"
+                                                  SelectedValue="{Binding SelectedOutputContainer}"
+                                                  SelectedValuePath="Value" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Margin="0,0,0,4"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding QualityOptionLabel}" />
+                                        <ComboBox DisplayMemberPath="DisplayName"
+                                                  ItemsSource="{Binding QualityPresetOptions}"
+                                                  SelectedValue="{Binding SelectedQualityPreset}"
+                                                  SelectedValuePath="Value" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2">
+                                        <TextBlock Margin="0,0,0,4"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding ThreeDIntensityOptionLabel}" />
+                                        <ComboBox DisplayMemberPath="DisplayName"
+                                                  ItemsSource="{Binding ThreeDIntensityOptions}"
+                                                  SelectedValue="{Binding SelectedThreeDIntensity}"
+                                                  SelectedValuePath="Value" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Row="2" Grid.Column="2">
+                                        <TextBlock Margin="0,0,0,4"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding ThreeDOutputFormatOptionLabel}" />
+                                        <ComboBox DisplayMemberPath="DisplayName"
+                                                  ItemsSource="{Binding ThreeDOutputFormatOptions}"
+                                                  SelectedValue="{Binding SelectedThreeDOutputFormat}"
+                                                  SelectedValuePath="Value" />
+                                    </StackPanel>
+                                </Grid>
+                                <StackPanel Margin="0,12,0,0">
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center"
+                                                   Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding LocalModelSelectionLabel}" />
+                                        <Button Grid.Column="1"
+                                                MinWidth="30"
+                                                Padding="8,5"
+                                                AutomationProperties.AutomationId="ModelHelpButton"
+                                                AutomationProperties.Name="{Binding ModelHelpButtonToolTipText}"
+                                                Command="{Binding ShowModelHelpCommand}"
+                                                Content="?"
+                                                IsEnabled="{Binding CanShowModelHelp}"
+                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                ToolTip="{Binding ModelHelpButtonToolTipText}" />
+                                    </Grid>
+                                    <ComboBox DisplayMemberPath="DisplayName"
+                                              IsEnabled="{Binding HasLocalModelSelectionCandidates}"
+                                              ItemsSource="{Binding LocalModelCandidates}"
+                                              SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                     Mode=TwoWay}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="{Binding LocalModelSelectionStatusText}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Border Margin="0,12,0,0"
+                                        Padding="10"
+                                        AutomationProperties.AutomationId="ConversionPreflightEstimates"
+                                        Background="{DynamicResource InputBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5">
+                                    <StackPanel>
+                                        <TextBlock FontWeight="SemiBold"
+                                                   Text="{Binding CompactEstimateTimeConfidenceText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,4,0,0"
+                                                   Text="{Binding CompactOutputSizeFreeSpaceText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,8,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding CompactSelectedModelGuidanceText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,4,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding CompactPresetGuidanceText}"
+                                                   TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
-                                <TextBlock Margin="0,0,0,8"
+                                <Expander Margin="0,10,0,0"
+                                          Style="{StaticResource V3dfyExpanderStyle}"
+                                          Header="{Binding EstimateDetailsTitleText}">
+                                    <Border AutomationProperties.AutomationId="EstimateDetailsCard"
+                                            Padding="10"
+                                            Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5">
+                                        <StackPanel>
+                                        <TextBlock Text="{Binding EstimateBasisText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding PerformanceHistoryPrivacyText}"
+                                                   TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </Expander>
+                                <Expander Margin="0,8,0,0"
+                                          Style="{StaticResource V3dfyExpanderStyle}"
+                                          Header="{Binding GuidanceDetailsTitleText}">
+                                    <Border AutomationProperties.AutomationId="GuidanceDetailsCard"
+                                            Padding="10"
+                                            Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5">
+                                        <StackPanel>
+                                        <TextBlock Text="{Binding SelectedModelGuidanceText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,6,0,0"
+                                                   Text="{Binding PresetGuidanceText}"
+                                                   TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </Expander>
+                            </StackPanel>
+
+                            <StackPanel AutomationProperties.AutomationId="ConversionPlanStepContent"
+                                        Visibility="{Binding WizardConversionPlanStepVisibility}">
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="{Binding ConversionPlanTitle}" />
+                                <TextBlock Margin="0,0,0,10"
                                            Style="{StaticResource MutedTextStyle}"
                                            Text="{Binding ConversionPlanStatusText}"
                                            TextWrapping="Wrap" />
                                 <TextBlock Margin="0,0,0,8"
                                            FontWeight="SemiBold"
-                                           Text="{Binding ConversionPlanPresetText}"
+                                           Text="{Binding OutputLocationTitle}" />
+                                <TextBlock Margin="0,0,0,4"
+                                           Style="{StaticResource MutedTextStyle}"
+                                           Text="{Binding OutputPathLabel}" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding OutputPathText}" />
+                                    <Button Grid.Column="2"
+                                            Padding="10,5"
+                                            Command="{Binding BrowseOutputFolderCommand}"
+                                            Content="{Binding BrowseOutputFolderText}" />
+                                    <Button Grid.Column="4"
+                                            Padding="10,5"
+                                            Command="{Binding ResetOutputPathCommand}"
+                                            Content="{Binding ResetOutputPathText}" />
+                                </Grid>
+                                <CheckBox Margin="0,10,0,0"
+                                          Content="{Binding OpenOutputWhenFinishedText}"
+                                          IsChecked="{Binding OpenOutputWhenFinished,
+                                                              Mode=TwoWay}"
+                                          IsEnabled="{Binding CanChangeOpenOutputWhenFinished}" />
+                                <Border Margin="0,12,0,0"
+                                        Padding="10"
+                                        Background="{DynamicResource InputBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5"
+                                        Visibility="{Binding LgCompatibilityOptionsVisibility}">
+                                    <StackPanel>
+                                        <TextBlock Margin="0,0,0,8"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding LgCompatibilityCopyExplanationText}"
+                                                   TextWrapping="Wrap" />
+                                        <CheckBox Content="{Binding CreateLgCompatibilityCopyText}"
+                                                  IsChecked="{Binding CreateLgCompatibilityCopy,
+                                                                      Mode=TwoWay}"
+                                                  IsEnabled="{Binding CanChangeLgCompatibilityCopyOptions}" />
+                                        <CheckBox Margin="0,6,0,0"
+                                                  Content="{Binding PreferLgCompatibilityCopyWhenOpeningText}"
+                                                  IsChecked="{Binding PreferLgCompatibilityCopyWhenOpening,
+                                                                      Mode=TwoWay}"
+                                                  IsEnabled="{Binding CanPreferLgCompatibilityCopyWhenOpening}" />
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Margin="0,14,0,8"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding ReadyForConversionSummaryText}" />
+                                <TextBlock Text="{Binding ConversionPlanPresetText}"
                                            TextWrapping="Wrap" />
-                                <TextBlock Margin="0,0,0,8"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           Text="{Binding ConversionPlanLocalModelText}"
+                                <TextBlock Text="{Binding ConversionPlanLocalModelText}"
                                            TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding ConversionPlanOutputPathText}"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding ConversionPlanLgCompatibilityCopyPathText}"
-                                           TextWrapping="Wrap"
-                                           Visibility="{Binding LgCompatibilityCopyPathVisibility}" />
                                 <TextBlock Text="{Binding ConversionPlanOutputFormatText}"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding ConversionPlanResolutionText}" />
                                 <TextBlock Text="{Binding ConversionPlanThreeDLayoutText}" />
                                 <TextBlock Text="{Binding ConversionPlanQualityText}" />
                                 <TextBlock Text="{Binding ConversionPlanIntensityText}" />
+                                <TextBlock Text="{Binding CompactEstimateTimeConfidenceText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CompactOutputSizeFreeSpaceText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding ConversionPlanOutputPathText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding ConversionPlanLgCompatibilityCopyPathText}"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding LgCompatibilityCopyPathVisibility}" />
                                 <TextBlock Margin="0,8,0,0"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            Text="{Binding ConversionPlanDryRunReasonText}"
                                            TextWrapping="Wrap" />
-                                <TextBlock Margin="0,10,0,4"
-                                           FontWeight="SemiBold"
-                                           Text="{Binding ConversionPlanStepsTitle}" />
-                                <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
-                                           Text="{Binding ConversionPlanStepsText}"
-                                           TextWrapping="Wrap" />
-                                <TextBlock Margin="0,10,0,4"
-                                           FontWeight="SemiBold"
-                                           Text="{Binding ConversionPlanCommandPreviewTitle}" />
-                                <Border Padding="8"
-                                        Background="{DynamicResource LogBackgroundBrush}"
-                                        BorderBrush="{DynamicResource CardBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="4">
-                                    <TextBox MinHeight="70"
-                                             MaxHeight="130"
-                                             AcceptsReturn="True"
-                                             Background="{DynamicResource LogBackgroundBrush}"
-                                             BorderThickness="0"
-                                             FontFamily="Consolas"
-                                             FontSize="11"
-                                             HorizontalScrollBarVisibility="Auto"
-                                             IsReadOnly="True"
-                                             Text="{Binding ConversionPlanCommandPreviewText, Mode=OneWay}"
-                                             TextWrapping="NoWrap"
-                                             VerticalScrollBarVisibility="Auto">
-                                        <TextBox.Resources>
-                                            <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
-                                                   TargetType="ScrollBar" />
-                                        </TextBox.Resources>
-                                        <TextBox.ContextMenu>
-                                            <ContextMenu Style="{StaticResource V3dfyContextMenuStyle}">
-                                                <MenuItem Header="Copy"
-                                                          Command="ApplicationCommands.Copy"
-                                                          CommandTarget="{Binding PlacementTarget,
-                                                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                <MenuItem Header="Select all"
-                                                          Command="ApplicationCommands.SelectAll"
-                                                          CommandTarget="{Binding PlacementTarget,
-                                                                                  RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                            </ContextMenu>
-                                        </TextBox.ContextMenu>
-                                    </TextBox>
-                                </Border>
+                                <Expander Margin="0,10,0,0"
+                                          AutomationProperties.AutomationId="ConversionPlanTechnicalDetails"
+                                          Style="{StaticResource V3dfyExpanderStyle}"
+                                          Header="{Binding ConversionPlanTechnicalDetailsTitleText}">
+                                    <Border Margin="0,8,0,0"
+                                            Padding="10"
+                                            AutomationProperties.AutomationId="ConversionPlanTechnicalDetailsCard"
+                                            Background="{DynamicResource InputBackgroundBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5">
+                                        <StackPanel>
+                                            <TextBlock Margin="0,0,0,4"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding ConversionPlanStepsTitle}" />
+                                            <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       Text="{Binding ConversionPlanStepsText}"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Margin="0,10,0,4"
+                                                       FontWeight="SemiBold"
+                                                       Text="{Binding ConversionPlanCommandPreviewTitle}" />
+                                            <Border Padding="8"
+                                                    Background="{DynamicResource LogBackgroundBrush}"
+                                                    BorderBrush="{DynamicResource CardBorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4">
+                                                <TextBox MinHeight="70"
+                                                         MaxHeight="130"
+                                                         AcceptsReturn="True"
+                                                         Background="{DynamicResource LogBackgroundBrush}"
+                                                         BorderThickness="0"
+                                                         FontFamily="Consolas"
+                                                         FontSize="11"
+                                                         HorizontalScrollBarVisibility="Auto"
+                                                         IsReadOnly="True"
+                                                         Text="{Binding ConversionPlanCommandPreviewText, Mode=OneWay}"
+                                                         TextWrapping="NoWrap"
+                                                         VerticalScrollBarVisibility="Auto">
+                                                    <TextBox.Resources>
+                                                        <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
+                                                               TargetType="ScrollBar" />
+                                                    </TextBox.Resources>
+                                                    <TextBox.ContextMenu>
+                                                        <ContextMenu Style="{StaticResource V3dfyContextMenuStyle}">
+                                                            <MenuItem Header="Copy"
+                                                                      Command="ApplicationCommands.Copy"
+                                                                      CommandTarget="{Binding PlacementTarget,
+                                                                                              RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                            <MenuItem Header="Select all"
+                                                                      Command="ApplicationCommands.SelectAll"
+                                                                      CommandTarget="{Binding PlacementTarget,
+                                                                                              RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                        </ContextMenu>
+                                                    </TextBox.ContextMenu>
+                                                </TextBox>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+                                </Expander>
                             </StackPanel>
-                        </TabItem>
-                    </TabControl>
-                </Border>
+                        </Grid>
+                    </ScrollViewer>
 
+                    <Grid Grid.Row="3"
+                          Margin="0,14,0,0"
+                          AutomationProperties.AutomationId="WizardFooter">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button AutomationProperties.AutomationId="WizardBackButton"
+                                Command="{Binding WizardBackCommand}"
+                                Content="{Binding WizardBackText}"
+                                Style="{StaticResource WizardFooterSecondaryButtonStyle}"
+                                Visibility="{Binding WizardBackButtonVisibility}" />
+                        <Button Grid.Column="2"
+                                MinWidth="110"
+                                AutomationProperties.AutomationId="WizardNextButton"
+                                Command="{Binding WizardNextCommand}"
+                                Content="{Binding WizardNextText}"
+                                IsEnabled="{Binding CanMoveWizardNext}"
+                                Style="{StaticResource WizardFooterButtonStyle}"
+                                ToolTip="{Binding WizardNextToolTipText}"
+                                Visibility="{Binding WizardNextButtonVisibility}" />
+                        <Button Grid.Column="2"
+                                MinWidth="220"
+                                HorizontalAlignment="Right"
+                                AutomationProperties.AutomationId="ContinueWithConversionButton"
+                                Command="{Binding ContinueWithConversionCommand}"
+                                Content="{Binding ContinueWithConversionText}"
+                                IsEnabled="{Binding CanEnterPreviewConversionStage}"
+                                Style="{StaticResource WizardFooterButtonStyle}"
+                                Visibility="{Binding ContinueWithConversionFooterVisibility}" />
+                    </Grid>
                 </Grid>
-            </ScrollViewer>
+            </Border>
 
             <Border Margin="0,0,4,0"
                     Style="{StaticResource CardStyle}"
@@ -696,290 +902,215 @@
 
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
+                    <RowDefinition Height="{Binding PreviewConversionRowHeight}" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
                         ClipToBounds="True"
                         Margin="0,0,0,6"
-                        Style="{StaticResource CardStyle}">
+                        AutomationProperties.AutomationId="PreviewConversionStatusCard"
+                        Style="{StaticResource CardStyle}"
+                        Visibility="{Binding PreviewConversionStatusCardVisibility}">
                     <Grid ClipToBounds="True">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                       Text="{Binding SystemStatusTitle}" />
-                            <StackPanel Grid.Column="1"
-                                        Margin="0,0,0,8"
-                                        Orientation="Horizontal">
-                                <Button Margin="0,0,8,0"
-                                        AutomationProperties.AutomationId="ShowTechnicalDetailsButton"
-                                        Command="{Binding ShowTechnicalDetailsCommand}"
-                                        Content="{Binding SystemStatusDetailsButtonText}"
-                                        IsEnabled="{Binding CanUseSystemStatusActions}"
-                                        Style="{StaticResource SecondaryButtonStyle}" />
-                                <Button Padding="10,5"
-                                        Command="{Binding RefreshEngineStatusCommand}"
-                                        Content="{Binding RefreshText}"
-                                        IsEnabled="{Binding CanUseSystemStatusActions}" />
-                            </StackPanel>
-                        </Grid>
-                        <TabControl Grid.Row="1"
-                                    SelectedIndex="{Binding SelectedSystemStatusTabIndex,
-                                                            Mode=TwoWay}"
-                                    Style="{StaticResource WorkflowTabControlStyle}">
-                            <TabItem Header="{Binding SystemStatusToolsTabTitle}"
-                                     IsEnabled="{Binding CanOpenSystemStatusToolsTab}"
-                                     Style="{StaticResource WorkflowTabItemStyle}">
-                                <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                              VerticalScrollBarVisibility="Auto">
-                                    <ScrollViewer.Resources>
-                                        <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
-                                               TargetType="ScrollBar" />
-                                    </ScrollViewer.Resources>
-                                    <ItemsControl ItemsSource="{Binding ToolStatuses}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Grid Margin="0,4">
-                                                    <Grid.ToolTip>
-                                                        <ToolTip>
-                                                            <TextBlock MaxWidth="480"
-                                                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                                                       Text="{Binding PlacementTarget.DataContext.DetailText,
-                                                                                      RelativeSource={RelativeSource AncestorType=ToolTip}}"
-                                                                       TextWrapping="Wrap" />
-                                                        </ToolTip>
-                                                    </Grid.ToolTip>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="Auto" />
-                                                    </Grid.RowDefinitions>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding Name}" />
-                                                    <TextBlock Grid.Column="1"
-                                                               Margin="8,0,0,0"
-                                                               HorizontalAlignment="Right"
-                                                               TextAlignment="Right"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding StatusText}" />
-                                                    <TextBlock Grid.Row="1"
-                                                               Margin="0,2,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ReasonText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Button Grid.Row="1"
-                                                            Grid.Column="1"
-                                                            MinWidth="52"
-                                                            Margin="8,2,0,0"
-                                                            Padding="8,3"
-                                                            HorizontalAlignment="Right"
-                                                            VerticalAlignment="Top"
-                                                            Command="{Binding ContextActionCommand}"
-                                                            Content="{Binding ContextActionText}"
-                                                            Style="{StaticResource SecondaryButtonStyle}"
-                                                            ToolTip="{Binding ContextActionToolTip}"
-                                                            Visibility="{Binding ContextActionVisibility}" />
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </ScrollViewer>
-                            </TabItem>
-                            <TabItem Header="{Binding SystemStatusConversionTabTitle}"
-                                     IsEnabled="{Binding CanOpenSystemStatusConversionTab}"
-                                     Style="{StaticResource WorkflowTabItemStyle}">
-                                <Grid>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                                  VerticalScrollBarVisibility="Auto">
-                                        <ScrollViewer.Resources>
-                                            <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
-                                                   TargetType="ScrollBar" />
-                                        </ScrollViewer.Resources>
-                                        <StackPanel>
-                                            <Border Margin="0,0,0,12"
-                                                    Padding="10"
-                                                    Background="{DynamicResource InputBackgroundBrush}"
-                                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="5"
-                                                    Visibility="{Binding PreviewRequirementVisibility}">
-                                                <StackPanel>
-                                                    <TextBlock Margin="0,0,0,6"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding PreviewStepTitleText}" />
-                                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
-                                                               Margin="0,0,0,8"
-                                                               Text="{Binding PreviewRequiredInstructionText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="8" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel>
-                                                            <TextBlock Style="{StaticResource MutedTextStyle}"
-                                                                       Text="{Binding PreviewFromLabel}" />
-                                                            <TextBox Text="{Binding PreviewFromText,
-                                                                                    Mode=TwoWay,
-                                                                                    UpdateSourceTrigger=PropertyChanged}"
-                                                                     IsEnabled="{Binding CanEditPreviewTimeRange}" />
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="2">
-                                                            <TextBlock Style="{StaticResource MutedTextStyle}"
-                                                                       Text="{Binding PreviewToLabel}" />
-                                                            <TextBox Text="{Binding PreviewToText,
-                                                                                    Mode=TwoWay,
-                                                                                    UpdateSourceTrigger=PropertyChanged}"
-                                                                     IsEnabled="{Binding CanEditPreviewTimeRange}" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               Foreground="#B91C1C"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding PreviewTimeRangeValidationText}"
-                                                               TextWrapping="Wrap"
-                                                               Visibility="{Binding PreviewTimeRangeValidationVisibility}" />
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Margin="0,0,0,12"
-                                                    Padding="10"
-                                                    Background="{DynamicResource InputBackgroundBrush}"
-                                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="5"
-                                                    AutomationProperties.AutomationId="ConversionReadySummary"
-                                                    Visibility="{Binding ConversionReadySummaryVisibility}">
-                                                <StackPanel>
-                                                    <TextBlock Margin="0,0,0,6"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding ConversionReadyTitleText}" />
-                                                    <TextBlock Margin="0,0,0,8"
-                                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                                               Text="{Binding ConversionReadyBodyText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,0,0,4"
-                                                               Text="{Binding ConversionReadySelectedModelText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,0,0,4"
-                                                               Text="{Binding ConversionReadyOutputText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
-                                                               Text="{Binding ConversionReadyDestinationText}"
-                                                               TextWrapping="Wrap" />
-                                                </StackPanel>
-                                            </Border>
-                                            <StackPanel Visibility="{Binding ConversionRunningStatusVisibility}">
-                                                <TextBlock Text="{Binding ConversionReadinessStatusLabel}"
-                                                           Style="{StaticResource MutedTextStyle}" />
-                                                <TextBlock Margin="0,2,0,8"
-                                                           Text="{Binding ConversionReadinessStatusText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Text="{Binding ConversionExecutionStepLabel}"
-                                                           Style="{StaticResource MutedTextStyle}" />
-                                                <TextBlock Margin="0,2,0,8"
-                                                           Text="{Binding ConversionExecutionDetailText}"
-                                                           TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                   Text="{Binding PreviewConversionStatusTitleText}" />
+                        <ScrollViewer Grid.Row="1"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ScrollViewer.Resources>
+                                <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                                       TargetType="ScrollBar" />
+                            </ScrollViewer.Resources>
+                            <StackPanel>
+                                <TextBlock FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding PreviewConversionStatusText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Margin="0,4,0,12"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           Text="{Binding PreviewConversionStatusDetailText}"
+                                           TextWrapping="Wrap" />
+                                <Border Margin="0,0,0,12"
+                                        Padding="10"
+                                        Background="{DynamicResource InputBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5"
+                                        Visibility="{Binding PreviewRequirementVisibility}">
+                                    <StackPanel>
+                                        <TextBlock Margin="0,0,0,6"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding PreviewStepTitleText}" />
+                                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Margin="0,0,0,8"
+                                                   Text="{Binding PreviewRequiredInstructionText}"
+                                                   TextWrapping="Wrap" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="8" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding PreviewFromLabel}" />
+                                                <TextBox Text="{Binding PreviewFromText,
+                                                                        Mode=TwoWay,
+                                                                        UpdateSourceTrigger=PropertyChanged}"
+                                                         IsEnabled="{Binding CanEditPreviewTimeRange}" />
                                             </StackPanel>
-                                            <Grid Margin="0,0,0,10"
-                                                  AutomationProperties.AutomationId="ConversionTimingEstimates"
-                                                  Visibility="{Binding ConversionTimingEstimatesVisibility}">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ConversionElapsedLabelText}" />
-                                                    <TextBlock Margin="0,2,0,0"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding ConversionElapsedValueText}" />
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="1"
-                                                            Margin="10,0,0,0">
-                                                    <TextBlock Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ConversionRemainingLabelText}" />
-                                                    <TextBlock Margin="0,2,0,0"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding ConversionRemainingValueText}" />
-                                                </StackPanel>
-                                                <StackPanel Grid.Column="2"
-                                                            Margin="10,0,0,0">
-                                                    <TextBlock Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ConversionEstimatedTotalLabelText}" />
-                                                    <TextBlock Margin="0,2,0,0"
-                                                               FontWeight="SemiBold"
-                                                               Text="{Binding ConversionEstimatedTotalValueText}" />
-                                                </StackPanel>
-                                            </Grid>
-                                            <StackPanel Visibility="{Binding ConversionMissingRequirementsVisibility}">
-                                                <TextBlock Text="{Binding ConversionReadinessMissingRequirementsTitle}"
-                                                           Style="{StaticResource MutedTextStyle}" />
-                                                <TextBlock Margin="0,2,0,8"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           Text="{Binding ConversionReadinessMissingComponentsSummaryText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,0,0,10"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           Text="{Binding ConversionReadinessRequiredComponentsText}"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Margin="0,0,0,10"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           Text="{Binding ConversionBlockedReasonText}"
-                                                           TextWrapping="Wrap" />
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                           Text="{Binding PreviewToLabel}" />
+                                                <TextBox Text="{Binding PreviewToText,
+                                                                        Mode=TwoWay,
+                                                                        UpdateSourceTrigger=PropertyChanged}"
+                                                         IsEnabled="{Binding CanEditPreviewTimeRange}" />
                                             </StackPanel>
-                                        </StackPanel>
-                                    </ScrollViewer>
-                                    <Grid Grid.Row="1"
-                                          Margin="0,10,0,0">
-                                        <Button HorizontalAlignment="Stretch"
-                                                AutomationProperties.AutomationId="GeneratePreviewPrimaryActionButton"
-                                                Command="{Binding GeneratePreviewCommand}"
-                                                Content="{Binding GeneratePreviewText}"
-                                                Style="{StaticResource PrimaryCtaButtonStyle}"
-                                                Visibility="{Binding GeneratePreviewPrimaryActionVisibility}" />
-                                        <Button HorizontalAlignment="Stretch"
-                                                AutomationProperties.AutomationId="StartConversionButton"
-                                                Command="{Binding StartConversionCommand}"
-                                                Content="{Binding StartConversionText}"
-                                                Style="{StaticResource PrimaryCtaButtonStyle}"
-                                                Visibility="{Binding ConvertPrimaryActionVisibility}" />
-                                        <Button HorizontalAlignment="Stretch"
-                                                AutomationProperties.AutomationId="CancelConversionPrimaryActionButton"
-                                                Command="{Binding CancelConversionCommand}"
-                                                Content="{Binding CancelConversionText}"
-                                                FontSize="15"
-                                                FontWeight="Bold"
-                                                MinHeight="44"
-                                                Padding="16,11"
-                                                Style="{StaticResource DestructiveButtonStyle}"
-                                                Visibility="{Binding CancelConversionPrimaryActionVisibility}" />
-                                    </Grid>
+                                        </Grid>
+                                        <TextBlock Margin="0,4,0,0"
+                                                   Foreground="#B91C1C"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding PreviewTimeRangeValidationText}"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{Binding PreviewTimeRangeValidationVisibility}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Margin="0,0,0,12"
+                                        Padding="10"
+                                        Background="{DynamicResource InputBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5"
+                                        AutomationProperties.AutomationId="ConversionReadySummary"
+                                        Visibility="{Binding ConversionReadySummaryVisibility}">
+                                    <StackPanel>
+                                        <TextBlock Margin="0,0,0,6"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding ConversionReadyTitleText}" />
+                                        <TextBlock Margin="0,0,0,8"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding ConversionReadyBodyText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,0,0,4"
+                                                   Text="{Binding ConversionReadySelectedModelText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Margin="0,0,0,4"
+                                                   Text="{Binding ConversionReadyOutputText}"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding ConversionReadyDestinationText}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Visibility="{Binding ConversionRunningStatusVisibility}">
+                                    <TextBlock Text="{Binding ConversionReadinessStatusLabel}"
+                                               Style="{StaticResource MutedTextStyle}" />
+                                    <TextBlock Margin="0,2,0,8"
+                                               Text="{Binding ConversionReadinessStatusText}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding ConversionExecutionStepLabel}"
+                                               Style="{StaticResource MutedTextStyle}" />
+                                    <TextBlock Margin="0,2,0,8"
+                                               Text="{Binding ConversionExecutionDetailText}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Grid Margin="0,0,0,10"
+                                      AutomationProperties.AutomationId="ConversionTimingEstimates"
+                                      Visibility="{Binding ConversionTimingEstimatesVisibility}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding ConversionElapsedLabelText}" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding ConversionElapsedValueText}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1"
+                                                Margin="10,0,0,0">
+                                        <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding ConversionRemainingLabelText}" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding ConversionRemainingValueText}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2"
+                                                Margin="10,0,0,0">
+                                        <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                   Text="{Binding ConversionEstimatedTotalLabelText}" />
+                                        <TextBlock Margin="0,2,0,0"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding ConversionEstimatedTotalValueText}" />
+                                    </StackPanel>
                                 </Grid>
-                            </TabItem>
-                        </TabControl>
+                                <Border Margin="0,0,0,12"
+                                        Padding="10"
+                                        Background="{DynamicResource InputBackgroundBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5"
+                                        Visibility="{Binding PreviewConversionMissingToolsVisibility}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   Text="{Binding PreviewConversionMissingToolsText}"
+                                                   TextWrapping="Wrap" />
+                                        <Button Grid.Column="2"
+                                                MinWidth="52"
+                                                Padding="8,4"
+                                                AutomationProperties.AutomationId="PreviewConversionOpenSettingsButton"
+                                                Command="{Binding OpenToolsEngineSettingsCommand}"
+                                                Content="{Binding OpenSettingsForToolsText}"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Grid Grid.Row="2"
+                              Margin="0,10,0,0">
+                            <Button HorizontalAlignment="Stretch"
+                                    AutomationProperties.AutomationId="GeneratePreviewPrimaryActionButton"
+                                    Command="{Binding GeneratePreviewCommand}"
+                                    Content="{Binding GeneratePreviewText}"
+                                    Style="{StaticResource PrimaryCtaButtonStyle}"
+                                    Visibility="{Binding GeneratePreviewPrimaryActionVisibility}" />
+                            <Button HorizontalAlignment="Stretch"
+                                    AutomationProperties.AutomationId="StartConversionButton"
+                                    Command="{Binding StartConversionCommand}"
+                                    Content="{Binding StartConversionText}"
+                                    Style="{StaticResource PrimaryCtaButtonStyle}"
+                                    Visibility="{Binding ConvertPrimaryActionVisibility}" />
+                            <Button HorizontalAlignment="Stretch"
+                                    AutomationProperties.AutomationId="CancelConversionPrimaryActionButton"
+                                    Command="{Binding CancelConversionCommand}"
+                                    Content="{Binding CancelConversionText}"
+                                    FontSize="15"
+                                    FontWeight="Bold"
+                                    MinHeight="44"
+                                    Padding="16,11"
+                                    Style="{StaticResource DestructiveButtonStyle}"
+                                    Visibility="{Binding CancelConversionPrimaryActionVisibility}" />
+                        </Grid>
                     </Grid>
                 </Border>
 
                 <Border Grid.Row="1"
                         ClipToBounds="True"
-                        Margin="0,6,0,0"
+                        Margin="{Binding ActivityLogCardMargin}"
                         Style="{StaticResource CardStyle}"
                         Visibility="{Binding ActivityLogVisibility}">
                     <Grid>
@@ -1124,6 +1255,7 @@
               Style="{StaticResource V3dfyModalOverlayStyle}"
               Visibility="{Binding ModalOverlayVisibility}">
             <Border Width="{Binding ActiveModalWidth}"
+                    Height="{Binding ActiveModalHeight}"
                     MaxHeight="650"
                     MinHeight="360"
                     Margin="24"
@@ -1158,6 +1290,350 @@
                                        Text="{Binding PreviewGpuUsageText}" />
                             <TextBlock Text="{Binding PreviewVramUsageText}" />
                         </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="1"
+                          AutomationProperties.AutomationId="SettingsModal"
+                          Visibility="{Binding SettingsModalContentVisibility}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220" />
+                            <ColumnDefinition Width="18" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Padding="10"
+                                Background="{DynamicResource InputBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top"
+                                           Margin="0,0,0,8"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding SettingsSideMenuTitleText}" />
+                                <ListBox AutomationProperties.AutomationId="SettingsSideMenu"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         DisplayMemberPath="DisplayName"
+                                         ItemsSource="{Binding SettingsSectionOptions}"
+                                         ItemContainerStyle="{StaticResource SettingsMenuListBoxItemStyle}"
+                                         SelectedValue="{Binding SelectedSettingsSection,
+                                                                 Mode=TwoWay}"
+                                         SelectedValuePath="Value" />
+                            </DockPanel>
+                        </Border>
+                        <ScrollViewer Grid.Column="2"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ScrollViewer.Resources>
+                                <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                                       TargetType="ScrollBar" />
+                            </ScrollViewer.Resources>
+                            <Grid>
+                                <StackPanel AutomationProperties.AutomationId="VisualSettingsSection"
+                                            Visibility="{Binding VisualSettingsSectionVisibility}">
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                               Text="{Binding VisualSettingsTitleText}" />
+                                    <StackPanel AutomationProperties.AutomationId="VisualSettingsRows">
+                                        <StackPanel Margin="0,0,0,12">
+                                            <TextBlock Margin="0,0,0,4"
+                                                       Style="{StaticResource MutedTextStyle}"
+                                                       Text="{Binding LanguageLabel}" />
+                                            <ComboBox ItemsSource="{Binding LanguageOptions}"
+                                                      SelectedItem="{Binding SelectedLanguage}" />
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Margin="0,0,0,4"
+                                                       Style="{StaticResource MutedTextStyle}"
+                                                       Text="{Binding ThemeLabel}" />
+                                            <ComboBox ItemsSource="{Binding ThemeOptions}"
+                                                      SelectedItem="{Binding SelectedTheme}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <StackPanel AutomationProperties.AutomationId="ModelsSettingsSection"
+                                            Visibility="{Binding ModelsSettingsSectionVisibility}">
+                                    <Grid AutomationProperties.AutomationId="ModelsSettingsHeader"
+                                          Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                                   Text="{Binding ModelsSettingsTitleText}" />
+                                        <StackPanel Grid.Column="1"
+                                                    HorizontalAlignment="Right"
+                                                    Orientation="Horizontal">
+                                            <Button AutomationProperties.AutomationId="SettingsViewModelsButton"
+                                                    Command="{Binding ShowModelInventoryCommand}"
+                                                    Content="{Binding ViewModelsText}"
+                                                    IsEnabled="{Binding CanUseSystemStatusActions}"
+                                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Margin="0,0,0,12"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="{Binding ModelsSettingsIntroText}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock FontWeight="SemiBold"
+                                               Text="{Binding SelectableModelsSectionTitleText}" />
+                                    <Border Margin="0,6,0,10"
+                                            MinHeight="116"
+                                            MaxHeight="220"
+                                            AutomationProperties.AutomationId="SettingsSelectableModelsTable"
+                                            Background="{DynamicResource LogBackgroundBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5"
+                                            Visibility="{Binding SettingsSelectableModelsTableVisibility}">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+                                            <Border Style="{StaticResource TableHeaderBorderStyle}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="1.3*" />
+                                                        <ColumnDefinition Width="0.9*" />
+                                                        <ColumnDefinition Width="1.8*" />
+                                                        <ColumnDefinition Width="0.75*" />
+                                                        <ColumnDefinition Width="0.9*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock FontWeight="SemiBold"
+                                                               Text="{Binding SelectableModelNameHeaderText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Margin="8,0,0,0"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding SelectableModelIw3HeaderText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Margin="8,0,0,0"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding SelectableModelCheckpointHeaderText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Grid.Column="3"
+                                                               Margin="8,0,0,0"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding SelectableModelTypeHeaderText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Grid.Column="4"
+                                                               Margin="8,0,0,0"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding SelectableModelSourceHeaderText}"
+                                                               TextWrapping="Wrap" />
+                                                </Grid>
+                                            </Border>
+                                            <ScrollViewer Grid.Row="1"
+                                                          HorizontalScrollBarVisibility="Disabled"
+                                                          VerticalScrollBarVisibility="Auto">
+                                                <ScrollViewer.Resources>
+                                                    <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                                                           TargetType="ScrollBar" />
+                                                </ScrollViewer.Resources>
+                                                <ItemsControl AlternationCount="2"
+                                                              ItemsSource="{Binding SelectableModelInventoryRows}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Style="{StaticResource StripedTableRowBorderStyle}">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="1.3*" />
+                                                                        <ColumnDefinition Width="0.9*" />
+                                                                        <ColumnDefinition Width="1.8*" />
+                                                                        <ColumnDefinition Width="0.75*" />
+                                                                        <ColumnDefinition Width="0.9*" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding Model}"
+                                                                               TextWrapping="Wrap" />
+                                                                    <TextBlock Grid.Column="1"
+                                                                               Margin="8,0,0,0"
+                                                                               Text="{Binding Iw3DepthModel}"
+                                                                               TextWrapping="Wrap" />
+                                                                    <TextBlock Grid.Column="2"
+                                                                               Margin="8,0,0,0"
+                                                                               Text="{Binding Checkpoint}"
+                                                                               TextWrapping="Wrap" />
+                                                                    <TextBlock Grid.Column="3"
+                                                                               Margin="8,0,0,0"
+                                                                               Text="{Binding Type}"
+                                                                               TextWrapping="Wrap" />
+                                                                    <TextBlock Grid.Column="4"
+                                                                               Margin="8,0,0,0"
+                                                                               Text="{Binding Source}"
+                                                                               TextWrapping="Wrap" />
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Margin="0,6,0,10"
+                                               AutomationProperties.AutomationId="SettingsSelectableModelsEmptyState"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="{Binding SettingsSelectableModelsEmptyText}"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding SettingsSelectableModelsEmptyVisibility}" />
+                                    <TextBlock Style="{StaticResource MutedTextStyle}"
+                                               Text="{Binding ModelPackImportStatusText}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,6,0,12"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="{Binding LastModelPackImportSummary}"
+                                               TextWrapping="Wrap"
+                                               Visibility="{Binding LastModelPackImportSummaryVisibility}" />
+                                </StackPanel>
+
+                                <StackPanel AutomationProperties.AutomationId="ToolsEngineSettingsSection"
+                                            Visibility="{Binding ToolsEngineSettingsSectionVisibility}">
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                                   Text="{Binding ToolsEngineSettingsTitleText}" />
+                                        <Button Grid.Column="1"
+                                                Padding="10,5"
+                                                AutomationProperties.AutomationId="SettingsRefreshToolsButton"
+                                                Command="{Binding RefreshEngineStatusCommand}"
+                                                Content="{Binding RefreshText}"
+                                                IsEnabled="{Binding CanUseSystemStatusActions}"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </Grid>
+                                    <TextBlock Margin="0,0,0,12"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="{Binding ToolsEngineSettingsIntroText}"
+                                               TextWrapping="Wrap" />
+                                    <ItemsControl ItemsSource="{Binding ToolStatuses}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,10">
+                                                    <Grid.ToolTip>
+                                                        <ToolTip>
+                                                            <TextBlock MaxWidth="480"
+                                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                                       Text="{Binding PlacementTarget.DataContext.DetailText,
+                                                                                      RelativeSource={RelativeSource AncestorType=ToolTip}}"
+                                                                       TextWrapping="Wrap" />
+                                                        </ToolTip>
+                                                    </Grid.ToolTip>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock FontWeight="SemiBold"
+                                                               Text="{Binding Name}" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Margin="8,0,0,0"
+                                                               MinWidth="80"
+                                                               HorizontalAlignment="Right"
+                                                               FontWeight="SemiBold"
+                                                               TextAlignment="Right"
+                                                               Text="{Binding StatusText}" />
+                                                    <TextBlock Grid.Row="1"
+                                                               Margin="0,2,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ReasonText}"
+                                                               TextWrapping="Wrap" />
+                                                    <Button Grid.Row="1"
+                                                            Grid.Column="1"
+                                                            MinWidth="52"
+                                                            Margin="8,2,0,0"
+                                                            Padding="8,3"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Command="{Binding ContextActionCommand}"
+                                                            Content="{Binding ContextActionText}"
+                                                            Style="{StaticResource SecondaryButtonStyle}"
+                                                            ToolTip="{Binding ContextActionToolTip}"
+                                                            Visibility="{Binding ContextActionVisibility}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <StackPanel AutomationProperties.AutomationId="LogsDiagnosticsSettingsSection"
+                                            Visibility="{Binding LogsDiagnosticsSettingsSectionVisibility}">
+                                    <Grid Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                                   Text="{Binding LogsDiagnosticsSettingsTitleText}" />
+                                        <Button Grid.Column="1"
+                                                Padding="10,5"
+                                                AutomationProperties.AutomationId="SettingsCopyLogButton"
+                                                Command="{Binding CopyFullLogCommand}"
+                                                Content="{Binding CopyFullLogText}"
+                                                Style="{StaticResource SecondaryButtonStyle}" />
+                                    </Grid>
+                                    <TextBlock Margin="0,0,0,12"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Text="{Binding LogsDiagnosticsSettingsIntroText}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,0,0,4"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding LogsDiagnosticsTechnicalDetailsTitleText}" />
+                                    <Border Padding="8"
+                                            Background="{DynamicResource LogBackgroundBrush}"
+                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4">
+                                        <TextBox MinHeight="240"
+                                                 AcceptsReturn="True"
+                                                 Background="{DynamicResource LogBackgroundBrush}"
+                                                 BorderThickness="0"
+                                                 FontFamily="Consolas"
+                                                 FontSize="12"
+                                                 HorizontalScrollBarVisibility="Auto"
+                                                 IsReadOnly="True"
+                                                 Text="{Binding LogsDiagnosticsTechnicalDetailsText, Mode=OneWay}"
+                                                 TextWrapping="NoWrap"
+                                                 VerticalScrollBarVisibility="Auto">
+                                            <TextBox.Resources>
+                                                <Style BasedOn="{StaticResource TechnicalLogScrollBarStyle}"
+                                                       TargetType="ScrollBar" />
+                                            </TextBox.Resources>
+                                            <TextBox.ContextMenu>
+                                                <ContextMenu Style="{StaticResource V3dfyContextMenuStyle}">
+                                                    <MenuItem Header="Copy"
+                                                              Command="ApplicationCommands.Copy"
+                                                              CommandTarget="{Binding PlacementTarget,
+                                                                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <MenuItem Header="Select all"
+                                                              Command="ApplicationCommands.SelectAll"
+                                                              CommandTarget="{Binding PlacementTarget,
+                                                                                      RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                </ContextMenu>
+                                            </TextBox.ContextMenu>
+                                        </TextBox>
+                                    </Border>
+                                </StackPanel>
+
+                                <StackPanel AutomationProperties.AutomationId="AboutLicensesSettingsSection"
+                                            Visibility="{Binding AboutLicensesSettingsSectionVisibility}">
+                                    <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                               Text="{Binding AboutLicensesSettingsTitleText}" />
+                                    <TextBlock Text="{Binding AboutLicensesText}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Margin="0,14,0,4"
+                                               FontWeight="SemiBold"
+                                               Text="{Binding AboutModelNoticesTitleText}" />
+                                    <TextBlock Text="{Binding AboutModelNoticesText}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
                     </Grid>
 
                     <TextBox Grid.Row="1"
@@ -1855,6 +2331,12 @@
                                TextWrapping="Wrap"
                                Visibility="{Binding ReplaceVideoConfirmationModalContentVisibility}" />
 
+                    <TextBlock Grid.Row="1"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               Text="{Binding PreviewInvalidationConfirmationBodyText}"
+                               TextWrapping="Wrap"
+                               Visibility="{Binding PreviewInvalidationConfirmationModalContentVisibility}" />
+
                     <Grid Grid.Row="1"
                           Visibility="{Binding ConversionCompletedModalContentVisibility}">
                         <Grid.RowDefinitions>
@@ -1922,6 +2404,16 @@
                                 Command="{Binding ConfirmReplaceVideoCommand}"
                                 Content="{Binding ReplaceVideoConfirmText}"
                                 Visibility="{Binding ReplaceVideoConfirmationModalContentVisibility}" />
+                        <Button AutomationProperties.AutomationId="CancelPreviewInvalidationButton"
+                                Command="{Binding CancelPreviewInvalidationCommand}"
+                                Content="{Binding CancelDialogText}"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Visibility="{Binding PreviewInvalidationConfirmationModalContentVisibility}" />
+                        <Button Margin="8,0,0,0"
+                                AutomationProperties.AutomationId="ConfirmPreviewInvalidationButton"
+                                Command="{Binding ConfirmPreviewInvalidationCommand}"
+                                Content="{Binding PreviewInvalidationConfirmText}"
+                                Visibility="{Binding PreviewInvalidationConfirmationModalContentVisibility}" />
                         <Button Margin="8,0,0,0"
                                 AutomationProperties.AutomationId="AcceptConversionCompletedButton"
                                 Command="{Binding AcceptConversionCompletedCommand}"
@@ -1969,6 +2461,10 @@
                                 Command="{Binding CloseProfileDetailsCommand}"
                                 Content="{Binding CloseDialogText}"
                                 Visibility="{Binding ProfileDetailsModalContentVisibility}" />
+                        <Button AutomationProperties.AutomationId="CloseSettingsButton"
+                                Command="{Binding CloseSettingsCommand}"
+                                Content="{Binding CloseDialogText}"
+                                Visibility="{Binding SettingsModalContentVisibility}" />
                     </StackPanel>
                 </Grid>
             </Border>

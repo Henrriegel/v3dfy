@@ -5,206 +5,351 @@ namespace V3dfy.Tests.App;
 public sealed class MainWindowXamlStructureTests
 {
     [Fact]
-    public void ConversionPlanTab_ContainsOutputProfileSelectorBeforeOutputContainer()
+    public void MainWorkflow_UsesStepperWizardInsteadOfTabNavigation()
     {
         var xaml = ReadMainWindowXaml();
+        var wizard = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"MainWorkflowWizard\"",
+            "AutomationProperties.AutomationId=\"WizardFooter\"");
 
-        var profileSelectorIndex = xaml.IndexOf(
-            "SelectedOutputPreset",
-            StringComparison.Ordinal);
-        var outputContainerIndex = xaml.IndexOf(
-            "SelectedOutputContainer",
-            StringComparison.Ordinal);
-
-        Assert.True(profileSelectorIndex >= 0);
-        Assert.True(outputContainerIndex >= 0);
-        Assert.True(profileSelectorIndex < outputContainerIndex);
-        Assert.Contains("ShowProfileDetailsCommand", xaml);
-        Assert.Contains("ProfileDetailsBodyText", xaml);
+        Assert.DoesNotContain("<TabControl", xaml);
+        Assert.DoesNotContain("<TabItem", xaml);
+        Assert.Contains("SourceAndAnalysisStepTitle", wizard);
+        Assert.Contains("ThreeDSetupStepTitle", wizard);
+        Assert.Contains("WizardConversionPlanStepTitle", wizard);
+        Assert.Contains("SourceAndAnalysisStepState", wizard);
+        Assert.Contains("ThreeDSetupStepState", wizard);
+        Assert.Contains("ConversionPlanStepState", wizard);
     }
 
     [Fact]
-    public void ConversionPlanTab_ContainsPreflightEstimateAndGuidanceSummary()
+    public void WizardFooter_HasFixedBackNextOutsideScrollableContent()
+    {
+        var xaml = ReadMainWindowXaml();
+        var footerButtonStyle = ExtractSourceRange(
+            xaml,
+            "x:Key=\"WizardFooterButtonStyle\"",
+            "x:Key=\"WizardFooterSecondaryButtonStyle\"");
+        var footerSecondaryButtonStyle = ExtractSourceRange(
+            xaml,
+            "x:Key=\"WizardFooterSecondaryButtonStyle\"",
+            "x:Key=\"SettingsMenuListBoxItemStyle\"");
+        var scrollContent = ExtractSourceRange(
+            xaml,
+            "<ScrollViewer Grid.Row=\"1\"",
+            "AutomationProperties.AutomationId=\"WizardFooter\"");
+        var footer = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"WizardFooter\"",
+            "Visibility=\"{Binding ConversionRunningVisibility}\"");
+        var backButton = ExtractSourceRange(
+            footer,
+            "AutomationProperties.AutomationId=\"WizardBackButton\"",
+            "AutomationProperties.AutomationId=\"WizardNextButton\"");
+        var nextButton = ExtractSourceRange(
+            footer,
+            "MinWidth=\"110\"",
+            "AutomationProperties.AutomationId=\"ContinueWithConversionButton\"");
+        var continueButton = ExtractSourceRange(
+            footer,
+            "MinWidth=\"220\"",
+            "</Grid>");
+
+        Assert.DoesNotContain("WizardBackButton", scrollContent);
+        Assert.DoesNotContain("WizardNextButton", scrollContent);
+        Assert.DoesNotContain("ContinueWithConversionButton", scrollContent);
+        Assert.Contains("<Setter Property=\"Height\" Value=\"34\" />", footerButtonStyle);
+        Assert.Contains("<Setter Property=\"Padding\" Value=\"10,5\" />", footerButtonStyle);
+        Assert.Contains("<Setter Property=\"MinWidth\" Value=\"88\" />", footerButtonStyle);
+        Assert.Contains("<Setter Property=\"Height\" Value=\"34\" />", footerSecondaryButtonStyle);
+        Assert.Contains("<Setter Property=\"Padding\" Value=\"10,5\" />", footerSecondaryButtonStyle);
+        Assert.Contains("<Setter Property=\"MinWidth\" Value=\"88\" />", footerSecondaryButtonStyle);
+        Assert.Contains("AutomationProperties.AutomationId=\"WizardBackButton\"", footer);
+        Assert.Contains("Command=\"{Binding WizardBackCommand}\"", footer);
+        Assert.Contains("Visibility=\"{Binding WizardBackButtonVisibility}\"", footer);
+        Assert.Contains("Style=\"{StaticResource WizardFooterSecondaryButtonStyle}\"", backButton);
+        Assert.Contains("AutomationProperties.AutomationId=\"WizardNextButton\"", footer);
+        Assert.Contains("Command=\"{Binding WizardNextCommand}\"", footer);
+        Assert.Contains("IsEnabled=\"{Binding CanMoveWizardNext}\"", footer);
+        Assert.Contains("ToolTip=\"{Binding WizardNextToolTipText}\"", footer);
+        Assert.Contains("Visibility=\"{Binding WizardNextButtonVisibility}\"", footer);
+        Assert.Contains("Style=\"{StaticResource WizardFooterButtonStyle}\"", nextButton);
+        Assert.Contains("MinWidth=\"110\"", nextButton);
+        Assert.Contains("AutomationProperties.AutomationId=\"ContinueWithConversionButton\"", footer);
+        Assert.Contains("Command=\"{Binding ContinueWithConversionCommand}\"", footer);
+        Assert.Contains("Visibility=\"{Binding ContinueWithConversionFooterVisibility}\"", footer);
+        Assert.Contains("IsEnabled=\"{Binding CanEnterPreviewConversionStage}\"", footer);
+        Assert.Contains("Style=\"{StaticResource WizardFooterButtonStyle}\"", continueButton);
+        Assert.Contains("MinWidth=\"220\"", continueButton);
+        Assert.Contains("HorizontalAlignment=\"Right\"", continueButton);
+        Assert.DoesNotContain("HorizontalAlignment=\"Stretch\"", continueButton);
+        Assert.DoesNotContain("Padding=", continueButton);
+        Assert.DoesNotContain("MinHeight=", footer);
+        Assert.DoesNotContain("Style=\"{StaticResource PrimaryCtaButtonStyle}\"", footer);
+    }
+
+    [Fact]
+    public void SourceAndAnalysisStep_ContainsSelectionAndAnalysisTogether()
+    {
+        var xaml = ReadMainWindowXaml();
+        var step = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"SourceAndAnalysisStepContent\"",
+            "AutomationProperties.AutomationId=\"ThreeDSetupStepContent\"");
+
+        Assert.Contains("DropVideoText", step);
+        Assert.Contains("SelectedVideoDisplayPath", step);
+        Assert.Contains("SelectVideoCommand", step);
+        Assert.Contains("AnalyzeCommand", step);
+        Assert.Contains("SourceAnalysisEmptyHintText", step);
+        Assert.Contains("Visibility=\"{Binding SourceAnalysisEmptyHintVisibility}\"", step);
+        Assert.Contains("AutomationProperties.AutomationId=\"VideoAnalysisSection\"", step);
+        Assert.Contains("Visibility=\"{Binding VideoAnalysisSectionVisibility}\"", step);
+        Assert.Contains("VideoAnalysisPendingStatusText", step);
+        Assert.Contains("Visibility=\"{Binding VideoAnalysisPendingStatusVisibility}\"", step);
+        Assert.Contains("Visibility=\"{Binding VideoAnalysisResultsVisibility}\"", step);
+        Assert.Contains("VideoAnalysisTitle", step);
+        Assert.Contains("AnalysisDurationText", step);
+        Assert.Contains("AnalysisResolutionText", step);
+        Assert.Contains("AnalysisFpsText", step);
+        Assert.Contains("AnalysisCodecText", step);
+        Assert.Contains("AnalysisContainerText", step);
+        Assert.Contains("AnalysisAudioStreamsText", step);
+        Assert.Contains("AnalysisSubtitleStreamsText", step);
+        Assert.Contains("AnalysisHdrText", step);
+        Assert.Contains("AnalysisCompatibilityText", step);
+    }
+
+    [Fact]
+    public void ThreeDSetupStep_ContainsSetupModelGuidanceAndCompactEstimates()
+    {
+        var xaml = ReadMainWindowXaml();
+        var step = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"ThreeDSetupStepContent\"",
+            "AutomationProperties.AutomationId=\"ConversionPlanStepContent\"");
+
+        Assert.Contains("SelectedOutputPreset", step);
+        Assert.Contains("SelectedOutputContainer", step);
+        Assert.Contains("SelectedQualityPreset", step);
+        Assert.Contains("SelectedThreeDIntensity", step);
+        Assert.Contains("SelectedThreeDOutputFormat", step);
+        Assert.Contains("SelectedLocalModelCandidate", step);
+        Assert.Contains("CompactEstimateTimeConfidenceText", step);
+        Assert.Contains("CompactOutputSizeFreeSpaceText", step);
+        Assert.Contains("CompactSelectedModelGuidanceText", step);
+        Assert.Contains("CompactPresetGuidanceText", step);
+        Assert.Contains("EstimateDetailsTitleText", step);
+        Assert.Contains("Style=\"{StaticResource V3dfyExpanderStyle}\"", step);
+        Assert.Contains("AutomationProperties.AutomationId=\"EstimateDetailsCard\"", step);
+        Assert.Contains("EstimateBasisText", step);
+        Assert.Contains("PerformanceHistoryPrivacyText", step);
+        Assert.Contains("GuidanceDetailsTitleText", step);
+        Assert.Contains("AutomationProperties.AutomationId=\"GuidanceDetailsCard\"", step);
+        Assert.DoesNotContain("OutputPathText", step);
+    }
+
+    [Fact]
+    public void ConversionPlanStep_IsCompactOutputFocusedWithTechnicalDetailsCollapsed()
+    {
+        var xaml = ReadMainWindowXaml();
+        var step = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"ConversionPlanStepContent\"",
+            "AutomationProperties.AutomationId=\"WizardFooter\"");
+
+        Assert.Contains("OutputPathText", step);
+        Assert.Contains("BrowseOutputFolderCommand", step);
+        Assert.Contains("ResetOutputPathCommand", step);
+        Assert.Contains("OpenOutputWhenFinished", step);
+        Assert.Contains("LgCompatibilityOptionsVisibility", step);
+        Assert.Contains("ReadyForConversionSummaryText", step);
+        Assert.Contains("ConversionPlanPresetText", step);
+        Assert.Contains("ConversionPlanLocalModelText", step);
+        Assert.Contains("ConversionPlanOutputFormatText", step);
+        Assert.Contains("ConversionPlanResolutionText", step);
+        Assert.Contains("ConversionPlanThreeDLayoutText", step);
+        Assert.Contains("ConversionPlanQualityText", step);
+        Assert.Contains("ConversionPlanIntensityText", step);
+        Assert.Contains("CompactEstimateTimeConfidenceText", step);
+        Assert.Contains("CompactOutputSizeFreeSpaceText", step);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ContinueWithConversionButton\"", step);
+        Assert.DoesNotContain("Command=\"{Binding ContinueWithConversionCommand}\"", step);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConversionPlanTechnicalDetails\"", step);
+        Assert.Contains("Style=\"{StaticResource V3dfyExpanderStyle}\"", step);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConversionPlanTechnicalDetailsCard\"", step);
+        Assert.Contains("ConversionPlanStepsText", step);
+        Assert.Contains("ConversionPlanCommandPreviewText", step);
+    }
+
+    [Fact]
+    public void RightPanel_UsesContextualPreviewConversionStatusAndKeepsActivityLogBelow()
+    {
+        var xaml = ReadMainWindowXaml();
+        var rightTop = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"PreviewConversionStatusCard\"",
+            "AutomationProperties.AutomationId=\"GeneratePreviewPrimaryActionButton\"");
+
+        Assert.DoesNotContain("PreviewConversionPlaceholderCard", xaml);
+        Assert.Contains("<RowDefinition Height=\"{Binding PreviewConversionRowHeight}\" />", xaml);
+        Assert.Contains("Margin=\"{Binding ActivityLogCardMargin}\"", xaml);
+        Assert.Contains("Visibility=\"{Binding PreviewConversionStatusCardVisibility}\"", rightTop);
+        Assert.Contains("PreviewConversionStatusTitleText", rightTop);
+        Assert.Contains("PreviewConversionStatusText", rightTop);
+        Assert.Contains("PreviewConversionStatusDetailText", rightTop);
+        Assert.Contains("PreviewRequirementVisibility", rightTop);
+        Assert.Contains("ConversionReadySummary", rightTop);
+        Assert.Contains("PreviewConversionMissingToolsText", rightTop);
+        Assert.Contains("OpenToolsEngineSettingsCommand", rightTop);
+        Assert.DoesNotContain("ToolStatuses", rightTop);
+        Assert.DoesNotContain("RefreshEngineStatusCommand", rightTop);
+        Assert.DoesNotContain("ShowTechnicalDetailsCommand", rightTop);
+        Assert.DoesNotContain("ConversionReadinessMissingComponentsSummaryText", rightTop);
+        Assert.DoesNotContain("ConversionReadinessRequiredComponentsText", rightTop);
+        Assert.DoesNotContain("ConversionBlockedReasonText", rightTop);
+        Assert.Contains("Grid.Row=\"1\"", xaml);
+        Assert.Contains("Text=\"{Binding ActivityLogTitle}\"", xaml);
+        Assert.Contains("<RowDefinition Height=\"*\" />", xaml);
+    }
+
+    [Fact]
+    public void Header_UsesSingleGearAndSettingsModalHasSideMenu()
     {
         var xaml = ReadMainWindowXaml();
         var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
-        var planTab = ExtractSourceRange(
+        var header = ExtractSourceRange(
             xaml,
-            "Header=\"{Binding ConversionPlanTitle}\"",
-            "Text=\"{Binding ConversionPlanStatusText}\"");
+            "<Grid Margin=\"0,0,0,18\">",
+            "<Grid Grid.Row=\"1\">");
+        var settings = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"SettingsModal\"",
+            "Visibility=\"{Binding TechnicalDetailsModalContentVisibility}\"");
 
-        Assert.Contains("AutomationProperties.AutomationId=\"ConversionPreflightEstimates\"", planTab);
-        Assert.Contains("Text=\"{Binding EstimatedConversionTimeText}\"", planTab);
-        Assert.Contains("Text=\"{Binding EstimateConfidenceText}\"", planTab);
-        Assert.Contains("Text=\"{Binding EstimateBasisText}\"", planTab);
-        Assert.Contains("Text=\"{Binding EstimatedOutputSizeText}\"", planTab);
-        Assert.Contains("Text=\"{Binding RecommendedFreeSpaceText}\"", planTab);
-        Assert.Contains("Text=\"{Binding SelectedModelGuidanceText}\"", planTab);
-        Assert.Contains("Text=\"{Binding PresetGuidanceText}\"", planTab);
-        Assert.Contains("Text=\"{Binding PerformanceHistoryPrivacyText}\"", planTab);
-        Assert.Contains("Performance history is stored locally", viewModel);
-        Assert.Contains("No telemetry or file paths are stored", viewModel);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsButton\"", header);
+        Assert.Contains("AutomationProperties.Name=\"{Binding SettingsText}\"", header);
+        Assert.Contains("ToolTip=\"{Binding SettingsText}\"", header);
+        Assert.DoesNotContain("LanguageOptions", header);
+        Assert.DoesNotContain("ThemeOptions", header);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsSideMenu\"", settings);
+        Assert.Contains("ItemsSource=\"{Binding SettingsSectionOptions}\"", settings);
+        Assert.Contains("SelectedValue=\"{Binding SelectedSettingsSection", settings);
+        Assert.Contains("Height=\"{Binding ActiveModalHeight}\"", xaml);
+        Assert.Contains("ActiveModalHeight => IsSettingsModalOpen ? 650d : double.NaN", viewModel);
+        Assert.Contains("<ScrollViewer Grid.Column=\"2\"", settings);
+        Assert.Contains("AutomationProperties.AutomationId=\"CloseSettingsButton\"", xaml);
+        Assert.Contains("Grid.Row=\"1\"", settings);
     }
 
     [Fact]
-    public void ConversionPlanTab_KeepsConvertButtonInPrimaryActionSlot()
+    public void SettingsModal_ContainsVisualToolsAndDiagnosticSections()
     {
         var xaml = ReadMainWindowXaml();
-        var preflightIndex = xaml.IndexOf(
-            "AutomationProperties.AutomationId=\"ConversionPreflightEstimates\"",
-            StringComparison.Ordinal);
-        var startButtonIndex = xaml.IndexOf(
-            "AutomationProperties.AutomationId=\"StartConversionButton\"",
-            StringComparison.Ordinal);
+        var settings = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"SettingsModal\"",
+            "Visibility=\"{Binding TechnicalDetailsModalContentVisibility}\"");
 
-        Assert.True(preflightIndex >= 0);
-        Assert.True(startButtonIndex > preflightIndex);
-        Assert.Contains("Grid.Row=\"1\"", xaml);
-        Assert.Contains("Command=\"{Binding StartConversionCommand}\"", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"VisualSettingsSection\"", settings);
+        var visual = ExtractSourceRange(
+            settings,
+            "AutomationProperties.AutomationId=\"VisualSettingsSection\"",
+            "AutomationProperties.AutomationId=\"ModelsSettingsSection\"");
+        Assert.Contains("AutomationProperties.AutomationId=\"VisualSettingsRows\"", visual);
+        Assert.Contains("ItemsSource=\"{Binding LanguageOptions}\"", settings);
+        Assert.Contains("ItemsSource=\"{Binding ThemeOptions}\"", settings);
+        Assert.DoesNotContain("<Grid.ColumnDefinitions>", visual);
+        Assert.DoesNotContain("Grid.Column=\"2\"", visual);
+        Assert.DoesNotContain("PreviewConversionSettingsSection", settings);
+        Assert.DoesNotContain("PreviewConversionSettingsTitleText", settings);
+        Assert.Contains("AutomationProperties.AutomationId=\"ModelsSettingsHeader\"", settings);
+        var models = ExtractSourceRange(
+            settings,
+            "AutomationProperties.AutomationId=\"ModelsSettingsSection\"",
+            "AutomationProperties.AutomationId=\"ToolsEngineSettingsSection\"");
+        var modelsHeader = ExtractSourceRange(
+            models,
+            "AutomationProperties.AutomationId=\"ModelsSettingsHeader\"",
+            "Text=\"{Binding ModelsSettingsIntroText}\"");
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsViewModelsButton\"", modelsHeader);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SettingsImportModelPackButton\"", modelsHeader);
+        Assert.Equal(1, CountOccurrences(models, "AutomationProperties.AutomationId=\"SettingsViewModelsButton\""));
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SettingsImportModelPackButton\"", models);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsSelectableModelsTable\"", models);
+        Assert.Contains("ItemsSource=\"{Binding SelectableModelInventoryRows}\"", models);
+        Assert.Contains("Text=\"{Binding SelectableModelNameHeaderText}\"", models);
+        Assert.Contains("Text=\"{Binding SelectableModelIw3HeaderText}\"", models);
+        Assert.Contains("Text=\"{Binding SelectableModelCheckpointHeaderText}\"", models);
+        Assert.Contains("Text=\"{Binding SelectableModelTypeHeaderText}\"", models);
+        Assert.Contains("Text=\"{Binding SelectableModelSourceHeaderText}\"", models);
+        Assert.Contains("Text=\"{Binding Iw3DepthModel}\"", models);
+        Assert.Contains("Text=\"{Binding Checkpoint}\"", models);
+        Assert.Contains("Text=\"{Binding Type}\"", models);
+        Assert.Contains("Text=\"{Binding Source}\"", models);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsSelectableModelsEmptyState\"", models);
+        Assert.Contains("Visibility=\"{Binding SettingsSelectableModelsEmptyVisibility}\"", models);
+        Assert.Contains("AutomationProperties.AutomationId=\"ToolsEngineSettingsSection\"", settings);
+        Assert.Contains("ItemsSource=\"{Binding ToolStatuses}\"", settings);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsRefreshToolsButton\"", settings);
+        Assert.Contains("Command=\"{Binding RefreshEngineStatusCommand}\"", settings);
+        Assert.Contains("Command=\"{Binding ContextActionCommand}\"", settings);
+        Assert.Contains("MinWidth=\"80\"", settings);
+        Assert.Contains("TextAlignment=\"Right\"", settings);
+        Assert.Contains("AutomationProperties.AutomationId=\"LogsDiagnosticsSettingsSection\"", settings);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsCopyLogButton\"", settings);
+        Assert.Contains("Command=\"{Binding CopyFullLogCommand}\"", settings);
+        Assert.Contains("LogsDiagnosticsTechnicalDetailsText", settings);
+        Assert.DoesNotContain("SettingsViewLogButton", settings);
+        Assert.DoesNotContain("Command=\"{Binding ViewActivityLogCommand}\"", settings);
+        Assert.DoesNotContain("Command=\"{Binding ShowTechnicalDetailsCommand}\"", settings);
+        Assert.DoesNotContain("ConversionPlanStepsText", settings);
+        Assert.DoesNotContain("ConversionPlanCommandPreviewText", settings);
+        Assert.Contains("AutomationProperties.AutomationId=\"AboutLicensesSettingsSection\"", settings);
+        Assert.Contains("AboutModelNoticesText", settings);
     }
 
     [Fact]
-    public void MainWindow_DoesNotKeepPermanentSelectedOutputPresetCard()
+    public void PreviewInvalidationConfirmation_UsesStyledModalAndLocalizedActions()
     {
         var xaml = ReadMainWindowXaml();
+        var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var modal = ExtractSourceRange(
+            xaml,
+            "PreviewInvalidationConfirmationBodyText",
+            "Visibility=\"{Binding ConversionCompletedModalContentVisibility}\"");
+        var footer = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"CancelPreviewInvalidationButton\"",
+            "AutomationProperties.AutomationId=\"AcceptConversionCompletedButton\"");
 
-        Assert.DoesNotContain("RecommendedPresetTitle", xaml);
-        Assert.DoesNotContain("Grid.Row=\"4\" Style=\"{StaticResource CardStyle}\"", xaml);
+        Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", xaml);
+        Assert.Contains("Style=\"{StaticResource V3dfyModalCardStyle}\"", xaml);
+        Assert.Contains("PreviewInvalidationConfirmationModalContentVisibility", modal);
+        Assert.Contains("Command=\"{Binding CancelPreviewInvalidationCommand}\"", footer);
+        Assert.Contains("Command=\"{Binding ConfirmPreviewInvalidationCommand}\"", footer);
+        Assert.Contains("Content=\"{Binding PreviewInvalidationConfirmText}\"", footer);
+        Assert.Contains("\"Changing this setting requires a new preview\"", viewModel);
+        Assert.Contains("\"Este cambio requiere generar un nuevo preview\"", viewModel);
+        Assert.DoesNotContain("MessageBox", xaml);
+        Assert.DoesNotContain("MessageBox", viewModel);
     }
 
     [Fact]
-    public void ConversionPlanTab_HidesLgOptionsBehindProfileVisibilityBinding()
-    {
-        var xaml = ReadMainWindowXaml();
-        var appResources = ReadAppXaml();
-
-        Assert.Contains("Visibility=\"{Binding LgCompatibilityOptionsVisibility}\"", xaml);
-        Assert.Contains("CreateLgCompatibilityCopyText", xaml);
-        Assert.Contains("PreferLgCompatibilityCopyWhenOpeningText", xaml);
-        Assert.Contains("LgCompatibilityCopyExplanationText", xaml);
-        Assert.Contains("InputBackgroundBrush", xaml);
-        Assert.Contains("CardBorderBrush", xaml);
-        Assert.Contains("BorderThickness=\"1\"", xaml);
-        Assert.Contains("<Style TargetType=\"CheckBox\">", appResources);
-        Assert.Contains("PrimaryTextBrush", appResources);
-    }
-
-    [Fact]
-    public void SystemStatusConversionTab_ContainsRequiredSelectedConfigurationPreviewStep()
-    {
-        var xaml = ReadMainWindowXaml();
-
-        Assert.Contains("PreviewStepTitleText", xaml);
-        Assert.Contains("PreviewRequiredInstructionText", xaml);
-        Assert.Contains("GeneratePreviewCommand", xaml);
-        Assert.Contains("PreviewFromText", xaml);
-        Assert.Contains("PreviewToText", xaml);
-        Assert.Contains("PreviewTimeRangeValidationText", xaml);
-        Assert.Contains("StartConversionButton", xaml);
-        Assert.Contains("PreviewRequirementVisibility", xaml);
-        Assert.DoesNotContain("PreviewMaximumDurationText", xaml);
-        Assert.DoesNotContain("PreviewGateStatusText", xaml);
-        Assert.DoesNotContain("PreviewGateDetailText", xaml);
-        Assert.DoesNotContain("DeletePreviewCommand", xaml);
-        Assert.DoesNotContain("PreviewAll", xaml, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("ComparisonTable", xaml, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void ConversionPrimaryAction_UsesOneSlotForGeneratePreviewOrConvert()
+    public void ConversionPrimaryAction_RemainsInRightPanelSingleSlot()
     {
         var xaml = ReadMainWindowXaml();
 
         Assert.Contains("GeneratePreviewPrimaryActionButton", xaml);
         Assert.Contains("Visibility=\"{Binding GeneratePreviewPrimaryActionVisibility}\"", xaml);
+        Assert.Contains("StartConversionButton", xaml);
         Assert.Contains("Visibility=\"{Binding ConvertPrimaryActionVisibility}\"", xaml);
         Assert.Contains("CancelConversionPrimaryActionButton", xaml);
         Assert.Contains("Visibility=\"{Binding CancelConversionPrimaryActionVisibility}\"", xaml);
-        Assert.Contains("Grid.Row=\"1\"", xaml);
         Assert.Equal(1, CountOccurrences(xaml, "Command=\"{Binding GeneratePreviewCommand}\""));
         Assert.Equal(1, CountOccurrences(xaml, "Command=\"{Binding StartConversionCommand}\""));
         Assert.Equal(1, CountOccurrences(xaml, "Command=\"{Binding CancelConversionCommand}\""));
-    }
-
-    [Fact]
-    public void PreviewRequirementCard_CollapsesAfterPreviewAcceptance()
-    {
-        var xaml = ReadMainWindowXaml();
-
-        var previewRequirementIndex = xaml.IndexOf(
-            "Visibility=\"{Binding PreviewRequirementVisibility}\"",
-            StringComparison.Ordinal);
-        var previewFromIndex = xaml.IndexOf("PreviewFromText", StringComparison.Ordinal);
-        var generatePrimaryIndex = xaml.IndexOf(
-            "GeneratePreviewPrimaryActionButton",
-            StringComparison.Ordinal);
-
-        Assert.True(previewRequirementIndex >= 0);
-        Assert.True(previewFromIndex > previewRequirementIndex);
-        Assert.True(generatePrimaryIndex > previewFromIndex);
-    }
-
-    [Fact]
-    public void PreviewRequirementCard_ContainsOnlyEssentialRangeAndValidationControls()
-    {
-        var xaml = ReadMainWindowXaml();
-        var previewCard = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding PreviewRequirementVisibility}\"",
-            "Text=\"{Binding ConversionReadinessStatusLabel}\"");
-
-        Assert.Contains("PreviewStepTitleText", previewCard);
-        Assert.Contains("PreviewRequiredInstructionText", previewCard);
-        Assert.Contains("PreviewFromText", previewCard);
-        Assert.Contains("PreviewToText", previewCard);
-        Assert.Contains("PreviewTimeRangeValidationText", previewCard);
-        Assert.DoesNotContain("PreviewMaximumDurationText", previewCard);
-        Assert.DoesNotContain("PreviewGateStatusText", previewCard);
-        Assert.DoesNotContain("PreviewGateDetailText", previewCard);
-        Assert.DoesNotContain("PreviewDurationText", previewCard);
-        Assert.DoesNotContain("PreviewStartTimeText", previewCard);
-    }
-
-    [Fact]
-    public void PreviewRangeTextBoxes_BindEditabilityToCanEditPreviewTimeRange()
-    {
-        var xaml = ReadMainWindowXaml();
-        var previewCard = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding PreviewRequirementVisibility}\"",
-            "Text=\"{Binding ConversionReadinessStatusLabel}\"");
-
-        Assert.Contains("Text=\"{Binding PreviewFromText,", previewCard);
-        Assert.Contains("Text=\"{Binding PreviewToText,", previewCard);
-        Assert.Equal(2, CountOccurrences(previewCard, "IsEnabled=\"{Binding CanEditPreviewTimeRange}\""));
-    }
-
-    [Fact]
-    public void PreviewActions_MoveReviewActionsToModals()
-    {
-        var xaml = ReadMainWindowXaml();
-
-        Assert.Contains("CancelPreviewCommand", xaml);
-        Assert.Contains("OpenPreviewCommand", xaml);
-        Assert.Contains("ContinuePreviewCommand", xaml);
-        Assert.Contains("PreviewGeneratingModalContentVisibility", xaml);
-        Assert.Contains("PreviewReadyModalContentVisibility", xaml);
-        Assert.Contains("OpenPreviewExternallyText", xaml);
-    }
-
-    [Fact]
-    public void ActivityLog_ContainsCopyableViewLogModal()
-    {
-        var xaml = ReadMainWindowXaml();
-
-        Assert.Contains("ViewActivityLogCommand", xaml);
-        Assert.Contains("ViewLogText", xaml);
-        Assert.Contains("ActivityLogModalText", xaml);
-        Assert.Contains("CopyFullLogCommand", xaml);
-        Assert.Contains("CopyFullLogText", xaml);
-        Assert.Contains("CloseActivityLogCommand", xaml);
-        Assert.Contains("<TextBox Grid.Row=\"1\"", xaml);
-        Assert.Contains("IsReadOnly=\"True\"", xaml);
     }
 
     [Fact]
@@ -217,8 +362,6 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("ActivityLogModalText", xaml);
         Assert.Contains("PreviewGenerationLogList", xaml);
         Assert.Contains("ItemsSource=\"{Binding PreviewGenerationLogs}\"", xaml);
-        Assert.Contains("Text=\"{Binding ., Mode=OneWay}\"", xaml);
-        Assert.DoesNotContain("Text=\"{Binding PreviewGenerationLogText", xaml);
         Assert.Contains("ConversionPlanCommandPreviewText", xaml);
         Assert.True(CountOccurrences(xaml, "HorizontalScrollBarVisibility=\"Auto\"") >= 5);
         Assert.True(CountOccurrences(xaml, "TextWrapping=\"NoWrap\"") >= 5);
@@ -241,397 +384,9 @@ public sealed class MainWindowXamlStructureTests
         }
     }
 
-    [Fact]
-    public void PreviewGeneratingModal_ShowsStageMetricsEngineAndAppendFriendlyLog()
-    {
-        var xaml = ReadMainWindowXaml();
-
-        Assert.Contains("PreviewMetricsHeaderVisibility", xaml);
-        Assert.Contains("PreviewCpuUsageText", xaml);
-        Assert.Contains("PreviewRamUsageText", xaml);
-        Assert.Contains("PreviewGpuUsageText", xaml);
-        Assert.Contains("PreviewVramUsageText", xaml);
-        Assert.Contains("PreviewStageText", xaml);
-        Assert.Contains("PreviewEngineText", xaml);
-        Assert.Contains("PreviewRunningWithText", xaml);
-        Assert.Contains("PreviewGpuMetricsNoteText", xaml);
-        Assert.Contains("PreviewGpuMetricsStatusText", xaml);
-        Assert.Contains("PreviewGenerationLogList", xaml);
-        Assert.Contains("ScrollViewer.HorizontalScrollBarVisibility=\"Auto\"", xaml);
-        Assert.Contains("CopyPreviewLogButton", xaml);
-        Assert.Contains("CopyPreviewLogCommand", xaml);
-        Assert.Contains("CopyPreviewLogText", xaml);
-        Assert.Contains("CancelPreviewCommand", xaml);
-    }
-
-    [Fact]
-    public void PreviewGeneratingModalFooter_UsesDistinctCopyAndCancelStyles()
-    {
-        var xaml = ReadMainWindowXaml();
-        var footer = ExtractSourceRange(
-            xaml,
-            "AutomationProperties.AutomationId=\"CopyFullLogButton\"",
-            "AutomationProperties.AutomationId=\"ContinuePreviewButton\"");
-        var appResources = ReadAppXaml();
-
-        var copyPreviewIndex = footer.IndexOf(
-            "AutomationProperties.AutomationId=\"CopyPreviewLogButton\"",
-            StringComparison.Ordinal);
-        var cancelPreviewIndex = footer.IndexOf(
-            "AutomationProperties.AutomationId=\"CancelPreviewButton\"",
-            StringComparison.Ordinal);
-        var copyPreviewBlock = ExtractSourceRange(
-            footer,
-            "AutomationProperties.AutomationId=\"CopyPreviewLogButton\"",
-            "AutomationProperties.AutomationId=\"CancelPreviewButton\"");
-        var cancelPreviewBlock = ExtractSourceRange(
-            footer,
-            "AutomationProperties.AutomationId=\"CancelPreviewButton\"",
-            "AutomationProperties.AutomationId=\"OpenPreviewExternallyButton\"");
-
-        Assert.True(copyPreviewIndex >= 0);
-        Assert.True(cancelPreviewIndex > copyPreviewIndex);
-        Assert.Contains("Style=\"{StaticResource SecondaryButtonStyle}\"", copyPreviewBlock);
-        Assert.DoesNotContain("Style=\"{StaticResource DestructiveButtonStyle}\"", copyPreviewBlock);
-        Assert.Contains("Style=\"{StaticResource DestructiveButtonStyle}\"", cancelPreviewBlock);
-        Assert.DoesNotContain("Style=\"{StaticResource SecondaryButtonStyle}\"", cancelPreviewBlock);
-        Assert.Contains("x:Key=\"DestructiveButtonStyle\"", appResources);
-        Assert.Contains("DestructiveBrush", appResources);
-        Assert.Contains("DestructiveHoverBrush", appResources);
-    }
-
-    [Fact]
-    public void CancelPreviewButton_MatchesGeneratePreviewCtaHeight()
-    {
-        var xaml = ReadMainWindowXaml();
-        var appResources = ReadAppXaml();
-        var primaryCtaStyle = ExtractSourceRange(
-            appResources,
-            "x:Key=\"PrimaryCtaButtonStyle\"",
-            "x:Key=\"IconButtonStyle\"");
-        var cancelPreviewBlock = ExtractSourceRange(
-            xaml,
-            "AutomationProperties.AutomationId=\"CancelPreviewButton\"",
-            "AutomationProperties.AutomationId=\"OpenPreviewExternallyButton\"");
-
-        Assert.Contains("<Setter Property=\"MinHeight\" Value=\"44\" />", primaryCtaStyle);
-        Assert.Contains("MinHeight=\"44\"", cancelPreviewBlock);
-        Assert.Contains("Padding=\"16,11\"", cancelPreviewBlock);
-        Assert.Contains("Style=\"{StaticResource DestructiveButtonStyle}\"", cancelPreviewBlock);
-    }
-
-    [Fact]
-    public void ConversionPrimaryAction_UsesDestructiveStyleForLiveCancelOnly()
-    {
-        var xaml = ReadMainWindowXaml();
-        var appResources = ReadAppXaml();
-        var startConversionBlock = ExtractSourceRange(
-            xaml,
-            "AutomationProperties.AutomationId=\"StartConversionButton\"",
-            "AutomationProperties.AutomationId=\"CancelConversionPrimaryActionButton\"");
-        var cancelConversionBlock = ExtractSourceRange(
-            xaml,
-            "AutomationProperties.AutomationId=\"CancelConversionPrimaryActionButton\"",
-            "</Grid>");
-
-        Assert.Contains("Style=\"{StaticResource PrimaryCtaButtonStyle}\"", startConversionBlock);
-        Assert.DoesNotContain("Style=\"{StaticResource DestructiveButtonStyle}\"", startConversionBlock);
-        Assert.Contains("Style=\"{StaticResource DestructiveButtonStyle}\"", cancelConversionBlock);
-        Assert.Contains("MinHeight=\"44\"", cancelConversionBlock);
-        Assert.Contains("Padding=\"16,11\"", cancelConversionBlock);
-        Assert.Contains("FontSize=\"15\"", cancelConversionBlock);
-        Assert.Contains("FontWeight=\"Bold\"", cancelConversionBlock);
-        Assert.Contains("CancelConversionCommand", cancelConversionBlock);
-        Assert.Contains("x:Key=\"DestructiveButtonStyle\"", appResources);
-        Assert.Contains("DestructiveHoverBrush", appResources);
-        Assert.Contains("DestructivePressedBrush", appResources);
-        Assert.Contains("x:Key=\"PrimaryCtaButtonStyle\"", appResources);
-        Assert.Contains("<Setter Property=\"MinHeight\" Value=\"44\" />", appResources);
-        Assert.Contains("<Setter Property=\"Padding\" Value=\"16,11\" />", appResources);
-        var destructiveStyle = ExtractSourceRange(
-            appResources,
-            "x:Key=\"DestructiveButtonStyle\"",
-            "x:Key=\"PrimaryCtaButtonStyle\"");
-        Assert.Contains("DestructiveHoverBrush", destructiveStyle);
-        Assert.Contains("DestructivePressedBrush", destructiveStyle);
-        Assert.DoesNotContain("AccentHoverBrush", destructiveStyle);
-        Assert.DoesNotContain("AccentPressedBrush", destructiveStyle);
-        Assert.DoesNotContain("DataTrigger Binding=\"{Binding IsConversionRunning}\"", startConversionBlock);
-    }
-
-    [Fact]
-    public void ConversionCompletedModal_UsesStyledModalAndAcceptCommand()
-    {
-        var xaml = ReadMainWindowXaml();
-        var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
-        var modal = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding ConversionCompletedModalContentVisibility}\"",
-            "<StackPanel Grid.Row=\"3\"");
-        var footer = ExtractSourceRange(
-            xaml,
-            "AutomationProperties.AutomationId=\"AcceptConversionCompletedButton\"",
-            "AutomationProperties.AutomationId=\"CopyFullLogButton\"");
-
-        Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", xaml);
-        Assert.Contains("Style=\"{StaticResource V3dfyModalCardStyle}\"", xaml);
-        Assert.Contains("ConversionCompletedTitleText", viewModel);
-        Assert.Contains("\"Conversion complete\"", viewModel);
-        Assert.Contains("\"Conversi\\u00f3n finalizada\"", viewModel);
-        Assert.Contains("Text=\"{Binding ConversionCompletedBodyText}\"", modal);
-        Assert.Contains("Text=\"{Binding ConversionCompletedOutputPathText}\"", modal);
-        Assert.Contains("AutomationProperties.AutomationId=\"ConversionCompletedOutputPath\"", modal);
-        Assert.Contains("Command=\"{Binding AcceptConversionCompletedCommand}\"", footer);
-        Assert.Contains("Content=\"{Binding AcceptConversionCompletedText}\"", footer);
-        Assert.DoesNotContain("MessageBox", xaml);
-        Assert.DoesNotContain("MessageBox", viewModel);
-    }
-
-    [Fact]
-    public void SystemStatusConversionTab_SeparatesPreviewReadyRunningAndMissingRequirementStates()
-    {
-        var xaml = ReadMainWindowXaml();
-        var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
-        var conversionTab = ExtractSourceRange(
-            xaml,
-            "Header=\"{Binding SystemStatusConversionTabTitle}\"",
-            "AutomationProperties.AutomationId=\"GeneratePreviewPrimaryActionButton\"");
-
-        Assert.Contains("AutomationProperties.AutomationId=\"ConversionReadySummary\"", conversionTab);
-        Assert.Contains("Visibility=\"{Binding ConversionReadySummaryVisibility}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionReadyTitleText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionReadyBodyText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionReadySelectedModelText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionReadyOutputText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionReadyDestinationText}\"", conversionTab);
-        Assert.Contains("Visibility=\"{Binding ConversionRunningStatusVisibility}\"", conversionTab);
-        Assert.Contains("AutomationProperties.AutomationId=\"ConversionTimingEstimates\"", conversionTab);
-        Assert.Contains("Visibility=\"{Binding ConversionTimingEstimatesVisibility}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionElapsedLabelText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionElapsedValueText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionRemainingLabelText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionRemainingValueText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionEstimatedTotalLabelText}\"", conversionTab);
-        Assert.Contains("Text=\"{Binding ConversionEstimatedTotalValueText}\"", conversionTab);
-        Assert.Contains("Visibility=\"{Binding ConversionMissingRequirementsVisibility}\"", conversionTab);
-        Assert.Contains("public string ConversionReadyTitleText => Text(\"Conversion ready\", \"Conversi\\u00f3n lista\")", viewModel);
-        Assert.Contains("\"Preview accepted. The final video is ready to be generated.\"", viewModel);
-        Assert.Contains("\"Vista previa aceptada. El video final est\\u00e1 listo para generarse.\"", viewModel);
-        Assert.Contains("\"Selected model\"", viewModel);
-        Assert.Contains("\"Modelo seleccionado\"", viewModel);
-        Assert.Contains("\"Destination\"", viewModel);
-        Assert.Contains("\"Destino\"", viewModel);
-        Assert.Contains("public string ConversionElapsedLabelText => Text(\"Elapsed\", \"Transcurrido\")", viewModel);
-        Assert.Contains("public string ConversionRemainingLabelText => Text(\"Remaining\", \"Restante\")", viewModel);
-        Assert.Contains("public string ConversionEstimatedTotalLabelText => Text(\"Estimated total\", \"Total estimado\")", viewModel);
-    }
-
-    [Fact]
-    public void LiveConversionHeader_ContainsStyledProgressBarWithoutReplacingCancel()
-    {
-        var xaml = ReadMainWindowXaml();
-        var liveConversion = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding ConversionRunningVisibility}\"",
-            "x:Name=\"ConversionLiveLogList\"");
-
-        Assert.Contains("Visibility=\"{Binding ConversionProgressBarVisibility}\"", liveConversion);
-        Assert.Contains("Value=\"{Binding ConversionProgressBarValue, Mode=OneWay}\"", liveConversion);
-        Assert.DoesNotContain("Value=\"{Binding ConversionProgressBarValue}\"", liveConversion);
-        Assert.Contains("Text=\"{Binding ConversionProgressBarText}\"", liveConversion);
-        Assert.Contains("Style=\"{StaticResource V3dfyProgressBarStyle}\"", liveConversion);
-        Assert.Contains("<StackPanel Grid.Row=\"1\"", liveConversion);
-        Assert.DoesNotContain("<ColumnDefinition Width=\"220\" />", liveConversion);
-        Assert.Contains("AutomationProperties.AutomationId=\"CancelConversionPrimaryActionButton\"", xaml);
-        Assert.Contains("Command=\"{Binding CancelConversionCommand}\"", xaml);
-    }
-
-    [Fact]
-    public void PreviewGeneratingModal_ContainsStyledProgressBarOnlyInGeneratingContent()
-    {
-        var xaml = ReadMainWindowXaml();
-        var generating = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding PreviewGeneratingModalContentVisibility}\"",
-            "x:Name=\"PreviewGenerationLogList\"");
-        var ready = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding PreviewReadyModalContentVisibility}\"",
-            "Visibility=\"{Binding ModelHelpModalContentVisibility}\"");
-
-        Assert.Contains("Value=\"{Binding PreviewProgressPercent, Mode=OneWay}\"", generating);
-        Assert.DoesNotContain("Value=\"{Binding PreviewProgressPercent}\"", generating);
-        Assert.Contains("IsIndeterminate=\"{Binding PreviewProgressIsIndeterminate}\"", generating);
-        Assert.Contains("Text=\"{Binding PreviewProgressText}\"", generating);
-        Assert.Contains("Style=\"{StaticResource V3dfyProgressBarStyle}\"", generating);
-        Assert.Contains("<StackPanel Grid.Row=\"4\"", generating);
-        Assert.Contains("Margin=\"0,8,0,10\"", generating);
-        Assert.Contains("VerticalAlignment=\"Top\"", generating);
-        Assert.DoesNotContain("PreviewProgressPercent", ready);
-        Assert.DoesNotContain("V3dfyProgressBarStyle", ready);
-
-        var appResources = ReadAppXaml();
-        Assert.Contains("x:Key=\"V3dfyProgressBarStyle\"", appResources);
-        Assert.Contains("<Setter Property=\"Height\" Value=\"10\" />", appResources);
-    }
-
-    [Fact]
-    public void LogContextMenus_UseV3dfyStylesAndKeepCopySelectAll()
-    {
-        var xaml = ReadMainWindowXaml();
-        var appResources = ReadAppXaml();
-
-        Assert.Contains("x:Key=\"V3dfyContextMenuStyle\"", appResources);
-        Assert.Contains("TargetType=\"MenuItem\"", appResources);
-        Assert.Contains("ComboBoxHoverBrush", appResources);
-        Assert.Contains("CardBackgroundBrush", appResources);
-        Assert.Contains("CardBorderBrush", appResources);
-        Assert.Contains("V3dfyContextMenuStyle", xaml);
-        Assert.Contains("Header=\"Copy\"", xaml);
-        Assert.Contains("Command=\"ApplicationCommands.Copy\"", xaml);
-        Assert.Contains("Header=\"Select all\"", xaml);
-        Assert.Contains("Command=\"ApplicationCommands.SelectAll\"", xaml);
-        Assert.Contains("ActivityLogPanelText", xaml);
-        Assert.Contains("ActivityLogModalText", xaml);
-        Assert.Contains("TechnicalDetailsBodyText", xaml);
-        Assert.Contains("PreviewGenerationLogList", xaml);
-        Assert.Contains("ConversionLiveLogList", xaml);
-        Assert.DoesNotContain("MessageBox", xaml);
-    }
-
-    [Fact]
-    public void LogCopyNotification_IsTopLevelAndModalSafe()
-    {
-        var xaml = ReadMainWindowXaml();
-
-        Assert.Contains("AutomationProperties.AutomationId=\"LogCopyNotification\"", xaml);
-        Assert.Contains("Panel.ZIndex=\"20\"", xaml);
-        Assert.Contains("IsHitTestVisible=\"False\"", xaml);
-        Assert.Contains("Visibility=\"{Binding LogCopyNotificationVisibility}\"", xaml);
-        Assert.Contains("Text=\"{Binding LogCopyNotificationText}\"", xaml);
-    }
-
-    [Fact]
-    public void PreviewReadyModal_EmbedsPreviewAndExternalFallback()
-    {
-        var xaml = ReadMainWindowXaml();
-
-        Assert.Contains("<MediaElement", xaml);
-        Assert.Contains("LoadedBehavior=\"Manual\"", xaml);
-        Assert.Contains("UnloadedBehavior=\"Manual\"", xaml);
-        Assert.Contains("ScrubbingEnabled=\"True\"", xaml);
-        Assert.Contains("Source=\"{Binding PreviewMediaSource}\"", xaml);
-        Assert.Contains("MediaOpened=\"OnPreviewMediaOpened\"", xaml);
-        Assert.Contains("MediaEnded=\"OnPreviewMediaEnded\"", xaml);
-        Assert.Contains("MediaFailed=\"OnPreviewMediaFailed\"", xaml);
-        Assert.Contains("PreviewPlaybackFallbackText", xaml);
-        Assert.Contains("PreviewPlayPauseButton", xaml);
-        Assert.Contains("Style=\"{StaticResource IconButtonStyle}\"", xaml);
-        Assert.Contains("AutomationProperties.Name=\"{Binding PreviewPlayText}\"", xaml);
-        Assert.Contains("ToolTip=\"{Binding PreviewPlayText}\"", xaml);
-        Assert.Contains("PreviewTimelineSlider", xaml);
-        Assert.Contains("Style=\"{StaticResource PreviewSliderStyle}\"", xaml);
-        Assert.Contains("PreviewVolumeIcon", xaml);
-        Assert.Contains("AutomationProperties.Name=\"{Binding PreviewVolumeText}\"", xaml);
-        Assert.Contains("PreviewVolumeSlider", xaml);
-        Assert.Contains("PreviewMuteToggleButton", xaml);
-        Assert.Contains("Style=\"{StaticResource IconToggleButtonStyle}\"", xaml);
-        Assert.Contains("AutomationProperties.Name=\"{Binding PreviewMuteText}\"", xaml);
-        Assert.Contains("ToolTip=\"{Binding PreviewMuteText}\"", xaml);
-        Assert.DoesNotContain("PreviewMuteCheckBox", xaml);
-        Assert.DoesNotContain("OnPreviewReplayClicked", xaml);
-        Assert.DoesNotContain("Content=\"{Binding PreviewReplayText}\"", xaml);
-        Assert.DoesNotContain("Text=\"{Binding PreviewVolumeText}\"", xaml);
-        Assert.DoesNotContain("Content=\"{Binding PreviewMutedText}\"", xaml);
-        Assert.Contains("PreviewPlaybackStatusText", xaml);
-        Assert.Contains("OpenPreviewExternallyButton", xaml);
-        Assert.Contains("OpenPreviewExternallyText", xaml);
-    }
-
-    [Fact]
-    public void PreviewSliders_UseAppPreviewSliderStyle()
-    {
-        var xaml = ReadMainWindowXaml();
-        var appResources = ReadAppXaml();
-        var readyModal = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding PreviewReadyModalContentVisibility}\"",
-            "PreviewPlaybackStatusText");
-        var sliderStyle = ExtractSourceRange(
-            appResources,
-            "x:Key=\"PreviewSliderStyle\"",
-            "<Style TargetType=\"CheckBox\">");
-
-        Assert.Equal(2, CountOccurrences(readyModal, "Style=\"{StaticResource PreviewSliderStyle}\""));
-        Assert.Contains("PreviewTimelineSlider", readyModal);
-        Assert.Contains("PreviewVolumeSlider", readyModal);
-        Assert.Contains("PreviewSliderThumbStyle", appResources);
-        Assert.Contains("PreviewSliderTrackButtonStyle", appResources);
-        Assert.Contains("PART_Track", sliderStyle);
-        Assert.Contains("SliderFocusRing", sliderStyle);
-        Assert.Contains("IsMouseOver", sliderStyle);
-        Assert.Contains("IsKeyboardFocusWithin", sliderStyle);
-        Assert.Contains("IsEnabled", sliderStyle);
-    }
-
-    [Fact]
-    public void PreviewVolumeSlider_HasTrackClickHandlerWithoutChangingTimeline()
-    {
-        var xaml = ReadMainWindowXaml();
-        var readyModal = ExtractSourceRange(
-            xaml,
-            "Visibility=\"{Binding PreviewReadyModalContentVisibility}\"",
-            "PreviewPlaybackStatusText");
-        var timelineSlider = ExtractSourceRange(
-            readyModal,
-            "x:Name=\"PreviewTimelineSlider\"",
-            "x:Name=\"PreviewTimeText\"");
-        var volumeSlider = ExtractSourceRange(
-            readyModal,
-            "x:Name=\"PreviewVolumeSlider\"",
-            "x:Name=\"PreviewMuteToggleButton\"");
-
-        Assert.Contains("PreviewMouseLeftButtonDown=\"OnPreviewVolumeSliderPreviewMouseLeftButtonDown\"", volumeSlider);
-        Assert.Contains("Style=\"{StaticResource PreviewSliderStyle}\"", volumeSlider);
-        Assert.Contains("Style=\"{StaticResource PreviewSliderStyle}\"", timelineSlider);
-        Assert.DoesNotContain("OnPreviewVolumeSliderPreviewMouseLeftButtonDown", timelineSlider);
-    }
-
-    [Fact]
-    public void CheckBoxStyle_IsAppStyledForInteractiveStates()
-    {
-        var appResources = ReadAppXaml();
-        var checkBoxStyle = ExtractSourceRange(
-            appResources,
-            "<Style TargetType=\"CheckBox\">",
-            "<Style TargetType=\"ComboBox\">");
-        var mainWindow = ReadMainWindowXaml();
-
-        Assert.Contains("CheckBoxBox", checkBoxStyle);
-        Assert.Contains("CheckMark", checkBoxStyle);
-        Assert.Contains("BorderThickness=\"1\"", checkBoxStyle);
-        Assert.Contains("InputBackgroundBrush", checkBoxStyle);
-        Assert.Contains("CardBorderBrush", checkBoxStyle);
-        Assert.Contains("IsChecked", checkBoxStyle);
-        Assert.Contains("IsMouseOver", checkBoxStyle);
-        Assert.Contains("IsKeyboardFocused", checkBoxStyle);
-        Assert.Contains("IsEnabled", checkBoxStyle);
-        Assert.Contains("AccentBrush", checkBoxStyle);
-        Assert.Contains("AccentHoverBrush", checkBoxStyle);
-        Assert.Contains("DisabledBackgroundBrush", checkBoxStyle);
-        Assert.DoesNotContain("<Style TargetType=\"CheckBox\">", mainWindow);
-        Assert.Contains("CreateLgCompatibilityCopyText", mainWindow);
-        Assert.Contains("OpenOutputWhenFinishedText", mainWindow);
-    }
-
     private static string ReadMainWindowXaml()
     {
         return ReadSourceFile("src", "V3dfy.App", "MainWindow.xaml");
-    }
-
-    private static string ReadAppXaml()
-    {
-        return ReadSourceFile("src", "V3dfy.App", "App.xaml");
     }
 
     private static IEnumerable<(string FileName, string Xaml)> ReadWpfXamlSources()
@@ -730,8 +485,8 @@ public sealed class MainWindowXamlStructureTests
         var start = source.IndexOf(startMarker, StringComparison.Ordinal);
         var end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
 
-        Assert.True(start >= 0);
-        Assert.True(end > start);
+        Assert.True(start >= 0, $"Could not find start marker '{startMarker}'.");
+        Assert.True(end > start, $"Could not find end marker '{endMarker}'.");
 
         return source[start..end];
     }
