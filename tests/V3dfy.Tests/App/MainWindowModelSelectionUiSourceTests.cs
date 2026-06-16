@@ -43,6 +43,7 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", xaml);
         Assert.Contains("Style=\"{StaticResource V3dfyModalCardStyle}\"", xaml);
         Assert.Contains("Text=\"{Binding ModelHelpIntroText}\"", modal);
+        Assert.Contains("AutomationProperties.AutomationId=\"ModelHelpModalResponsiveBody\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"ModelHelpContent\"", modal);
         Assert.Contains("ItemsSource=\"{Binding ModelHelpRows}\"", modal);
         Assert.Contains("AlternationCount=\"2\"", modal);
@@ -64,6 +65,7 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.Contains("Style=\"{StaticResource ResponsiveTableHorizontalScrollViewerStyle}\"", modal);
         Assert.Contains("MinWidth=\"760\"", modal);
         Assert.Contains("Style=\"{StaticResource ResponsiveModalBodyScrollViewerStyle}\"", modal);
+        Assert.Contains("TextWrapping=\"Wrap\"", modal);
         Assert.DoesNotContain("ModelHelpBodyText", modal);
         Assert.DoesNotContain("<TextBox", modal);
         Assert.DoesNotContain("Status", modal);
@@ -124,7 +126,9 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.Contains("public string ModelHelpDepthHeaderText => Text(\"Depth\", \"Profundidad\")", source);
         Assert.Contains("\"Size/performance\"", source);
         Assert.Contains("\"Tamaño/rendimiento\"", source);
-        Assert.Contains("public IReadOnlyList<ModelHelpRow> ModelHelpRows => CreateModelHelpRows();", source);
+        Assert.Contains("public IReadOnlyList<ModelHelpRow> ModelHelpRows => _isImageParallaxModelHelpContext", source);
+        Assert.Contains("? CreateImageParallaxModelHelpRows()", source);
+        Assert.Contains(": CreateModelHelpRows();", source);
         Assert.Contains("public sealed record ModelHelpRow(", source);
         Assert.DoesNotContain("Status", rowRecord);
         Assert.DoesNotContain("ModelHelpStatusHeaderText", source);
@@ -137,7 +141,7 @@ public sealed class MainWindowModelSelectionUiSourceTests
         var method = ExtractSourceRange(
             source,
             "private IReadOnlyList<ModelHelpRow> CreateModelHelpRows()",
-            "private static Iw3DepthModelRegistryEntry? FindRegistryEntry");
+            "private IReadOnlyList<ModelHelpRow> CreateImageParallaxModelHelpRows()");
 
         Assert.Contains("foreach (var candidate in LocalModelCandidates)", method);
         Assert.Contains("rows.Add(new ModelHelpRow(", method);
@@ -148,6 +152,39 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.DoesNotContain("download", method, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Status", method);
         Assert.DoesNotContain("Estado", method);
+    }
+
+    [Fact]
+    public void ImageParallaxModelHelp_UsesSameHelpButtonPatternAndOnlyImageCompatibleCandidates()
+    {
+        var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var parallaxSetup = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"ImageParallaxScaffold\"",
+            "AutomationProperties.AutomationId=\"ImageStereoScaffold\"");
+        var parallaxHelpRows = ExtractSourceRange(
+            source,
+            "private IReadOnlyList<ModelHelpRow> CreateImageParallaxModelHelpRows()",
+            "private string GetModelSizePerformanceText");
+
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelHelpButton\"", parallaxSetup);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelHelpButtonNarrow\"", parallaxSetup);
+        Assert.Contains("Command=\"{Binding ShowImageParallaxModelHelpCommand}\"", parallaxSetup);
+        Assert.Contains("IsEnabled=\"{Binding CanShowImageParallaxModelHelp}\"", parallaxSetup);
+        Assert.Contains("ToolTip=\"{Binding ImageParallaxModelHelpButtonToolTipText}\"", parallaxSetup);
+        Assert.Contains("Content=\"?\"", parallaxSetup);
+        Assert.Contains("MinWidth=\"30\"", parallaxSetup);
+        Assert.Contains("Padding=\"8,5\"", parallaxSetup);
+        Assert.Contains("Style=\"{StaticResource SecondaryButtonStyle}\"", parallaxSetup);
+        Assert.Contains("ItemsSource=\"{Binding ImageParallaxLocalModelCandidates}\"", parallaxSetup);
+        Assert.Contains("public IReadOnlyList<LocalModelSelectionCandidate> ImageParallaxLocalModelCandidates", source);
+        Assert.Contains(".Where(IsImageParallaxCompatibleCandidate)", source);
+        Assert.Contains("Iw3DepthModelMediaCapability.ImageAndVideo or", source);
+        Assert.Contains("Iw3DepthModelMediaCapability.ImageOnly", source);
+        Assert.Contains("var candidates = ImageParallaxLocalModelCandidates;", parallaxHelpRows);
+        Assert.DoesNotContain("foreach (var candidate in LocalModelCandidates)", parallaxHelpRows);
+        Assert.DoesNotContain("download", parallaxHelpRows, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

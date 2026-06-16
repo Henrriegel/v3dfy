@@ -146,11 +146,11 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.DoesNotContain("Text=\"{Binding ImageGeneratedFilesText}\"", stereoResult);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"ExportStereoscopicImageButton\"", stereoResult);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"OpenImageOutputFolderButton\"", stereoResult);
-        Assert.Contains("AutomationProperties.AutomationId=\"ExportStereoscopicImageButton\"", rightOutputPanel);
-        Assert.Contains("Command=\"{Binding ExportStereoscopicImageCommand}\"", rightOutputPanel);
-        Assert.Contains("Content=\"{Binding ImageStereoExportActionText}\"", rightOutputPanel);
-        Assert.Contains("IsEnabled=\"{Binding CanExportStereoscopicImage}\"", rightOutputPanel);
-        Assert.Contains("Visibility=\"{Binding ImageStereoConvertButtonVisibility}\"", rightOutputPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConvertImageButton\"", rightOutputPanel);
+        Assert.Contains("Command=\"{Binding ConvertImageCommand}\"", rightOutputPanel);
+        Assert.Contains("Content=\"{Binding ImageConvertActionText}\"", rightOutputPanel);
+        Assert.Contains("IsEnabled=\"{Binding CanConvertImage}\"", rightOutputPanel);
+        Assert.Contains("Visibility=\"{Binding ImageConvertButtonVisibility}\"", rightOutputPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"OpenImageOutputFolderButton\"", rightOutputPanel);
         Assert.Contains("Command=\"{Binding OpenImageOutputFolderCommand}\"", rightOutputPanel);
         Assert.Contains("IsEnabled=\"{Binding CanOpenImageOutputFolder}\"", rightOutputPanel);
@@ -176,8 +176,9 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.DoesNotContain("Text=\"Anaglyph\"", stereoResult);
         Assert.DoesNotContain("Text=\"L / R\"", stereoResult);
         Assert.DoesNotContain("ImageStereoLegacyResultScaffold", xaml);
-        Assert.Contains("Content=\"{Binding ImageExportActionText}\"", parallaxResult);
-        Assert.Contains("IsEnabled=\"False\"", parallaxResult);
+        Assert.DoesNotContain("Content=\"{Binding ImageExportActionText}\"", parallaxResult);
+        Assert.DoesNotContain("IsEnabled=\"False\"", parallaxResult);
+        Assert.DoesNotContain("Command=\"{Binding ConvertImageCommand}\"", parallaxResult);
         Assert.DoesNotContain("Command=\"{Binding ExportStereoscopicImageCommand}\"", parallaxResult);
     }
 
@@ -186,7 +187,8 @@ public sealed class MainWindowImageStereoExportSourceTests
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
 
-        Assert.Contains("public string ImageStereoExportActionText => IsImageExportRunning", source);
+        Assert.Contains("public string ImageConvertActionText => IsImageExportRunning", source);
+        Assert.Contains("public string ImageStereoExportActionText => ImageConvertActionText", source);
         Assert.Contains("? Text(\"Converting...\", \"Convirtiendo...\")", source);
         Assert.Contains(": Text(\"Convert\", \"Convertir\")", source);
         Assert.Contains("public string ImageExportOverlayText => Text(\"Converting...\", \"Convirtiendo...\")", source);
@@ -263,7 +265,7 @@ public sealed class MainWindowImageStereoExportSourceTests
             "private static ImageMetadata ReadImageMetadata");
         var setupChangedMethod = ExtractSourceRange(
             source,
-            "private void ApplyImageSetupChanged()",
+            "private void ApplyImageSetupChanged(",
             "private void ResetImageSetupState()");
         var selectedModelMethod = ExtractSourceRange(
             source,
@@ -281,8 +283,8 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.Contains("MarkImageExportOutputOutdated();", setupChangedMethod);
         Assert.Contains("MarkImageExportOutputOutdated();", selectedModelMethod);
         Assert.Contains("_hasEnteredImagePreviewExportStage = false;", selectedModelMethod);
-        Assert.Contains("previous image conversion output is outdated", setupChangedMethod);
-        Assert.Contains("previous image conversion output is outdated", selectedModelMethod);
+        Assert.Contains("Previous image conversion output is outdated", setupChangedMethod);
+        Assert.Contains("Previous image conversion output is outdated", selectedModelMethod);
         Assert.DoesNotContain("ResetImageExportState();", localizedRefresh);
     }
 
@@ -358,7 +360,7 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.Contains("private bool HasCurrentImageConversionOutput", source);
         Assert.Contains("!HasCurrentImageConversionOutput", canExport);
         Assert.Contains("HasCurrentImageConversionOutput", canOpen);
-        Assert.Contains("HasCurrentImageConversionOutput ? Visibility.Collapsed : Visibility.Visible", visibilityProperties);
+        Assert.Contains("IsImageExportRunning || HasCurrentImageConversionOutput ? Visibility.Collapsed : Visibility.Visible", visibilityProperties);
         Assert.Contains("!IsImageExportRunning && HasCurrentImageConversionOutput", visibilityProperties);
         Assert.Contains("IsImageExportOutputOutdated", visibilityProperties);
         Assert.Contains("Configuration changed. Convert again.", source);
@@ -370,7 +372,7 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.Contains("_hasEnteredImagePreviewExportStage", outputPanelVisibility);
         Assert.Contains("HasCurrentImageConversionOutput", outputPanelVisibility);
         Assert.DoesNotContain("IsImageExportOutputOutdated", outputPanelVisibility);
-        Assert.Contains("Visibility=\"{Binding ImageStereoConvertButtonVisibility}\"", rightOutputPanel);
+        Assert.Contains("Visibility=\"{Binding ImageConvertButtonVisibility}\"", rightOutputPanel);
     }
 
     [Fact]
@@ -459,7 +461,8 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.DoesNotContain("\"Green/Magenta\"", optionsRange);
         Assert.DoesNotContain("\"Amber/Blue\"", optionsRange);
         Assert.Contains("NormalizeStereoAnaglyphMode(value)", anaglyphSetter);
-        Assert.Contains("ApplyImageSetupChanged();", anaglyphSetter);
+        Assert.Contains("Anaglyph mode changed:", anaglyphSetter);
+        Assert.Contains("ApplyImageSetupChanged(", anaglyphSetter);
         Assert.Contains("NormalizeSelectedStereoAnaglyphMode();", source);
         Assert.Contains("AnaglyphMode: NormalizeStereoAnaglyphMode(SelectedStereoAnaglyphMode)", createRequest);
         Assert.Contains("_selectedStereoAnaglyphMode = SupportedStereoAnaglyphMode;", resetSetup);
@@ -497,7 +500,7 @@ public sealed class MainWindowImageStereoExportSourceTests
             "private string CreateImagePreviewExportStatusText()");
         var setupChangedMethod = ExtractSourceRange(
             source,
-            "private void ApplyImageSetupChanged()",
+            "private void ApplyImageSetupChanged(",
             "private void ResetImageSetupState()");
 
         Assert.Contains("!_hasEnteredImagePreviewExportStage", footerVisibility);

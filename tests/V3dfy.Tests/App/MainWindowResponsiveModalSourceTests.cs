@@ -109,12 +109,14 @@ public sealed class MainWindowResponsiveModalSourceTests
             "</WrapPanel>");
 
         Assert.Contains("AutomationProperties.AutomationId=\"ModelHelpContent\"", modal);
+        Assert.Contains("AutomationProperties.AutomationId=\"ModelHelpModalResponsiveBody\"", xaml);
         Assert.Contains("Style=\"{StaticResource ResponsiveTableContainerStyle}\"", modal);
         Assert.Contains("x:Name=\"ModelHelpTableViewport\"", modal);
         Assert.Contains("Style=\"{StaticResource ResponsiveTableHorizontalScrollViewerStyle}\"", modal);
         Assert.Contains("MinWidth=\"760\"", modal);
         Assert.Contains("Width=\"{Binding ViewportWidth, ElementName=ModelHelpTableViewport}\"", modal);
         Assert.Contains("Style=\"{StaticResource ResponsiveModalBodyScrollViewerStyle}\"", modal);
+        Assert.Contains("TextWrapping=\"Wrap\"", modal);
         Assert.Contains("Width=\"{Binding ActualWidth", modal);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"CloseModelHelpButton\"", modal);
         Assert.Contains("AutomationProperties.AutomationId=\"CloseModelHelpButton\"", footer);

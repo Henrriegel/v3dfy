@@ -41,6 +41,82 @@ public sealed class MainWindowCodeBehindSourceTests
     }
 
     [Fact]
+    public void ImageParallaxGeneratedVideoPreview_UsesLightweightMediaElementPlaybackHandlers()
+    {
+        var source = ReadMainWindowCodeBehindSource();
+
+        Assert.Contains("OnImageParallaxPreviewMediaOpened", source);
+        Assert.Contains("OnImageParallaxPreviewMediaEnded", source);
+        Assert.Contains("OnImageParallaxPreviewMediaFailed", source);
+        Assert.Contains("OnImageParallaxPreviewPlayPauseClicked", source);
+        Assert.Contains("OnImageParallaxPreviewTimelineValueChanged", source);
+        Assert.Contains("OnImageParallaxPreviewVolumeValueChanged", source);
+        Assert.Contains("OnImageParallaxPreviewVolumeSliderPreviewMouseLeftButtonDown", source);
+        Assert.Contains("OnImageParallaxPreviewMuteChanged", source);
+        Assert.Contains("OnImageParallaxVideoPlayerVisibilityChanged", source);
+        Assert.Contains("_imageParallaxPlaybackTimer", source);
+        Assert.Contains("_isUpdatingImageParallaxVolume", source);
+        Assert.Contains("_isUpdatingImageParallaxMute", source);
+        Assert.Contains("_lastImageParallaxVolume", source);
+        Assert.Contains("ImageParallaxVerticalPlayerPrefix", source);
+        Assert.Contains("ImageParallaxWidePlayerPrefix", source);
+        var xaml = ReadMainWindowXamlSource();
+        Assert.Contains("ImageParallaxVerticalPreviewMediaElement", xaml);
+        Assert.Contains("ImageParallaxWidePreviewMediaElement", xaml);
+        Assert.Contains("MinHeight=\"220\"", xaml);
+        Assert.Contains("ImageParallaxVerticalPreviewVolumeSlider", xaml);
+        Assert.Contains("ImageParallaxVerticalPreviewMuteToggleButton", xaml);
+        Assert.Contains("ImageParallaxWidePreviewVolumeSlider", xaml);
+        Assert.Contains("ImageParallaxWidePreviewMuteToggleButton", xaml);
+        Assert.DoesNotContain("ImageParallaxVideoPlayerMinHeight", xaml);
+        Assert.DoesNotContain("ToggleImageParallaxVideoMaximizeCommand", xaml);
+        Assert.DoesNotContain("ImageParallaxVideoMaximizeGlyphText", xaml);
+        Assert.DoesNotContain("ImageParallaxVideoMaximizeButton", xaml);
+        Assert.DoesNotContain("Content=\"{Binding ImageParallaxVideoMaximizeButtonText}\"", xaml);
+        Assert.DoesNotContain("VLC", source, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LibVLC", source, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ImageParallaxVolumeMuteHandlers_SynchronizeBothPreviewLayouts()
+    {
+        var source = ReadMainWindowCodeBehindSource();
+        var volumeMethod = ExtractSourceRange(
+            source,
+            "private void OnImageParallaxPreviewVolumeValueChanged",
+            "private void OnImageParallaxPreviewVolumeSliderPreviewMouseLeftButtonDown");
+        var trackClickMethod = ExtractSourceRange(
+            source,
+            "private void OnImageParallaxPreviewVolumeSliderPreviewMouseLeftButtonDown",
+            "private void ApplyImageParallaxVolumeValue");
+        var mutedStateMethod = ExtractSourceRange(
+            source,
+            "private void SetImageParallaxMutedState",
+            "private void SetImageParallaxVolumeSliderValue");
+        var muteButtonMethod = ExtractSourceRange(
+            source,
+            "private void UpdateImageParallaxMuteButton",
+            "private void UpdateImageParallaxTimeText");
+
+        Assert.Contains("ResolveImageParallaxPlayerPrefix(sender)", volumeMethod);
+        Assert.Contains("ApplyImageParallaxVolumeValue(prefix, e.NewValue);", volumeMethod);
+        Assert.Contains("sender is not WpfSlider slider", trackClickMethod);
+        Assert.Contains("FindVisualParent<WpfThumb>(source) is not null", trackClickMethod);
+        Assert.Contains("SetImageParallaxVolumeSliderValue(prefix, clampedValue);", trackClickMethod);
+        Assert.Contains("ApplyImageParallaxVolumeValue(prefix, clampedValue);", trackClickMethod);
+        Assert.Contains("media.IsMuted = true;", mutedStateMethod);
+        Assert.Contains("media.Volume = 0;", mutedStateMethod);
+        Assert.Contains("SetImageParallaxVolumeSliderValue(prefix, 0);", mutedStateMethod);
+        Assert.Contains("media.IsMuted = false;", mutedStateMethod);
+        Assert.Contains("media.Volume = restoredVolume;", mutedStateMethod);
+        Assert.Contains("SetImageParallaxVolumeSliderValue(prefix, restoredVolume);", mutedStateMethod);
+        Assert.Contains("PreviewUnmuteText", muteButtonMethod);
+        Assert.Contains("PreviewMuteText", muteButtonMethod);
+        Assert.Contains("PreviewMuteGlyph", muteButtonMethod);
+        Assert.Contains("PreviewVolumeGlyph", muteButtonMethod);
+    }
+
+    [Fact]
     public void PreviewHandlers_GuardAgainstUnloadedNamedControls()
     {
         var source = ReadMainWindowCodeBehindSource();
@@ -196,6 +272,27 @@ public sealed class MainWindowCodeBehindSourceTests
         }
 
         throw new FileNotFoundException("Could not locate src/V3dfy.App/MainWindow.xaml.cs.");
+    }
+
+    private static string ReadMainWindowXamlSource()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(
+                directory.FullName,
+                "src",
+                "V3dfy.App",
+                "MainWindow.xaml");
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllText(candidate);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException("Could not locate src/V3dfy.App/MainWindow.xaml.");
     }
 
     private static string ExtractSourceRange(string source, string startMarker, string endMarker)

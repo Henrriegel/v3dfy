@@ -26,6 +26,7 @@ public sealed class InternalToolPathResolver
         Iw3PackageDirectory = ResolvePath(Iw3EngineBundleContract.Iw3PackageDirectoryRelativePath),
         ModelCatalogFile = ResolvePath(Iw3EngineBundleContract.ModelCatalogRelativePath),
         Iw3CliCapabilitiesFile = ResolvePath(Iw3EngineBundleContract.CliCapabilitiesRelativePath),
+        V3dfyParallaxHelperScript = ResolvePath(Iw3EngineBundleContract.V3dfyParallaxHelperRelativePath),
         Iw3DefaultStereoRuntimeDependencyFile =
             ResolvePath(Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyRelativePath),
     };

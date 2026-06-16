@@ -16,6 +16,7 @@ public static class Iw3EngineBundleContract
     public const string Iw3DefaultStereoRuntimeDependencyFileName = "iw3_row_flow_v3_20250627.pth";
     public const string Iw3DefaultStereoRuntimeDependencyRelativePath =
         "engine/iw3/nunif/iw3/pretrained_models/hub/checkpoints/iw3_row_flow_v3_20250627.pth";
+    public const string V3dfyParallaxHelperRelativePath = "engine/iw3/v3dfy/parallax2d.py";
     public const string CliCapabilitiesFileName = "IW3_CLI_CAPABILITIES.json";
     public const string CliCapabilitiesRelativePath = "engine/iw3/IW3_CLI_CAPABILITIES.json";
     public const string ModelCatalogFileName = "MODEL_CATALOG.json";

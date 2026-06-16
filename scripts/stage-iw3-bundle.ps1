@@ -171,6 +171,78 @@ function Copy-Bundle {
     }
 }
 
+function Add-UniqueString {
+    param(
+        [System.Collections.Generic.List[string]]$List,
+        [string]$Value
+    )
+
+    foreach ($item in $List) {
+        if ($item.Equals($Value, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+    }
+
+    $List.Add($Value)
+}
+
+function Merge-V3dfyIw3Capabilities {
+    param([string]$DestinationBundleRoot)
+
+    $capabilitiesPath = Join-Path $DestinationBundleRoot 'IW3_CLI_CAPABILITIES.json'
+    if (-not (Test-Path -LiteralPath $capabilitiesPath -PathType Leaf)) {
+        Write-Failure "cannot merge v3dfy iw3 extensions because capabilities manifest is missing: $capabilitiesPath"
+        return
+    }
+
+    $manifest = Get-Content -LiteralPath $capabilitiesPath -Raw | ConvertFrom-Json
+    $verifiedOptions = [System.Collections.Generic.List[string]]::new()
+    foreach ($option in @($manifest.VerifiedOptions)) {
+        if (-not [string]::IsNullOrWhiteSpace($option)) {
+            Add-UniqueString -List $verifiedOptions -Value $option
+        }
+    }
+
+    Add-UniqueString -List $verifiedOptions -Value '--export'
+    Add-UniqueString -List $verifiedOptions -Value '--export-depth-only'
+    Add-UniqueString -List $verifiedOptions -Value '--export-depth-fit'
+    $manifest.VerifiedOptions = @($verifiedOptions)
+
+    $notes = [string]$manifest.Notes
+    $extensionNote = 'v3dfy app extension verifies still-image depth export switches for the bundled parallax helper.'
+    if ($notes.IndexOf($extensionNote, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        $manifest.Notes = if ([string]::IsNullOrWhiteSpace($notes)) {
+            $extensionNote
+        }
+        else {
+            "$notes $extensionNote"
+        }
+    }
+
+    $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $capabilitiesPath -Encoding UTF8
+    Write-Check OK 'v3dfy iw3 depth export capability tokens merged.'
+}
+
+function Copy-V3dfyIw3Extensions {
+    param([string]$DestinationBundleRoot)
+
+    $extensionSourceRoot = Join-Path $repoRoot 'engine\iw3\v3dfy'
+    if (-not (Test-Path -LiteralPath $extensionSourceRoot -PathType Container)) {
+        Write-Failure "v3dfy iw3 extension source is missing: $extensionSourceRoot"
+        return
+    }
+
+    $extensionTargetRoot = Join-Path $DestinationBundleRoot 'v3dfy'
+    New-Item -ItemType Directory -Path $extensionTargetRoot -Force | Out-Null
+    Copy-Item `
+        -LiteralPath (Join-Path $extensionSourceRoot 'parallax2d.py') `
+        -Destination $extensionTargetRoot `
+        -Force
+    Write-Check OK "v3dfy iw3 extensions staged under: $extensionTargetRoot"
+
+    Merge-V3dfyIw3Capabilities -DestinationBundleRoot $DestinationBundleRoot
+}
+
 $sourceDefault = Join-Path $repoRoot 'engine\iw3'
 $targetDefault = Join-Path $repoRoot 'artifacts\stage\v3dfy-app'
 $sourcePath = Resolve-FullPath $SourceBundleRoot $sourceDefault
@@ -206,6 +278,8 @@ elseif (-not (Invoke-BundleValidation -BundleRoot $sourcePath -Description 'sour
 Copy-Bundle `
     -SourceRoot $sourcePath `
     -DestinationBundleRoot $targetBundlePath
+
+Copy-V3dfyIw3Extensions -DestinationBundleRoot $targetBundlePath
 
 if ($script:failureCount -gt 0) {
     Write-Check FAIL "iw3 bundle staging failed with $script:failureCount required issue(s)."

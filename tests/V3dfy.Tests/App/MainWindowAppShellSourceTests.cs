@@ -347,7 +347,7 @@ public sealed class MainWindowAppShellSourceTests
             "private void ContinueWithImageConversion()");
         var setupChangedMethod = ExtractSourceRange(
             source,
-            "private void ApplyImageSetupChanged()",
+            "private void ApplyImageSetupChanged(",
             "private void SetImageSetupString(");
         var sourceStep = ExtractSourceRange(
             imageSection,
@@ -416,14 +416,15 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModeCard\"", setupStep);
         Assert.Contains("Command=\"{Binding SelectImageParallaxModeCommand}\"", setupStep);
         Assert.Contains("Style=\"{StaticResource ImageWorkflowOptionCardButtonStyle}\"", setupStep);
+        Assert.Contains("IsEnabled=\"{Binding ImageWorkflowCardsEnabled}\"", setupStep);
         Assert.Contains("Text=\"{Binding ImageParallaxModeTitleText}\"", setupStep);
         Assert.Contains("Text=\"{Binding ImageParallaxModeBodyText}\"", setupStep);
-        Assert.Contains("Text=\"{Binding ImageParallaxModeCardStatusText}\"", setupStep);
+        Assert.DoesNotContain("Text=\"{Binding ImageParallaxModeCardStatusText}\"", setupStep);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoModeCard\"", setupStep);
         Assert.Contains("Command=\"{Binding SelectImageStereoModeCommand}\"", setupStep);
         Assert.Contains("Text=\"{Binding Image3DOutputModeTitleText}\"", setupStep);
         Assert.Contains("Text=\"{Binding Image3DOutputModeBodyText}\"", setupStep);
-        Assert.Contains("Text=\"{Binding ImageStereoModeCardStatusText}\"", setupStep);
+        Assert.DoesNotContain("Text=\"{Binding ImageStereoModeCardStatusText}\"", setupStep);
         Assert.DoesNotContain("StartConversionCommand", imageSection);
         Assert.DoesNotContain("GeneratePreviewCommand", imageSection);
         Assert.DoesNotContain("SelectVideoCommand", imageSection);
@@ -441,14 +442,15 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("ItemsSource=\"{Binding ParallaxLayerBehaviorOptions}\"", imageSection);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxResultScaffold\"", imageSection);
         Assert.Contains("Visibility=\"{Binding ImageParallaxPreviewExportStepVisibility}\"", imageSection);
-        Assert.Contains("Text=\"{Binding ImageOutputPlanText}\"", imageSection);
-        Assert.Contains("Text=\"{Binding ImageSetupSummaryText}\"", imageSection);
+        Assert.Contains("Text=\"{Binding ImageParallaxSummaryText}\"", imageSection);
+        Assert.Contains("Text=\"{Binding ImageExpectedOutputFileText}\"", imageSection);
+        Assert.Contains("Text=\"{Binding ImageNotImplementedStateText}\"", imageSection);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoScaffold\"", imageSection);
         Assert.Contains("Visibility=\"{Binding ImageStereoSetupStepVisibility}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding StereoOutputFormatOptions}\"", imageSection);
         Assert.Contains("SelectedItem=\"{Binding SelectedStereoOutputFormatOption,", imageSection);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelector\"", imageSection);
-        Assert.Contains("ItemsSource=\"{Binding LocalModelCandidates}\"", imageSection);
+        Assert.Contains("ItemsSource=\"{Binding ImageParallaxLocalModelCandidates}\"", imageSection);
         Assert.Contains("SelectedItem=\"{Binding SelectedLocalModelCandidate,", imageSection);
         Assert.Contains("ItemsSource=\"{Binding StereoEyeSeparationOptions}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding StereoConvergenceOptions}\"", imageSection);
@@ -466,8 +468,8 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("Text=\"{Binding ImagePlannedOutputFormatsText}\"", rightPanel);
         Assert.Contains("Text=\"{Binding ImageSelectedModelSummaryText}\"", rightPanel);
         Assert.Contains("Text=\"{Binding ImageExpectedOutputPathText}\"", rightPanel);
-        Assert.Contains("AutomationProperties.AutomationId=\"ExportStereoscopicImageButton\"", rightPanel);
-        Assert.Contains("Command=\"{Binding ExportStereoscopicImageCommand}\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConvertImageButton\"", rightPanel);
+        Assert.Contains("Command=\"{Binding ConvertImageCommand}\"", rightPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"OpenImageOutputFolderButton\"", rightPanel);
         Assert.Contains("Command=\"{Binding OpenImageOutputFolderCommand}\"", rightPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"NewImageConversionButton\"", rightPanel);
@@ -504,12 +506,12 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("Text=\"{Binding ImageDepthPanelTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageParallaxPreviewTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageParameterPanelTitleText}\"", imageSection);
-        Assert.Contains("Text=\"{Binding ImageExportOptionsTitleText}\"", imageSection);
+        Assert.Contains("Text=\"{Binding ImageParallaxSummaryText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageStereoPreviewTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageStereoControlsTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageGeneratedFilesTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageOutputPanelTitleText}\"", imageSection);
-        Assert.Contains("IsEnabled=\"False\"", imageSection);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConvertImageButton\"", imageSection);
         Assert.Contains("Visibility=\"Collapsed\"", hiddenLegacySection);
         Assert.Contains("public enum ImageConversionMode", source);
         Assert.Contains("public enum ImageConversionStep", source);
@@ -549,7 +551,7 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("public ObservableCollection<LogEntryViewModel> ImageLogs", source);
         Assert.Contains("private void AddImageLog", source);
         Assert.Contains("private void ClearImageLog()", source);
-        Assert.Contains("ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0);", source);
+        Assert.Contains("ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning);", source);
         Assert.Contains("ViewImageActivityLogCommand = new RelayCommand(ViewImageActivityLog);", constructor);
         Assert.Contains("private void ViewImageActivityLog()", source);
         Assert.Contains("private string CreateFullImageActivityLogText()", source);
@@ -571,15 +573,15 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("ContinueWithImageConversionCommand = new RelayCommand(", constructor);
         Assert.Contains("() => CanContinueWithImageConversion", constructor);
         Assert.Contains("AnalyzeImageCommand = new RelayCommand(AnalyzeImage, () => CanAnalyzeImage);", constructor);
-        Assert.Contains("public bool CanAnalyzeImage => HasSelectedImage;", source);
+        Assert.Contains("public bool CanAnalyzeImage => HasSelectedImage && CanInteractWithImageWorkflow;", source);
         Assert.Contains("public bool HasSelectedImageMode => SelectedImageConversionMode is not null;", source);
         Assert.Contains("public bool HasImageWorkflowPrerequisites => HasImageMetadata && HasSelectedImageMode;", source);
-        Assert.Contains("public bool CanOpenImageSetupStep => HasImageMetadata;", source);
+        Assert.Contains("public bool CanOpenImageSetupStep => HasImageMetadata && CanUseImageStepNavigation;", source);
         Assert.Contains("public bool IsImageModeSetupValid", source);
         Assert.Contains("public bool IsImageSetupValid => HasImageMetadata && HasSelectedImageMode && IsImageModeSetupValid;", source);
-        Assert.Contains("public bool CanOpenImagePreviewExportStep => IsImageSetupValid;", source);
-        Assert.Contains("ImageConversionStep.ModeAndSource => CanOpenImageSetupStep", source);
-        Assert.Contains("ImageConversionStep.Setup => CanOpenImagePreviewExportStep", source);
+        Assert.Contains("public bool CanOpenImagePreviewExportStep => IsImageSetupValid && CanUseImageStepNavigation;", source);
+        Assert.Contains("ImageConversionStep.ModeAndSource => CanUseImageStepNavigation && CanOpenImageSetupStep", source);
+        Assert.Contains("ImageConversionStep.Setup => CanUseImageStepNavigation && CanOpenImagePreviewExportStep", source);
         Assert.Contains("public Visibility ImageAnalysisResultsVisibility", source);
         Assert.Contains("HasImageMetadata ? Visibility.Visible : Visibility.Collapsed;", source);
         Assert.Contains("public GridLength ImagePreviewExportStatusRowHeight", source);
@@ -596,7 +598,8 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("_hasEnteredImagePreviewExportStage = false;", source);
         Assert.Contains("SelectedImageConversionStep = ImageConversionStep.ModeAndSource;", selectImageMethod);
         Assert.Contains("_hasEnteredImagePreviewExportStage = false;", selectImageMethod);
-        Assert.Contains("ApplyImageSetupChanged();", selectModeMethod);
+        Assert.Contains("Image workflow mode changed:", selectModeMethod);
+        Assert.Contains("ApplyImageSetupChanged(", selectModeMethod);
         Assert.Contains("SelectedImageConversionStep == ImageConversionStep.ModeAndSource", selectModeMethod);
         Assert.Contains("if (step == ImageConversionStep.Setup && !CanOpenImageSetupStep)", selectStepMethod);
         Assert.Contains("if (step == ImageConversionStep.PreviewAndExport && !CanOpenImagePreviewExportStep)", selectStepMethod);
@@ -660,13 +663,20 @@ public sealed class MainWindowAppShellSourceTests
             "private void OpenToolsEngineSettings()");
 
         Assert.Contains("private AppSection _selectedAppSection = AppSection.Home;", source);
-        Assert.Contains("SelectHomeSectionCommand = new RelayCommand(() => SelectAppSection(AppSection.Home));", constructor);
-        Assert.Contains("SelectImageConversionSectionCommand = new RelayCommand(() => SelectAppSection(AppSection.ImageConversion));", constructor);
-        Assert.Contains("SelectVideoConversionSectionCommand = new RelayCommand(() => SelectAppSection(AppSection.VideoConversion));", constructor);
-        Assert.Contains("ToggleSidebarCommand = new RelayCommand(ToggleSidebar);", constructor);
-        Assert.Contains("SelectImageCommand = new RelayCommand(SelectImage);", constructor);
-        Assert.Contains("SelectImageParallaxModeCommand = new RelayCommand(() => SelectImageConversionMode(ImageConversionMode.ParallaxPhoto));", constructor);
-        Assert.Contains("SelectImageStereoModeCommand = new RelayCommand(() => SelectImageConversionMode(ImageConversionMode.StereoscopicImage));", constructor);
+        Assert.Contains("SelectHomeSectionCommand = new RelayCommand(", constructor);
+        Assert.Contains("() => SelectAppSection(AppSection.Home)", constructor);
+        Assert.Contains("SelectImageConversionSectionCommand = new RelayCommand(", constructor);
+        Assert.Contains("() => SelectAppSection(AppSection.ImageConversion)", constructor);
+        Assert.Contains("SelectVideoConversionSectionCommand = new RelayCommand(", constructor);
+        Assert.Contains("() => SelectAppSection(AppSection.VideoConversion)", constructor);
+        Assert.Contains("ToggleSidebarCommand = new RelayCommand(ToggleSidebar, () => CanUseShellNavigation);", constructor);
+        Assert.Contains("SelectImageCommand = new RelayCommand(SelectImage, () => CanInteractWithImageWorkflow);", constructor);
+        Assert.Contains("SelectImageParallaxModeCommand = new RelayCommand(", constructor);
+        Assert.Contains("() => SelectImageConversionMode(ImageConversionMode.ParallaxPhoto)", constructor);
+        Assert.Contains("SelectImageStereoModeCommand = new RelayCommand(", constructor);
+        Assert.Contains("() => SelectImageConversionMode(ImageConversionMode.StereoscopicImage)", constructor);
+        Assert.Contains("() => CanUseShellNavigation", constructor);
+        Assert.Contains("() => CanInteractWithImageWorkflow", constructor);
         Assert.Contains("ImageWizardBackCommand = new RelayCommand(", constructor);
         Assert.Contains("ImageWizardNextCommand = new RelayCommand(", constructor);
         Assert.Contains("ContinueWithImageConversionCommand = new RelayCommand(", constructor);

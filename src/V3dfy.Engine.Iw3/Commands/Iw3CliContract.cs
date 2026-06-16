@@ -16,6 +16,9 @@ public static class Iw3CliContract
     public const string TopBottomSwitch = "--tb";
     public const string AnaglyphSwitch = "--anaglyph";
     public const string CrossEyedSwitch = "--cross-eyed";
+    public const string ExportSwitch = "--export";
+    public const string ExportDepthOnlySwitch = "--export-depth-only";
+    public const string ExportDepthFitSwitch = "--export-depth-fit";
 
     public static IReadOnlyList<string> ConfirmedBaseArgumentTemplate { get; } =
     [

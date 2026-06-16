@@ -30,7 +30,10 @@ public partial class MainWindow : Window
     private const string PreviewPauseGlyph = "\uE769";
     private const string PreviewVolumeGlyph = "\uE767";
     private const string PreviewMuteGlyph = "\uE74F";
+    private const string ImageParallaxVerticalPlayerPrefix = "ImageParallaxVertical";
+    private const string ImageParallaxWidePlayerPrefix = "ImageParallaxWide";
     private readonly DispatcherTimer _previewPlaybackTimer;
+    private readonly DispatcherTimer _imageParallaxPlaybackTimer;
     private WpfScrollViewer? _previewLogScrollViewer;
     private bool _previewLogShouldAutoScroll = true;
     private bool _isPreviewMediaPlaying;
@@ -41,6 +44,15 @@ public partial class MainWindow : Window
     private bool _isUpdatingPreviewVolume;
     private bool _isUpdatingPreviewMute;
     private double _lastPreviewVolume = PreviewDefaultVolume;
+    private string _activeImageParallaxPlayerPrefix = ImageParallaxWidePlayerPrefix;
+    private bool _isImageParallaxMediaPlaying;
+    private bool _isImageParallaxMediaEnded;
+    private bool _isUpdatingImageParallaxTimeline;
+    private bool _isUserDraggingImageParallaxTimeline;
+    private bool _wasImageParallaxMediaPlayingBeforeTimelineDrag;
+    private bool _isUpdatingImageParallaxVolume;
+    private bool _isUpdatingImageParallaxMute;
+    private double _lastImageParallaxVolume = PreviewDefaultVolume;
 
     public MainWindow()
     {
@@ -51,6 +63,11 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromMilliseconds(250),
         };
         _previewPlaybackTimer.Tick += OnPreviewPlaybackTimerTick;
+        _imageParallaxPlaybackTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250),
+        };
+        _imageParallaxPlaybackTimer.Tick += OnImageParallaxPlaybackTimerTick;
         DataContext = new MainWindowViewModel();
         if (DataContext is MainWindowViewModel viewModel)
         {
@@ -248,6 +265,624 @@ public partial class MainWindow : Window
         }
 
         return _previewLogScrollViewer.ScrollableHeight - _previewLogScrollViewer.VerticalOffset <= 2;
+    }
+
+    private void OnImageParallaxPreviewMediaOpened(object sender, RoutedEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax media opened",
+            () =>
+            {
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                _activeImageParallaxPlayerPrefix = prefix;
+                _imageParallaxPlaybackTimer.Stop();
+                _isImageParallaxMediaPlaying = false;
+                _isImageParallaxMediaEnded = false;
+                var media = sender as WpfMediaElement ?? FindImageParallaxMedia(prefix);
+                var timeline = FindImageParallaxTimeline(prefix);
+                TimeSpan? duration = null;
+                if (media is not null)
+                {
+                    media.ScrubbingEnabled = true;
+                    media.Pause();
+                    media.Position = TimeSpan.Zero;
+                    duration = GetPreviewMediaDuration(media);
+                }
+
+                if (timeline is not null)
+                {
+                    _isUpdatingImageParallaxTimeline = true;
+                    try
+                    {
+                        timeline.Maximum = duration?.TotalSeconds ?? 0;
+                        timeline.Value = 0;
+                    }
+                    finally
+                    {
+                        _isUpdatingImageParallaxTimeline = false;
+                    }
+                }
+
+                UpdateImageParallaxPlaybackButton(prefix);
+                UpdateImageParallaxTimeText(prefix);
+                SyncImageParallaxVolumeControls(prefix);
+                InitializeImageParallaxFirstFrame(media, duration, prefix);
+            });
+    }
+
+    private void OnImageParallaxPreviewMediaEnded(object sender, RoutedEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax media ended",
+            () =>
+            {
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                _activeImageParallaxPlayerPrefix = prefix;
+                _isImageParallaxMediaPlaying = false;
+                _isImageParallaxMediaEnded = true;
+                _imageParallaxPlaybackTimer.Stop();
+                if (GetPreviewMediaDuration(FindImageParallaxMedia(prefix)) is { } duration)
+                {
+                    SetImageParallaxTimelineValue(prefix, duration.TotalSeconds);
+                }
+
+                UpdateImageParallaxPlaybackButton(prefix);
+                UpdateImageParallaxTimeText(prefix);
+            });
+    }
+
+    private void OnImageParallaxPreviewMediaFailed(object sender, ExceptionRoutedEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax media failed",
+            () =>
+            {
+                _isImageParallaxMediaPlaying = false;
+                _isImageParallaxMediaEnded = false;
+                _imageParallaxPlaybackTimer.Stop();
+                AppErrorLogService.LogRecoverableException("Image parallax media failed", e.ErrorException);
+                UpdateImageParallaxPlaybackButton(ResolveImageParallaxPlayerPrefix(sender));
+            });
+    }
+
+    private void OnImageParallaxVideoPlayerVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax video player visibility",
+            () =>
+            {
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                if (e.NewValue is true)
+                {
+                    _activeImageParallaxPlayerPrefix = prefix;
+                    UpdateImageParallaxPlaybackButton(prefix);
+                    UpdateImageParallaxTimeText(prefix);
+                    SyncImageParallaxVolumeControls(prefix);
+                    return;
+                }
+
+                var media = FindImageParallaxMedia(prefix);
+                media?.Pause();
+                if (string.Equals(_activeImageParallaxPlayerPrefix, prefix, StringComparison.Ordinal))
+                {
+                    _imageParallaxPlaybackTimer.Stop();
+                    _isImageParallaxMediaPlaying = false;
+                    _isImageParallaxMediaEnded = false;
+                }
+
+                UpdateImageParallaxPlaybackButton(prefix);
+            });
+    }
+
+    private void OnImageParallaxPreviewPlayPauseClicked(object sender, RoutedEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax play/pause",
+            () =>
+            {
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                _activeImageParallaxPlayerPrefix = prefix;
+                var media = FindImageParallaxMedia(prefix);
+                if (media is null)
+                {
+                    return;
+                }
+
+                if (_isImageParallaxMediaPlaying)
+                {
+                    PauseImageParallaxMedia(media, prefix);
+                    return;
+                }
+
+                PlayImageParallaxMedia(media, prefix);
+            });
+    }
+
+    private void OnImageParallaxPreviewTimelinePreviewMouseDown(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var prefix = ResolveImageParallaxPlayerPrefix(sender);
+        _activeImageParallaxPlayerPrefix = prefix;
+        _wasImageParallaxMediaPlayingBeforeTimelineDrag = _isImageParallaxMediaPlaying;
+        _imageParallaxPlaybackTimer.Stop();
+        if (_wasImageParallaxMediaPlayingBeforeTimelineDrag &&
+            FindImageParallaxMedia(prefix) is { } media)
+        {
+            media.Pause();
+        }
+
+        _isUserDraggingImageParallaxTimeline = true;
+    }
+
+    private void OnImageParallaxPreviewTimelinePreviewMouseUp(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax timeline seek",
+            () =>
+            {
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                _activeImageParallaxPlayerPrefix = prefix;
+                _isUserDraggingImageParallaxTimeline = false;
+                var media = FindImageParallaxMedia(prefix);
+                var timeline = FindImageParallaxTimeline(prefix);
+                if (media is not null && timeline is not null)
+                {
+                    SeekImageParallaxMedia(media, prefix, timeline.Value);
+                }
+
+                if (_wasImageParallaxMediaPlayingBeforeTimelineDrag && media is not null)
+                {
+                    media.Play();
+                    _isImageParallaxMediaPlaying = true;
+                    _imageParallaxPlaybackTimer.Start();
+                }
+                else if (media is not null)
+                {
+                    media.Pause();
+                    _isImageParallaxMediaPlaying = false;
+                    _imageParallaxPlaybackTimer.Stop();
+                }
+
+                _wasImageParallaxMediaPlayingBeforeTimelineDrag = false;
+                UpdateImageParallaxPlaybackButton(prefix);
+                UpdateImageParallaxTimeText(prefix);
+            });
+    }
+
+    private void OnImageParallaxPreviewTimelineValueChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax timeline update",
+            () =>
+            {
+                if (_isUpdatingImageParallaxTimeline)
+                {
+                    return;
+                }
+
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                if (_isUserDraggingImageParallaxTimeline &&
+                    FindImageParallaxMedia(prefix) is { } media &&
+                    FindImageParallaxTimeline(prefix) is { } timeline)
+                {
+                    SeekImageParallaxMedia(media, prefix, timeline.Value);
+                }
+
+                UpdateImageParallaxTimeText(prefix);
+            });
+    }
+
+    private void OnImageParallaxPreviewVolumeValueChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax volume update",
+            () =>
+            {
+                if (_isUpdatingImageParallaxVolume)
+                {
+                    return;
+                }
+
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                _activeImageParallaxPlayerPrefix = prefix;
+                ApplyImageParallaxVolumeValue(prefix, e.NewValue);
+            });
+    }
+
+    private void OnImageParallaxPreviewVolumeSliderPreviewMouseLeftButtonDown(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax volume track click",
+            () =>
+            {
+                if (sender is not WpfSlider slider ||
+                    slider.ActualWidth <= 0 ||
+                    e.OriginalSource is not DependencyObject source ||
+                    FindVisualParent<WpfThumb>(source) is not null)
+                {
+                    return;
+                }
+
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                _activeImageParallaxPlayerPrefix = prefix;
+                var clickedX = Math.Clamp(e.GetPosition(slider).X, 0, slider.ActualWidth);
+                var normalizedClick = clickedX / slider.ActualWidth;
+                var clickedValue = slider.Minimum + ((slider.Maximum - slider.Minimum) * normalizedClick);
+                var clampedValue = Math.Clamp(clickedValue, slider.Minimum, slider.Maximum);
+
+                SetImageParallaxVolumeSliderValue(prefix, clampedValue);
+                ApplyImageParallaxVolumeValue(prefix, clampedValue);
+                e.Handled = true;
+            });
+    }
+
+    private void ApplyImageParallaxVolumeValue(string prefix, double value)
+    {
+        var volume = Math.Clamp(value, 0, 1);
+        if (volume <= PreviewMutedVolumeThreshold)
+        {
+            SetImageParallaxMutedState(
+                prefix,
+                isMuted: true,
+                updateSlider: false,
+                preserveCurrentVolume: false);
+            return;
+        }
+
+        _lastImageParallaxVolume = volume;
+        if (FindImageParallaxMedia(prefix) is { } media)
+        {
+            media.IsMuted = false;
+            media.Volume = volume;
+        }
+
+        SetImageParallaxMuteToggleChecked(prefix, false);
+        UpdateImageParallaxMuteButton(prefix);
+    }
+
+    private void OnImageParallaxPreviewMuteChanged(object sender, RoutedEventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax mute update",
+            () =>
+            {
+                var prefix = ResolveImageParallaxPlayerPrefix(sender);
+                _activeImageParallaxPlayerPrefix = prefix;
+                var muteToggle = FindImageParallaxMuteToggle(prefix);
+                if (_isUpdatingImageParallaxMute || muteToggle is null)
+                {
+                    return;
+                }
+
+                SetImageParallaxMutedState(
+                    prefix,
+                    isMuted: muteToggle.IsChecked == true,
+                    updateSlider: true,
+                    preserveCurrentVolume: true);
+            });
+    }
+
+    private void OnImageParallaxPlaybackTimerTick(object? sender, EventArgs e)
+    {
+        TryRunPreviewViewAction(
+            "Image parallax playback timer",
+            () =>
+            {
+                var prefix = _activeImageParallaxPlayerPrefix;
+                var media = FindImageParallaxMedia(prefix);
+                if (media is null)
+                {
+                    _imageParallaxPlaybackTimer.Stop();
+                    return;
+                }
+
+                if (!_isUserDraggingImageParallaxTimeline)
+                {
+                    SetImageParallaxTimelineValue(prefix, media.Position.TotalSeconds);
+                }
+
+                UpdateImageParallaxTimeText(prefix);
+            });
+    }
+
+    private void PlayImageParallaxMedia(WpfMediaElement media, string prefix)
+    {
+        if (_isImageParallaxMediaEnded)
+        {
+            media.Position = TimeSpan.Zero;
+            SetImageParallaxTimelineValue(prefix, 0);
+            _isImageParallaxMediaEnded = false;
+        }
+
+        media.Play();
+        _imageParallaxPlaybackTimer.Start();
+        _isImageParallaxMediaPlaying = true;
+        UpdateImageParallaxPlaybackButton(prefix);
+    }
+
+    private void PauseImageParallaxMedia(WpfMediaElement media, string prefix)
+    {
+        media.Pause();
+        _imageParallaxPlaybackTimer.Stop();
+        _isImageParallaxMediaPlaying = false;
+        _isImageParallaxMediaEnded = false;
+        UpdateImageParallaxPlaybackButton(prefix);
+    }
+
+    private void InitializeImageParallaxFirstFrame(
+        WpfMediaElement? media,
+        TimeSpan? duration,
+        string prefix)
+    {
+        if (media is null ||
+            duration is null ||
+            duration <= PreviewFirstFrameNudge)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            new Action(() => TryRunPreviewViewAction(
+                "Image parallax first frame initialization",
+                () =>
+                {
+                    if (_isImageParallaxMediaPlaying)
+                    {
+                        return;
+                    }
+
+                    media.ScrubbingEnabled = true;
+                    media.Pause();
+                    media.Position = PreviewFirstFrameNudge;
+                    SetImageParallaxTimelineValue(prefix, 0);
+                    UpdateImageParallaxTimeText(prefix);
+                })),
+            DispatcherPriority.Background);
+    }
+
+    private void SeekImageParallaxMedia(WpfMediaElement media, string prefix, double seconds)
+    {
+        media.Position = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        if (_isImageParallaxMediaEnded &&
+            FindImageParallaxTimeline(prefix) is { } timeline &&
+            seconds < timeline.Maximum)
+        {
+            _isImageParallaxMediaEnded = false;
+            UpdateImageParallaxPlaybackButton(prefix);
+        }
+    }
+
+    private void SetImageParallaxTimelineValue(string prefix, double value)
+    {
+        var timeline = FindImageParallaxTimeline(prefix);
+        if (timeline is null)
+        {
+            return;
+        }
+
+        _isUpdatingImageParallaxTimeline = true;
+        try
+        {
+            timeline.Value = Math.Clamp(value, timeline.Minimum, timeline.Maximum);
+        }
+        finally
+        {
+            _isUpdatingImageParallaxTimeline = false;
+        }
+    }
+
+    private void SyncImageParallaxVolumeControls(string prefix)
+    {
+        var slider = FindImageParallaxVolumeSlider(prefix);
+        var media = FindImageParallaxMedia(prefix);
+        var sliderVolume = slider is null
+            ? PreviewDefaultVolume
+            : Math.Clamp(slider.Value, 0, 1);
+        if (sliderVolume > PreviewMutedVolumeThreshold)
+        {
+            _lastImageParallaxVolume = sliderVolume;
+        }
+
+        var isMuted = sliderVolume <= PreviewMutedVolumeThreshold ||
+            media?.IsMuted == true;
+        if (media is not null)
+        {
+            media.Volume = isMuted ? 0 : sliderVolume;
+            media.IsMuted = isMuted;
+        }
+
+        SetImageParallaxMuteToggleChecked(prefix, isMuted);
+        UpdateImageParallaxMuteButton(prefix);
+    }
+
+    private void SetImageParallaxMutedState(
+        string prefix,
+        bool isMuted,
+        bool updateSlider,
+        bool preserveCurrentVolume)
+    {
+        var slider = FindImageParallaxVolumeSlider(prefix);
+        var media = FindImageParallaxMedia(prefix);
+        var currentVolume = slider is null
+            ? media?.Volume ?? _lastImageParallaxVolume
+            : Math.Clamp(slider.Value, 0, 1);
+
+        if (isMuted)
+        {
+            if (preserveCurrentVolume && currentVolume > PreviewMutedVolumeThreshold)
+            {
+                _lastImageParallaxVolume = currentVolume;
+            }
+
+            if (media is not null)
+            {
+                media.IsMuted = true;
+                media.Volume = 0;
+            }
+
+            if (updateSlider)
+            {
+                SetImageParallaxVolumeSliderValue(prefix, 0);
+            }
+
+            SetImageParallaxMuteToggleChecked(prefix, true);
+            UpdateImageParallaxMuteButton(prefix);
+            return;
+        }
+
+        var restoredVolume = _lastImageParallaxVolume > PreviewMutedVolumeThreshold
+            ? _lastImageParallaxVolume
+            : PreviewDefaultVolume;
+        if (media is not null)
+        {
+            media.IsMuted = false;
+            media.Volume = restoredVolume;
+        }
+
+        if (updateSlider)
+        {
+            SetImageParallaxVolumeSliderValue(prefix, restoredVolume);
+        }
+
+        SetImageParallaxMuteToggleChecked(prefix, false);
+        UpdateImageParallaxMuteButton(prefix);
+    }
+
+    private void SetImageParallaxVolumeSliderValue(string prefix, double value)
+    {
+        var slider = FindImageParallaxVolumeSlider(prefix);
+        if (slider is null)
+        {
+            return;
+        }
+
+        _isUpdatingImageParallaxVolume = true;
+        try
+        {
+            slider.Value = Math.Clamp(value, slider.Minimum, slider.Maximum);
+        }
+        finally
+        {
+            _isUpdatingImageParallaxVolume = false;
+        }
+    }
+
+    private void SetImageParallaxMuteToggleChecked(string prefix, bool isMuted)
+    {
+        var muteToggle = FindImageParallaxMuteToggle(prefix);
+        if (muteToggle is null)
+        {
+            return;
+        }
+
+        _isUpdatingImageParallaxMute = true;
+        try
+        {
+            muteToggle.IsChecked = isMuted;
+        }
+        finally
+        {
+            _isUpdatingImageParallaxMute = false;
+        }
+    }
+
+    private void UpdateImageParallaxPlaybackButton(string prefix)
+    {
+        var playPauseButton = FindImageParallaxPlayPauseButton(prefix);
+        if (playPauseButton is null)
+        {
+            return;
+        }
+
+        var viewModel = GetViewModel();
+        var label = _isImageParallaxMediaPlaying
+            ? viewModel?.PreviewPauseText ?? "Pause"
+            : viewModel?.PreviewPlayText ?? "Play";
+        playPauseButton.Content = _isImageParallaxMediaPlaying ? PreviewPauseGlyph : PreviewPlayGlyph;
+        playPauseButton.ToolTip = label;
+        AutomationProperties.SetName(playPauseButton, label);
+    }
+
+    private void UpdateImageParallaxMuteButton(string prefix)
+    {
+        var muteToggle = FindImageParallaxMuteToggle(prefix);
+        var volumeIcon = FindImageParallaxVolumeIcon(prefix);
+        var media = FindImageParallaxMedia(prefix);
+        var slider = FindImageParallaxVolumeSlider(prefix);
+        var isMuted = muteToggle?.IsChecked == true ||
+            media?.IsMuted == true ||
+            slider?.Value <= PreviewMutedVolumeThreshold;
+        var viewModel = GetViewModel();
+        var label = isMuted
+            ? viewModel?.PreviewUnmuteText ?? "Unmute"
+            : viewModel?.PreviewMuteText ?? "Mute";
+        var glyph = isMuted ? PreviewMuteGlyph : PreviewVolumeGlyph;
+        if (muteToggle is not null)
+        {
+            muteToggle.Content = glyph;
+            muteToggle.ToolTip = label;
+            AutomationProperties.SetName(muteToggle, label);
+        }
+
+        if (volumeIcon is not null)
+        {
+            volumeIcon.Text = glyph;
+        }
+    }
+
+    private void UpdateImageParallaxTimeText(string prefix)
+    {
+        var timeText = FindImageParallaxTimeText(prefix);
+        if (timeText is null)
+        {
+            return;
+        }
+
+        var media = FindImageParallaxMedia(prefix);
+        var current = media?.Position ?? TimeSpan.Zero;
+        var duration = GetPreviewMediaDuration(media) ?? TimeSpan.Zero;
+        timeText.Text = $"{FormatPreviewMediaTime(current)} / {FormatPreviewMediaTime(duration)}";
+    }
+
+    private WpfMediaElement? FindImageParallaxMedia(string prefix) =>
+        FindNamedControl<WpfMediaElement>($"{prefix}PreviewMediaElement");
+
+    private WpfSlider? FindImageParallaxTimeline(string prefix) =>
+        FindNamedControl<WpfSlider>($"{prefix}PreviewTimelineSlider");
+
+    private WpfButton? FindImageParallaxPlayPauseButton(string prefix) =>
+        FindNamedControl<WpfButton>($"{prefix}PreviewPlayPauseButton");
+
+    private WpfTextBlock? FindImageParallaxTimeText(string prefix) =>
+        FindNamedControl<WpfTextBlock>($"{prefix}PreviewTimeText");
+
+    private WpfSlider? FindImageParallaxVolumeSlider(string prefix) =>
+        FindNamedControl<WpfSlider>($"{prefix}PreviewVolumeSlider");
+
+    private WpfToggleButton? FindImageParallaxMuteToggle(string prefix) =>
+        FindNamedControl<WpfToggleButton>($"{prefix}PreviewMuteToggleButton");
+
+    private WpfTextBlock? FindImageParallaxVolumeIcon(string prefix) =>
+        FindNamedControl<WpfTextBlock>($"{prefix}PreviewVolumeIcon");
+
+    private static string ResolveImageParallaxPlayerPrefix(object sender)
+    {
+        if (sender is FrameworkElement element &&
+            element.Name.Contains("Vertical", StringComparison.Ordinal))
+        {
+            return ImageParallaxVerticalPlayerPrefix;
+        }
+
+        return ImageParallaxWidePlayerPrefix;
     }
 
     private void OnPreviewMediaOpened(object sender, RoutedEventArgs e)

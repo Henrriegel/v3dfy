@@ -107,10 +107,10 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"ImageConversionModeCards\"", setupStep);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModeCard\"", setupStep);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoModeCard\"", setupStep);
-        Assert.Contains("public bool CanOpenImageSetupStep => HasImageMetadata;", source);
+        Assert.Contains("public bool CanOpenImageSetupStep => HasImageMetadata && CanUseImageStepNavigation;", source);
         Assert.Contains("SelectImageSetupStepCommand = new RelayCommand(", constructor);
         Assert.Contains("() => CanOpenImageSetupStep", constructor);
-        Assert.Contains("ImageConversionStep.ModeAndSource => CanOpenImageSetupStep", source);
+        Assert.Contains("ImageConversionStep.ModeAndSource => CanUseImageStepNavigation && CanOpenImageSetupStep", source);
         Assert.True(IndexOf(setupStep, "AutomationProperties.AutomationId=\"ImageConversionModeCards\"") <
             IndexOf(setupStep, "AutomationProperties.AutomationId=\"ImageNoModeSetupHint\""));
         Assert.True(IndexOf(setupStep, "AutomationProperties.AutomationId=\"ImageConversionModeCards\"") <
@@ -177,8 +177,7 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("Style=\"{StaticResource ImageWorkflowOptionCardButtonStyle}\"", setupStep);
         Assert.Contains("Tag=\"{Binding ImageParallaxModeSelectionState}\"", setupStep);
         Assert.Contains("Tag=\"{Binding ImageStereoModeSelectionState}\"", setupStep);
-        Assert.Contains("Text=\"{Binding ImageParallaxModeCardStatusText}\"", setupStep);
-        Assert.Contains("Text=\"{Binding ImageStereoModeCardStatusText}\"", setupStep);
+        Assert.Contains("IsEnabled=\"{Binding ImageWorkflowCardsEnabled}\"", setupStep);
         Assert.Contains("Binding Tag, RelativeSource={RelativeSource TemplatedParent}", workflowStyle);
         Assert.Contains("Value=\"Active\"", workflowStyle);
         Assert.Contains("Value=\"{DynamicResource AccentBrush}\"", workflowStyle);
@@ -188,14 +187,14 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("Property=\"BorderThickness\"", workflowStyle);
         Assert.Contains("Value=\"2\"", workflowStyle);
         Assert.Contains("x:Key=\"ImageWorkflowSelectedMarkerStyle\"", workflowStyle);
-        Assert.Contains("x:Key=\"ImageWorkflowSelectionBadgeStyle\"", workflowStyle);
         Assert.Contains("x:Key=\"ImageWorkflowOptionIconTextStyle\"", workflowStyle);
         Assert.Contains("x:Key=\"ImageWorkflowOptionTitleTextStyle\"", workflowStyle);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModeSelectedMarker\"", setupStep);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoModeSelectedMarker\"", setupStep);
-        Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModeSelectedBadge\"", setupStep);
-        Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoModeSelectedBadge\"", setupStep);
-        Assert.Contains("Text=\"&#xE73E;\"", setupStep);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageParallaxModeSelectedBadge\"", setupStep);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageStereoModeSelectedBadge\"", setupStep);
+        Assert.DoesNotContain("Text=\"{Binding ImageParallaxModeCardStatusText}\"", setupStep);
+        Assert.DoesNotContain("Text=\"{Binding ImageStereoModeCardStatusText}\"", setupStep);
         Assert.DoesNotContain("#", workflowStyle);
         Assert.Contains("SelectedImageConversionMode == ImageConversionMode.ParallaxPhoto", source);
         Assert.Contains("SelectedImageConversionMode == ImageConversionMode.StereoscopicImage", source);
@@ -231,7 +230,9 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("SelectedImageConversionStep == ImageConversionStep.Setup && HasSelectedImageMode", source);
         Assert.Contains("public Visibility ImageWorkflowChooserVisibility", source);
         Assert.Contains("(!HasSelectedImageMode || IsImageWorkflowChooserExpanded)", source);
-        Assert.Contains("ToggleImageWorkflowChooserCommand = new RelayCommand(ToggleImageWorkflowChooser);", constructor);
+        Assert.Contains("ToggleImageWorkflowChooserCommand = new RelayCommand(", constructor);
+        Assert.Contains("ToggleImageWorkflowChooser,", constructor);
+        Assert.Contains("() => CanInteractWithImageWorkflow", constructor);
         Assert.Contains("public RelayCommand ToggleImageWorkflowChooserCommand { get; }", source);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageWorkflowSummaryBar\"", setupStep);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageWorkflowSummaryWideLayout\"", setupStep);
@@ -469,13 +470,11 @@ public sealed class MainWindowImageConversionParitySourceTests
             "AutomationProperties.AutomationId=\"ImageWizardFooter\"");
 
         Assert.True(IndexOf(parallaxWideLayout, "Text=\"{Binding ImageResultParallaxTitleText}\"") <
-            IndexOf(parallaxWideLayout, "AutomationProperties.AutomationId=\"ImageParallaxWideExportOptionsSummaryRow\""));
-        Assert.True(IndexOf(parallaxWideLayout, "AutomationProperties.AutomationId=\"ImageParallaxWideExportOptionsSummaryRow\"") <
-            IndexOf(parallaxWideLayout, "Text=\"{Binding ImageExportOptionsTitleText}\""));
-        Assert.True(IndexOf(parallaxWideLayout, "Text=\"{Binding ImageExportOptionsTitleText}\"") <
-            IndexOf(parallaxWideLayout, "Text=\"{Binding ImageResultSummaryTitleText}\""));
-        Assert.Contains("<ColumnDefinition Width=\"*\" />", parallaxWideLayout);
-        Assert.Contains("<ColumnDefinition Width=\"12\" />", parallaxWideLayout);
+            IndexOf(parallaxWideLayout, "Source=\"{Binding ImageParallaxPreviewImagePath}\""));
+        Assert.Contains("Visibility=\"{Binding ImageExportProgressVisibility}\"", parallaxWideLayout);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageParallaxWideExportOptionsSummaryRow\"", parallaxWideLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageExportOptionsTitleText}\"", parallaxWideLayout);
+        Assert.DoesNotContain("Text=\"{Binding ImageResultSummaryTitleText}\"", parallaxWideLayout);
         Assert.True(IndexOf(stereoWideLayout, "Text=\"{Binding ImageStereoResultTitleText}\"") <
             IndexOf(stereoWideLayout, "Source=\"{Binding ImageStereoPreviewImagePath}\""));
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"ImageStereoWideExportOptionsSummaryRow\"", stereoWideLayout);
@@ -568,7 +567,8 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("? Visibility.Visible", source);
         Assert.Contains("? GridLength.Auto", source);
         Assert.Contains("Text=\"{Binding ImageOutputPanelTitleText}\"", rightPanel);
-        Assert.Contains("AutomationProperties.AutomationId=\"ExportStereoscopicImageButton\"", rightPanel);
+        Assert.Contains("AutomationProperties.AutomationId=\"ConvertImageButton\"", rightPanel);
+        Assert.Contains("Command=\"{Binding ConvertImageCommand}\"", rightPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"OpenImageOutputFolderButton\"", rightPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"NewImageConversionButton\"", rightPanel);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageScaffoldLog\"", rightPanel);
@@ -660,7 +660,7 @@ public sealed class MainWindowImageConversionParitySourceTests
             "private void OpenSettings()");
         var setupChangedMethod = ExtractSourceRange(
             source,
-            "private void ApplyImageSetupChanged()",
+            "private void ApplyImageSetupChanged(",
             "private void ResetImageSetupState()");
 
         Assert.Contains("SelectedImageConversionStep > ImageConversionStep.ModeAndSource && HasImageMetadata => \"Completed\"", imageStepStateMethod);

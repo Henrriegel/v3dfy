@@ -774,6 +774,7 @@
                     <Button AutomationProperties.AutomationId="SidebarHomeButton"
                             AutomationProperties.Name="{Binding HomeNavigationText}"
                             Command="{Binding SelectHomeSectionCommand}"
+                            IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
                             Tag="{Binding IsHomeSectionSelected}"
                             ToolTip="{Binding HomeNavigationText}">
@@ -790,6 +791,7 @@
                     <Button AutomationProperties.AutomationId="SidebarImageConversionButton"
                             AutomationProperties.Name="{Binding ImageConversionNavigationText}"
                             Command="{Binding SelectImageConversionSectionCommand}"
+                            IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
                             Tag="{Binding IsImageConversionSectionSelected}"
                             ToolTip="{Binding ImageConversionNavigationText}">
@@ -806,6 +808,7 @@
                     <Button AutomationProperties.AutomationId="SidebarVideoConversionButton"
                             AutomationProperties.Name="{Binding VideoConversionNavigationText}"
                             Command="{Binding SelectVideoConversionSectionCommand}"
+                            IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
                             Tag="{Binding IsVideoConversionSectionSelected}"
                             ToolTip="{Binding VideoConversionNavigationText}">
@@ -826,6 +829,7 @@
                     <Button AutomationProperties.AutomationId="SidebarToggleStripButton"
                             AutomationProperties.Name="{Binding SidebarToggleToolTipText}"
                             Command="{Binding ToggleSidebarCommand}"
+                            IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource SidebarToggleStripButtonStyle}"
                             ToolTip="{Binding SidebarToggleToolTipText}">
                         <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
@@ -842,6 +846,7 @@
                             AutomationProperties.AutomationId="SidebarSettingsButton"
                             AutomationProperties.Name="{Binding SettingsText}"
                             Command="{Binding OpenSettingsCommand}"
+                            IsEnabled="{Binding CanOpenSettings}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
                             ToolTip="{Binding SettingsText}">
                         <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
@@ -923,6 +928,7 @@
                         <Button Margin="0,0,12,0"
                                 AutomationProperties.AutomationId="HomeVideoConversionCard"
                                 Command="{Binding SelectVideoConversionSectionCommand}"
+                                IsEnabled="{Binding CanUseShellNavigation}"
                                 Style="{StaticResource HomeActionCardButtonStyle}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -958,6 +964,7 @@
                         <Button Margin="0,0,12,0"
                                 AutomationProperties.AutomationId="HomeImageConversionCard"
                                 Command="{Binding SelectImageConversionSectionCommand}"
+                                IsEnabled="{Binding CanUseShellNavigation}"
                                 Style="{StaticResource HomeActionCardButtonStyle}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -992,6 +999,7 @@
                         </Button>
                         <Button AutomationProperties.AutomationId="HomeSettingsCard"
                                 Command="{Binding OpenSettingsCommand}"
+                                IsEnabled="{Binding CanOpenSettings}"
                                 Style="{StaticResource HomeActionCardButtonStyle}">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -1058,6 +1066,7 @@
                             <Border Tag="{Binding ImageModeSourceStepState}"
                                     Style="{StaticResource WizardStepPillStyle}">
                                 <Button Command="{Binding SelectImageModeSourceStepCommand}"
+                                        IsEnabled="{Binding CanUseImageStepNavigation}"
                                         Style="{StaticResource ImageWizardStepButtonStyle}">
                                     <StackPanel Orientation="Horizontal">
                                         <Border Tag="{Binding ImageModeSourceStepState}"
@@ -1081,6 +1090,7 @@
                                     Tag="{Binding ImageSetupStepState}"
                                     Style="{StaticResource WizardStepPillStyle}">
                                 <Button Command="{Binding SelectImageSetupStepCommand}"
+                                        IsEnabled="{Binding CanUseImageStepNavigation}"
                                         Style="{StaticResource ImageWizardStepButtonStyle}">
                                     <StackPanel Orientation="Horizontal">
                                         <Border Tag="{Binding ImageSetupStepState}"
@@ -1104,6 +1114,7 @@
                                     Tag="{Binding ImagePreviewExportStepState}"
                                     Style="{StaticResource WizardStepPillStyle}">
                                 <Button Command="{Binding SelectImagePreviewExportStepCommand}"
+                                        IsEnabled="{Binding CanUseImageStepNavigation}"
                                         Style="{StaticResource ImageWizardStepButtonStyle}">
                                     <StackPanel Orientation="Horizontal">
                                         <Border Tag="{Binding ImagePreviewExportStepState}"
@@ -1155,7 +1166,8 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <Button AutomationProperties.AutomationId="SelectImageButton"
                                                         Command="{Binding SelectImageCommand}"
-                                                        Content="{Binding SelectImageText}" />
+                                                        Content="{Binding SelectImageText}"
+                                                        IsEnabled="{Binding CanInteractWithImageWorkflow}" />
                                                 <Button Margin="10,0,0,0"
                                                         AutomationProperties.AutomationId="AnalyzeImageButton"
                                                         Command="{Binding AnalyzeImageCommand}"
@@ -1220,6 +1232,7 @@
                                                         Padding="10,5"
                                                         AutomationProperties.AutomationId="ChangeImageWorkflowButton"
                                                         Command="{Binding ToggleImageWorkflowChooserCommand}"
+                                                        IsEnabled="{Binding CanInteractWithImageWorkflow}"
                                                         Style="{StaticResource SecondaryButtonStyle}">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="{Binding ChangeImageWorkflowText}"
@@ -1244,6 +1257,7 @@
                                                         HorizontalAlignment="Stretch"
                                                         AutomationProperties.AutomationId="ChangeImageWorkflowButtonNarrow"
                                                         Command="{Binding ToggleImageWorkflowChooserCommand}"
+                                                        IsEnabled="{Binding CanInteractWithImageWorkflow}"
                                                         Style="{StaticResource SecondaryButtonStyle}">
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
@@ -1279,6 +1293,7 @@
                                             </Grid.ColumnDefinitions>
                                             <Button AutomationProperties.AutomationId="ImageParallaxModeCard"
                                                     Command="{Binding SelectImageParallaxModeCommand}"
+                                                    IsEnabled="{Binding ImageWorkflowCardsEnabled}"
                                                     Style="{StaticResource ImageWorkflowOptionCardButtonStyle}"
                                                     Tag="{Binding ImageParallaxModeSelectionState}">
                                                 <StackPanel>
@@ -1296,23 +1311,12 @@
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageParallaxModeBodyText}"
                                                                TextWrapping="Wrap" />
-                                                    <Border AutomationProperties.AutomationId="ImageParallaxModeSelectedBadge"
-                                                            Tag="{Binding ImageParallaxModeSelectionState}"
-                                                            Style="{StaticResource ImageWorkflowSelectionBadgeStyle}">
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <TextBlock FontFamily="Segoe MDL2 Assets"
-                                                                       Text="&#xE73E;" />
-                                                            <TextBlock Margin="6,0,0,0"
-                                                                       FontWeight="SemiBold"
-                                                                       Text="{Binding ImageParallaxModeCardStatusText}"
-                                                                       TextWrapping="Wrap" />
-                                                        </StackPanel>
-                                                    </Border>
                                                 </StackPanel>
                                             </Button>
                                             <Button Grid.Column="2"
                                                     AutomationProperties.AutomationId="ImageStereoModeCard"
                                                     Command="{Binding SelectImageStereoModeCommand}"
+                                                    IsEnabled="{Binding ImageWorkflowCardsEnabled}"
                                                     Style="{StaticResource ImageWorkflowOptionCardButtonStyle}"
                                                     Tag="{Binding ImageStereoModeSelectionState}">
                                                 <StackPanel>
@@ -1330,18 +1334,6 @@
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding Image3DOutputModeBodyText}"
                                                                TextWrapping="Wrap" />
-                                                    <Border AutomationProperties.AutomationId="ImageStereoModeSelectedBadge"
-                                                            Tag="{Binding ImageStereoModeSelectionState}"
-                                                            Style="{StaticResource ImageWorkflowSelectionBadgeStyle}">
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <TextBlock FontFamily="Segoe MDL2 Assets"
-                                                                       Text="&#xE73E;" />
-                                                            <TextBlock Margin="6,0,0,0"
-                                                                       FontWeight="SemiBold"
-                                                                       Text="{Binding ImageStereoModeCardStatusText}"
-                                                                       TextWrapping="Wrap" />
-                                                        </StackPanel>
-                                                    </Border>
                                                 </StackPanel>
                                             </Button>
                                         </Grid>
@@ -1394,12 +1386,9 @@
                                                                     BorderBrush="{DynamicResource CardBorderBrush}"
                                                                     BorderThickness="1"
                                                                     CornerRadius="6">
-                                                                <TextBlock HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"
-                                                                           FontFamily="Segoe MDL2 Assets"
-                                                                           FontSize="32"
-                                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                                           Text="&#xEB9F;" />
+                                                                <Image Margin="8"
+                                                                       Source="{Binding SelectedImagePath}"
+                                                                       Stretch="Uniform" />
                                                             </Border>
                                                         </StackPanel>
                                                     </Border>
@@ -1416,10 +1405,12 @@
                                                                     BorderBrush="{DynamicResource CardBorderBrush}"
                                                                     BorderThickness="1"
                                                                     CornerRadius="6">
-                                                                <TextBlock HorizontalAlignment="Center"
+                                                                <TextBlock Margin="10"
+                                                                           HorizontalAlignment="Center"
                                                                            VerticalAlignment="Center"
                                                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                                                           Text="{Binding DisabledPlaceholderText}"
+                                                                           Text="{Binding ImageDepthMapGenerationText}"
+                                                                           TextAlignment="Center"
                                                                            TextWrapping="Wrap" />
                                                             </Border>
                                                         </StackPanel>
@@ -1443,17 +1434,22 @@
                                                                 BorderThickness="1"
                                                                 CornerRadius="6">
                                                             <Grid>
-                                                                <TextBlock HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"
-                                                                           FontFamily="Segoe MDL2 Assets"
-                                                                           FontSize="46"
-                                                                           Foreground="{DynamicResource AccentBrush}"
-                                                                           Text="&#xE768;" />
-                                                                <TextBlock Margin="0,72,0,0"
-                                                                           HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"
-                                                                           Style="{StaticResource MutedTextStyle}"
-                                                                           Text="{Binding ImagePreviewActionText}" />
+                                                                <Image Margin="8"
+                                                                       Source="{Binding ImageParallaxPreviewImagePath}"
+                                                                       Stretch="Uniform" />
+                                                                <Border Margin="10"
+                                                                        Padding="8,5"
+                                                                        HorizontalAlignment="Left"
+                                                                        VerticalAlignment="Top"
+                                                                        Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                        BorderBrush="{DynamicResource AccentBrush}"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="6">
+                                                                    <TextBlock FontWeight="SemiBold"
+                                                                               Foreground="{DynamicResource AccentBrush}"
+                                                                               Text="{Binding ImageParallaxModeTitleText}"
+                                                                               TextWrapping="Wrap" />
+                                                                </Border>
                                                             </Grid>
                                                         </Border>
                                                     </Grid>
@@ -1469,31 +1465,37 @@
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageDepthIntensityLabelText}" />
                                                         <ComboBox ItemsSource="{Binding ParallaxDepthIntensityOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedParallaxDepthIntensity}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageMotionDirectionLabelText}" />
                                                         <ComboBox ItemsSource="{Binding ParallaxMotionDirectionOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedParallaxMotionDirection}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageZoomAmplitudeLabelText}" />
                                                         <ComboBox ItemsSource="{Binding ParallaxZoomAmplitudeOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedParallaxZoomAmplitude}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageDurationLabelText}" />
                                                         <ComboBox ItemsSource="{Binding ParallaxDurationOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedParallaxDuration}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageSmoothingLabelText}" />
                                                         <ComboBox ItemsSource="{Binding ParallaxSmoothingOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedParallaxSmoothing}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageLayerBehaviorLabelText}" />
                                                         <ComboBox ItemsSource="{Binding ParallaxLayerBehaviorOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedParallaxLayerBehavior}" />
                                                     </StackPanel>
                                                 </Border>
@@ -1505,10 +1507,61 @@
                                                                    TextWrapping="Wrap" />
                                                         <TextBlock Margin="0,8,0,0"
                                                                    Style="{StaticResource MutedTextStyle}"
-                                                                   Text="{Binding ImageResultSummaryText}" />
-                                                        <Button Margin="0,12,0,0"
-                                                                Content="{Binding ImagePreviewActionText}"
-                                                                IsEnabled="False" />
+                                                                   Text="{Binding ImageParallaxSummaryText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,8,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageParallaxQualityGuidanceText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <Grid Margin="0,10,0,3">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                                       Text="{Binding ImageModelSelectionLabelText}"
+                                                                       TextWrapping="Wrap" />
+                                                            <Button Grid.Column="1"
+                                                                    MinWidth="30"
+                                                                    Padding="8,5"
+                                                                    AutomationProperties.AutomationId="ImageParallaxModelHelpButton"
+                                                                    AutomationProperties.Name="{Binding ImageParallaxModelHelpButtonToolTipText}"
+                                                                    Command="{Binding ShowImageParallaxModelHelpCommand}"
+                                                                    Content="?"
+                                                                    IsEnabled="{Binding CanShowImageParallaxModelHelp}"
+                                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                                    ToolTip="{Binding ImageParallaxModelHelpButtonToolTipText}" />
+                                                        </Grid>
+                                                        <ComboBox AutomationProperties.AutomationId="ImageParallaxModelSelector"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  IsEnabled="{Binding ImageParallaxModelSelectorEnabled}"
+                                                                  ItemsSource="{Binding ImageParallaxLocalModelCandidates}"
+                                                                  SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                         Mode=TwoWay}" />
+                                                        <TextBlock Margin="0,8,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageSelectedModelSummaryText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageParallaxModelGuidanceText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageExpectedOutputFileText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageSaveLocationText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageNotImplementedStateText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Margin="0,6,0,0"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageBundledIw3StereoNoteText}"
+                                                                   TextWrapping="Wrap" />
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
@@ -1531,12 +1584,9 @@
                                                             BorderBrush="{DynamicResource CardBorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   FontFamily="Segoe MDL2 Assets"
-                                                                   FontSize="32"
-                                                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                                                   Text="&#xEB9F;" />
+                                                        <Image Margin="8"
+                                                               Source="{Binding SelectedImagePath}"
+                                                               Stretch="Uniform" />
                                                     </Border>
                                                 </StackPanel>
                                             </Border>
@@ -1552,10 +1602,12 @@
                                                             BorderBrush="{DynamicResource CardBorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="6">
-                                                        <TextBlock HorizontalAlignment="Center"
+                                                        <TextBlock Margin="10"
+                                                                   HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center"
                                                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                                                   Text="{Binding DisabledPlaceholderText}"
+                                                                   Text="{Binding ImageDepthMapGenerationText}"
+                                                                   TextAlignment="Center"
                                                                    TextWrapping="Wrap" />
                                                     </Border>
                                                 </StackPanel>
@@ -1578,17 +1630,22 @@
                                                             BorderThickness="1"
                                                             CornerRadius="6">
                                                         <Grid>
-                                                            <TextBlock HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"
-                                                                       FontFamily="Segoe MDL2 Assets"
-                                                                       FontSize="42"
-                                                                       Foreground="{DynamicResource AccentBrush}"
-                                                                       Text="&#xE768;" />
-                                                            <TextBlock Margin="0,66,0,0"
-                                                                       HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center"
-                                                                       Style="{StaticResource MutedTextStyle}"
-                                                                       Text="{Binding ImagePreviewActionText}" />
+                                                            <Image Margin="8"
+                                                                   Source="{Binding ImageParallaxPreviewImagePath}"
+                                                                   Stretch="Uniform" />
+                                                            <Border Margin="10"
+                                                                    Padding="8,5"
+                                                                    HorizontalAlignment="Left"
+                                                                    VerticalAlignment="Top"
+                                                                    Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                    BorderBrush="{DynamicResource AccentBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="6">
+                                                                <TextBlock FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource AccentBrush}"
+                                                                           Text="{Binding ImageParallaxModeTitleText}"
+                                                                           TextWrapping="Wrap" />
+                                                            </Border>
                                                         </Grid>
                                                     </Border>
                                                 </Grid>
@@ -1603,31 +1660,37 @@
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageDepthIntensityLabelText}" />
                                                     <ComboBox ItemsSource="{Binding ParallaxDepthIntensityOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedParallaxDepthIntensity}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageMotionDirectionLabelText}" />
                                                     <ComboBox ItemsSource="{Binding ParallaxMotionDirectionOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedParallaxMotionDirection}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageZoomAmplitudeLabelText}" />
                                                     <ComboBox ItemsSource="{Binding ParallaxZoomAmplitudeOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedParallaxZoomAmplitude}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageDurationLabelText}" />
                                                     <ComboBox ItemsSource="{Binding ParallaxDurationOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedParallaxDuration}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageSmoothingLabelText}" />
                                                     <ComboBox ItemsSource="{Binding ParallaxSmoothingOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedParallaxSmoothing}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageLayerBehaviorLabelText}" />
                                                     <ComboBox ItemsSource="{Binding ParallaxLayerBehaviorOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedParallaxLayerBehavior}" />
                                                 </StackPanel>
                                             </Border>
@@ -1639,10 +1702,61 @@
                                                                TextWrapping="Wrap" />
                                                     <TextBlock Margin="0,8,0,0"
                                                                Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageResultSummaryText}" />
-                                                    <Button Margin="0,12,0,0"
-                                                            Content="{Binding ImagePreviewActionText}"
-                                                            IsEnabled="False" />
+                                                               Text="{Binding ImageParallaxSummaryText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageParallaxQualityGuidanceText}"
+                                                               TextWrapping="Wrap" />
+                                                    <Grid Margin="0,10,0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageModelSelectionLabelText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <Button Grid.Column="1"
+                                                                MinWidth="30"
+                                                                Padding="8,5"
+                                                                AutomationProperties.AutomationId="ImageParallaxModelHelpButtonNarrow"
+                                                                AutomationProperties.Name="{Binding ImageParallaxModelHelpButtonToolTipText}"
+                                                                Command="{Binding ShowImageParallaxModelHelpCommand}"
+                                                                Content="?"
+                                                                IsEnabled="{Binding CanShowImageParallaxModelHelp}"
+                                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                                ToolTip="{Binding ImageParallaxModelHelpButtonToolTipText}" />
+                                                    </Grid>
+                                                    <ComboBox AutomationProperties.AutomationId="ImageParallaxModelSelectorNarrow"
+                                                              DisplayMemberPath="DisplayName"
+                                                              IsEnabled="{Binding ImageParallaxModelSelectorEnabled}"
+                                                              ItemsSource="{Binding ImageParallaxLocalModelCandidates}"
+                                                              SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                     Mode=TwoWay}" />
+                                                    <TextBlock Margin="0,8,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageSelectedModelSummaryText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageParallaxModelGuidanceText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageExpectedOutputFileText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageSaveLocationText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageNotImplementedStateText}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Margin="0,6,0,0"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageBundledIw3StereoNoteText}"
+                                                               TextWrapping="Wrap" />
                                                 </StackPanel>
                                             </Border>
                                         </StackPanel>
@@ -1714,26 +1828,31 @@
                                                                    Text="{Binding ImageStereoOutputFormatLabelText}" />
                                                         <ComboBox ItemsSource="{Binding StereoOutputFormatOptions}"
                                                                   DisplayMemberPath="DisplayName"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedStereoOutputFormatOption,
                                                                                          Mode=TwoWay}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageStereoEyeSeparationLabelText}" />
                                                         <ComboBox ItemsSource="{Binding StereoEyeSeparationOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedStereoEyeSeparation}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageStereoConvergenceLabelText}" />
                                                         <ComboBox ItemsSource="{Binding StereoConvergenceOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedStereoConvergence}" />
                                                         <CheckBox Margin="0,10,0,0"
                                                                   Content="{Binding ImageStereoSwapEyesLabelText}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   IsChecked="{Binding ImageStereoSwapEyes}" />
                                                         <TextBlock Margin="0,8,0,3"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageStereoAnaglyphModeLabelText}"
                                                                    Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
                                                         <ComboBox ItemsSource="{Binding StereoAnaglyphModeOptions}"
+                                                                  IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                                   SelectedItem="{Binding SelectedStereoAnaglyphMode}"
                                                                   Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
                                                         <TextBlock Margin="0,10,0,0"
@@ -1754,7 +1873,7 @@
                                                                    TextWrapping="Wrap" />
                                                         <ComboBox AutomationProperties.AutomationId="ImageModelSelector"
                                                                   DisplayMemberPath="DisplayName"
-                                                                  IsEnabled="{Binding HasLocalModelSelectionCandidates}"
+                                                                  IsEnabled="{Binding ImageModelSelectorEnabled}"
                                                                   ItemsSource="{Binding LocalModelCandidates}"
                                                                   SelectedItem="{Binding SelectedLocalModelCandidate,
                                                                                          Mode=TwoWay}" />
@@ -1846,26 +1965,31 @@
                                                                Text="{Binding ImageStereoOutputFormatLabelText}" />
                                                     <ComboBox ItemsSource="{Binding StereoOutputFormatOptions}"
                                                               DisplayMemberPath="DisplayName"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedStereoOutputFormatOption,
                                                                                      Mode=TwoWay}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageStereoEyeSeparationLabelText}" />
                                                     <ComboBox ItemsSource="{Binding StereoEyeSeparationOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedStereoEyeSeparation}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageStereoConvergenceLabelText}" />
                                                     <ComboBox ItemsSource="{Binding StereoConvergenceOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedStereoConvergence}" />
                                                     <CheckBox Margin="0,10,0,0"
                                                               Content="{Binding ImageStereoSwapEyesLabelText}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               IsChecked="{Binding ImageStereoSwapEyes}" />
                                                     <TextBlock Margin="0,8,0,3"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageStereoAnaglyphModeLabelText}"
                                                                Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
                                                     <ComboBox ItemsSource="{Binding StereoAnaglyphModeOptions}"
+                                                              IsEnabled="{Binding ImageSetupControlsEnabled}"
                                                               SelectedItem="{Binding SelectedStereoAnaglyphMode}"
                                                               Visibility="{Binding ImageStereoAnaglyphModeVisibility}" />
                                                     <TextBlock Margin="0,10,0,0"
@@ -1886,7 +2010,7 @@
                                                                TextWrapping="Wrap" />
                                                     <ComboBox AutomationProperties.AutomationId="ImageModelSelectorNarrow"
                                                               DisplayMemberPath="DisplayName"
-                                                              IsEnabled="{Binding HasLocalModelSelectionCandidates}"
+                                                              IsEnabled="{Binding ImageModelSelectorEnabled}"
                                                               ItemsSource="{Binding LocalModelCandidates}"
                                                               SelectedItem="{Binding SelectedLocalModelCandidate,
                                                                                      Mode=TwoWay}" />
@@ -1928,11 +2052,6 @@
                                       Visibility="{Binding ImageParallaxPreviewExportStepVisibility}">
                                     <Grid AutomationProperties.AutomationId="ImageParallaxPreviewExportVerticalLayout"
                                           Visibility="{Binding ImageParallaxPreviewExportVerticalLayoutVisibility}">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="2*" />
-                                            <ColumnDefinition Width="14" />
-                                            <ColumnDefinition Width="1*" />
-                                        </Grid.ColumnDefinitions>
                                         <Border MinHeight="260"
                                                 Style="{StaticResource CardStyle}">
                                             <Grid>
@@ -1942,70 +2061,132 @@
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                            Text="{Binding ImageResultParallaxTitleText}" />
-                                                <Border Grid.Row="1"
-                                                        Background="{DynamicResource LogBackgroundBrush}"
-                                                        BorderBrush="{DynamicResource CardBorderBrush}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="6">
-                                                    <TextBlock HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"
-                                                               FontFamily="Segoe MDL2 Assets"
-                                                               FontSize="44"
-                                                               Foreground="{DynamicResource AccentBrush}"
-                                                               Text="&#xE768;" />
-                                                </Border>
+                                                <Grid Grid.Row="1"
+                                                      Margin="0,10,0,0"
+                                                      MinHeight="220">
+                                                    <Border Background="{DynamicResource LogBackgroundBrush}"
+                                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6">
+                                                        <Grid>
+                                                            <Image Margin="10"
+                                                                   Source="{Binding ImageParallaxPreviewImagePath}"
+                                                                   Stretch="Uniform"
+                                                                   Visibility="{Binding ImageParallaxSourcePreviewVisibility}" />
+                                                            <Grid x:Name="ImageParallaxVerticalPreviewPlayer"
+                                                                  Margin="10"
+                                                                  AutomationProperties.AutomationId="ImageParallaxGeneratedVideoPreview"
+                                                                  IsVisibleChanged="OnImageParallaxVideoPlayerVisibilityChanged"
+                                                                  Visibility="{Binding ImageParallaxVideoPreviewVisibility}">
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="*" />
+                                                                    <RowDefinition Height="Auto" />
+                                                                </Grid.RowDefinitions>
+                                                                <MediaElement x:Name="ImageParallaxVerticalPreviewMediaElement"
+                                                                              MinHeight="220"
+                                                                              LoadedBehavior="Manual"
+                                                                              MediaEnded="OnImageParallaxPreviewMediaEnded"
+                                                                              MediaFailed="OnImageParallaxPreviewMediaFailed"
+                                                                              MediaOpened="OnImageParallaxPreviewMediaOpened"
+                                                                              ScrubbingEnabled="True"
+                                                                              Source="{Binding ImageParallaxVideoMediaSource}"
+                                                                              Stretch="Uniform"
+                                                                              UnloadedBehavior="Manual"
+                                                                              Volume="0.7" />
+                                                                <Grid Grid.Row="1"
+                                                                      Margin="0,8,0,0"
+                                                                      AutomationProperties.AutomationId="ImageParallaxGeneratedVideoControls">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="90" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Button x:Name="ImageParallaxVerticalPreviewPlayPauseButton"
+                                                                            Margin="0,0,8,0"
+                                                                            AutomationProperties.Name="{Binding PreviewPlayText}"
+                                                                            Click="OnImageParallaxPreviewPlayPauseClicked"
+                                                                            Content="&#xE768;"
+                                                                            Style="{StaticResource IconButtonStyle}"
+                                                                            ToolTip="{Binding PreviewPlayText}" />
+                                                                    <Slider x:Name="ImageParallaxVerticalPreviewTimelineSlider"
+                                                                            Grid.Column="1"
+                                                                            Margin="0,0,8,0"
+                                                                            Minimum="0"
+                                                                            PreviewMouseDown="OnImageParallaxPreviewTimelinePreviewMouseDown"
+                                                                            PreviewMouseUp="OnImageParallaxPreviewTimelinePreviewMouseUp"
+                                                                            Style="{StaticResource PreviewSliderStyle}"
+                                                                            ValueChanged="OnImageParallaxPreviewTimelineValueChanged" />
+                                                                    <TextBlock x:Name="ImageParallaxVerticalPreviewTimeText"
+                                                                               Grid.Column="2"
+                                                                               MinWidth="92"
+                                                                               Margin="0,0,12,0"
+                                                                               VerticalAlignment="Center"
+                                                                               Text="00:00 / 00:00" />
+                                                                    <TextBlock x:Name="ImageParallaxVerticalPreviewVolumeIcon"
+                                                                               Grid.Column="3"
+                                                                               Margin="0,0,8,0"
+                                                                               AutomationProperties.Name="{Binding PreviewVolumeText}"
+                                                                               FontFamily="Segoe MDL2 Assets"
+                                                                               FontSize="15"
+                                                                               VerticalAlignment="Center"
+                                                                               Text="&#xE767;"
+                                                                               ToolTip="{Binding PreviewVolumeText}" />
+                                                                    <Slider x:Name="ImageParallaxVerticalPreviewVolumeSlider"
+                                                                            Grid.Column="4"
+                                                                            Minimum="0"
+                                                                            Maximum="1"
+                                                                            PreviewMouseLeftButtonDown="OnImageParallaxPreviewVolumeSliderPreviewMouseLeftButtonDown"
+                                                                            Style="{StaticResource PreviewSliderStyle}"
+                                                                            Value="0.7"
+                                                                            ValueChanged="OnImageParallaxPreviewVolumeValueChanged" />
+                                                                    <ToggleButton x:Name="ImageParallaxVerticalPreviewMuteToggleButton"
+                                                                                  Grid.Column="5"
+                                                                                  Margin="8,0,0,0"
+                                                                                  AutomationProperties.Name="{Binding PreviewMuteText}"
+                                                                                  Checked="OnImageParallaxPreviewMuteChanged"
+                                                                                  Content="&#xE74F;"
+                                                                                  Style="{StaticResource IconToggleButtonStyle}"
+                                                                                  ToolTip="{Binding PreviewMuteText}"
+                                                                                  Unchecked="OnImageParallaxPreviewMuteChanged" />
+                                                                </Grid>
+                                                            </Grid>
+                                                            <Border Margin="12"
+                                                                    Padding="10,6"
+                                                                    HorizontalAlignment="Left"
+                                                                    VerticalAlignment="Top"
+                                                                    Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                    BorderBrush="{DynamicResource AccentBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="6">
+                                                                <TextBlock FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource AccentBrush}"
+                                                                           Text="{Binding ImageParallaxPreviewBadgeText}"
+                                                                           TextWrapping="Wrap" />
+                                                            </Border>
+                                                            <Border Background="{DynamicResource ModalOverlayBrush}"
+                                                                    Visibility="{Binding ImageExportProgressVisibility}">
+                                                                <StackPanel Width="280"
+                                                                            HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center">
+                                                                    <TextBlock FontWeight="SemiBold"
+                                                                               Foreground="{DynamicResource ButtonForegroundBrush}"
+                                                                               Text="{Binding ImageExportOverlayText}"
+                                                                               TextAlignment="Center"
+                                                                               TextWrapping="Wrap" />
+                                                                    <ProgressBar Margin="0,12,0,0"
+                                                                                 Maximum="100"
+                                                                                 Value="{Binding ImageExportProgressPercent, Mode=OneWay}"
+                                                                                 Style="{StaticResource V3dfyProgressBarStyle}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
                                             </Grid>
                                         </Border>
-                                        <StackPanel Grid.Column="2">
-                                            <Border Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageExportOptionsTitleText}" />
-                                                    <TextBlock Margin="0,8,0,8"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageOutputPlanText}"
-                                                               TextWrapping="Wrap" />
-                                                    <CheckBox Margin="0,8,0,0"
-                                                              Content="MP4 1080p"
-                                                              IsChecked="True"
-                                                              IsEnabled="False" />
-                                                    <CheckBox Margin="0,6,0,0"
-                                                              Content="Loop-friendly motion"
-                                                              IsChecked="True"
-                                                              IsEnabled="False" />
-                                                    <CheckBox Margin="0,6,0,0"
-                                                              Content="Project metadata"
-                                                              IsChecked="True"
-                                                              IsEnabled="False" />
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Margin="0,12,0,0"
-                                                    Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageResultSummaryTitleText}" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageSetupSummaryText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageNotImplementedStateText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Button Margin="0,12,0,0"
-                                                            Content="{Binding ImageExportActionText}"
-                                                            IsEnabled="False" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageOpenOutputFolderActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageNewConversionActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </StackPanel>
                                     </Grid>
                                     <StackPanel AutomationProperties.AutomationId="ImageParallaxPreviewExportWideLayout"
                                                 Visibility="{Binding ImageParallaxPreviewExportWideLayoutVisibility}">
@@ -2018,76 +2199,132 @@
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                            Text="{Binding ImageResultParallaxTitleText}" />
-                                                <Border Grid.Row="1"
-                                                        Background="{DynamicResource LogBackgroundBrush}"
-                                                        BorderBrush="{DynamicResource CardBorderBrush}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="6">
-                                                    <TextBlock HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"
-                                                               FontFamily="Segoe MDL2 Assets"
-                                                               FontSize="44"
-                                                               Foreground="{DynamicResource AccentBrush}"
-                                                               Text="&#xE768;" />
-                                                </Border>
+                                                <Grid Grid.Row="1"
+                                                      Margin="0,10,0,0"
+                                                      MinHeight="190">
+                                                    <Border Background="{DynamicResource LogBackgroundBrush}"
+                                                            BorderBrush="{DynamicResource CardBorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6">
+                                                        <Grid>
+                                                            <Image Margin="10"
+                                                                   Source="{Binding ImageParallaxPreviewImagePath}"
+                                                                   Stretch="Uniform"
+                                                                   Visibility="{Binding ImageParallaxSourcePreviewVisibility}" />
+                                                            <Grid x:Name="ImageParallaxWidePreviewPlayer"
+                                                                  Margin="10"
+                                                                  AutomationProperties.AutomationId="ImageParallaxGeneratedVideoPreviewWide"
+                                                                  IsVisibleChanged="OnImageParallaxVideoPlayerVisibilityChanged"
+                                                                  Visibility="{Binding ImageParallaxVideoPreviewVisibility}">
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="*" />
+                                                                    <RowDefinition Height="Auto" />
+                                                                </Grid.RowDefinitions>
+                                                                <MediaElement x:Name="ImageParallaxWidePreviewMediaElement"
+                                                                              MinHeight="220"
+                                                                              LoadedBehavior="Manual"
+                                                                              MediaEnded="OnImageParallaxPreviewMediaEnded"
+                                                                              MediaFailed="OnImageParallaxPreviewMediaFailed"
+                                                                              MediaOpened="OnImageParallaxPreviewMediaOpened"
+                                                                              ScrubbingEnabled="True"
+                                                                              Source="{Binding ImageParallaxVideoMediaSource}"
+                                                                              Stretch="Uniform"
+                                                                              UnloadedBehavior="Manual"
+                                                                              Volume="0.7" />
+                                                                <Grid Grid.Row="1"
+                                                                      Margin="0,8,0,0"
+                                                                      AutomationProperties.AutomationId="ImageParallaxGeneratedVideoControlsWide">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="90" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Button x:Name="ImageParallaxWidePreviewPlayPauseButton"
+                                                                            Margin="0,0,8,0"
+                                                                            AutomationProperties.Name="{Binding PreviewPlayText}"
+                                                                            Click="OnImageParallaxPreviewPlayPauseClicked"
+                                                                            Content="&#xE768;"
+                                                                            Style="{StaticResource IconButtonStyle}"
+                                                                            ToolTip="{Binding PreviewPlayText}" />
+                                                                    <Slider x:Name="ImageParallaxWidePreviewTimelineSlider"
+                                                                            Grid.Column="1"
+                                                                            Margin="0,0,8,0"
+                                                                            Minimum="0"
+                                                                            PreviewMouseDown="OnImageParallaxPreviewTimelinePreviewMouseDown"
+                                                                            PreviewMouseUp="OnImageParallaxPreviewTimelinePreviewMouseUp"
+                                                                            Style="{StaticResource PreviewSliderStyle}"
+                                                                            ValueChanged="OnImageParallaxPreviewTimelineValueChanged" />
+                                                                    <TextBlock x:Name="ImageParallaxWidePreviewTimeText"
+                                                                               Grid.Column="2"
+                                                                               MinWidth="92"
+                                                                               Margin="0,0,12,0"
+                                                                               VerticalAlignment="Center"
+                                                                               Text="00:00 / 00:00" />
+                                                                    <TextBlock x:Name="ImageParallaxWidePreviewVolumeIcon"
+                                                                               Grid.Column="3"
+                                                                               Margin="0,0,8,0"
+                                                                               AutomationProperties.Name="{Binding PreviewVolumeText}"
+                                                                               FontFamily="Segoe MDL2 Assets"
+                                                                               FontSize="15"
+                                                                               VerticalAlignment="Center"
+                                                                               Text="&#xE767;"
+                                                                               ToolTip="{Binding PreviewVolumeText}" />
+                                                                    <Slider x:Name="ImageParallaxWidePreviewVolumeSlider"
+                                                                            Grid.Column="4"
+                                                                            Minimum="0"
+                                                                            Maximum="1"
+                                                                            PreviewMouseLeftButtonDown="OnImageParallaxPreviewVolumeSliderPreviewMouseLeftButtonDown"
+                                                                            Style="{StaticResource PreviewSliderStyle}"
+                                                                            Value="0.7"
+                                                                            ValueChanged="OnImageParallaxPreviewVolumeValueChanged" />
+                                                                    <ToggleButton x:Name="ImageParallaxWidePreviewMuteToggleButton"
+                                                                                  Grid.Column="5"
+                                                                                  Margin="8,0,0,0"
+                                                                                  AutomationProperties.Name="{Binding PreviewMuteText}"
+                                                                                  Checked="OnImageParallaxPreviewMuteChanged"
+                                                                                  Content="&#xE74F;"
+                                                                                  Style="{StaticResource IconToggleButtonStyle}"
+                                                                                  ToolTip="{Binding PreviewMuteText}"
+                                                                                  Unchecked="OnImageParallaxPreviewMuteChanged" />
+                                                                </Grid>
+                                                            </Grid>
+                                                            <Border Margin="12"
+                                                                    Padding="10,6"
+                                                                    HorizontalAlignment="Left"
+                                                                    VerticalAlignment="Top"
+                                                                    Background="{DynamicResource TabSelectedBackgroundBrush}"
+                                                                    BorderBrush="{DynamicResource AccentBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="6">
+                                                                <TextBlock FontWeight="SemiBold"
+                                                                           Foreground="{DynamicResource AccentBrush}"
+                                                                           Text="{Binding ImageParallaxPreviewBadgeText}"
+                                                                           TextWrapping="Wrap" />
+                                                            </Border>
+                                                            <Border Background="{DynamicResource ModalOverlayBrush}"
+                                                                    Visibility="{Binding ImageExportProgressVisibility}">
+                                                                <StackPanel Width="280"
+                                                                            HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center">
+                                                                    <TextBlock FontWeight="SemiBold"
+                                                                               Foreground="{DynamicResource ButtonForegroundBrush}"
+                                                                               Text="{Binding ImageExportOverlayText}"
+                                                                               TextAlignment="Center"
+                                                                               TextWrapping="Wrap" />
+                                                                    <ProgressBar Margin="0,12,0,0"
+                                                                                 Maximum="100"
+                                                                                 Value="{Binding ImageExportProgressPercent, Mode=OneWay}"
+                                                                                 Style="{StaticResource V3dfyProgressBarStyle}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                </Grid>
                                             </Grid>
                                         </Border>
-                                        <Grid Margin="0,12,0,0"
-                                              AutomationProperties.AutomationId="ImageParallaxWideExportOptionsSummaryRow">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="12" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Border Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageExportOptionsTitleText}" />
-                                                    <TextBlock Margin="0,8,0,8"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageOutputPlanText}"
-                                                               TextWrapping="Wrap" />
-                                                    <CheckBox Margin="0,8,0,0"
-                                                              Content="MP4 1080p"
-                                                              IsChecked="True"
-                                                              IsEnabled="False" />
-                                                    <CheckBox Margin="0,6,0,0"
-                                                              Content="Loop-friendly motion"
-                                                              IsChecked="True"
-                                                              IsEnabled="False" />
-                                                    <CheckBox Margin="0,6,0,0"
-                                                              Content="Project metadata"
-                                                              IsChecked="True"
-                                                              IsEnabled="False" />
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Grid.Column="2"
-                                                    Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageResultSummaryTitleText}" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageSetupSummaryText}"
-                                                               TextWrapping="Wrap" />
-                                                    <TextBlock Margin="0,8,0,0"
-                                                               Style="{StaticResource MutedTextStyle}"
-                                                               Text="{Binding ImageNotImplementedStateText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Button Margin="0,12,0,0"
-                                                            Content="{Binding ImageExportActionText}"
-                                                            IsEnabled="False" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageOpenOutputFolderActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                    <Button Margin="0,8,0,0"
-                                                            Content="{Binding ImageNewConversionActionText}"
-                                                            IsEnabled="False"
-                                                            Style="{StaticResource SecondaryButtonStyle}" />
-                                                </StackPanel>
-                                            </Border>
-                                        </Grid>
                                     </StackPanel>
                                 </Grid>
 
@@ -2221,6 +2458,7 @@
                             <Button AutomationProperties.AutomationId="ImageWizardBackButton"
                                     Command="{Binding ImageWizardBackCommand}"
                                     Content="{Binding WizardBackText}"
+                                    IsEnabled="{Binding CanMoveImageWizardBack}"
                                     Style="{StaticResource WizardFooterSecondaryButtonStyle}"
                                     Visibility="{Binding ImageWizardBackButtonVisibility}" />
                             <Button Grid.Column="2"
@@ -2288,9 +2526,9 @@
                                        Visibility="{Binding ImageExportSuccessVisibility}" />
                             <TextBlock Margin="0,8,0,0"
                                        Style="{StaticResource MutedTextStyle}"
-                                       Text="{Binding ImageStereoExportDisabledReasonText}"
+                                       Text="{Binding ImageConvertDisabledReasonText}"
                                        TextWrapping="Wrap"
-                                       Visibility="{Binding ImageStereoExportDisabledReasonVisibility}" />
+                                       Visibility="{Binding ImageConvertDisabledReasonVisibility}" />
                             <TextBlock Margin="0,8,0,0"
                                        FontWeight="SemiBold"
                                        Foreground="{DynamicResource AccentBrush}"
@@ -2318,23 +2556,25 @@
                                        TextWrapping="Wrap"
                                        Visibility="{Binding ImageExportFailureVisibility}" />
                             <Button Margin="0,12,0,0"
-                                    AutomationProperties.AutomationId="ExportStereoscopicImageButton"
-                                    Command="{Binding ExportStereoscopicImageCommand}"
-                                    Content="{Binding ImageStereoExportActionText}"
-                                    IsEnabled="{Binding CanExportStereoscopicImage}"
-                                    Visibility="{Binding ImageStereoConvertButtonVisibility}" />
+                                    AutomationProperties.AutomationId="ConvertImageButton"
+                                    Command="{Binding ConvertImageCommand}"
+                                    Content="{Binding ImageConvertActionText}"
+                                    IsEnabled="{Binding CanConvertImage}"
+                                    Visibility="{Binding ImageConvertButtonVisibility}" />
                             <Button Margin="0,8,0,0"
                                     AutomationProperties.AutomationId="OpenImageOutputFolderButton"
                                     Command="{Binding OpenImageOutputFolderCommand}"
                                     Content="{Binding ImageOpenOutputFolderActionText}"
                                     IsEnabled="{Binding CanOpenImageOutputFolder}"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Visibility="{Binding ImageOpenOutputFolderButtonVisibility}" />
                             <Button Margin="0,8,0,0"
                                     AutomationProperties.AutomationId="NewImageConversionButton"
                                     Command="{Binding NewImageConversionCommand}"
                                     Content="{Binding ImageNewConversionActionText}"
                                     IsEnabled="{Binding CanStartNewImageConversion}"
-                                    Style="{StaticResource SecondaryButtonStyle}" />
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Visibility="{Binding ImageNewConversionButtonVisibility}" />
                         </StackPanel>
                     </Border>
 
@@ -4541,20 +4781,23 @@
                                    TextWrapping="Wrap" />
                     </Grid>
 
-                    <Grid Grid.Row="1"
-                          Visibility="{Binding ModelHelpModalContentVisibility}">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="12" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
-                                   Text="{Binding ModelHelpIntroText}"
-                                   TextWrapping="Wrap" />
-                        <Border Grid.Row="2"
-                                MinHeight="260"
-                                AutomationProperties.AutomationId="ModelHelpContent"
-                                Style="{StaticResource ResponsiveTableContainerStyle}">
+                    <ScrollViewer Grid.Row="1"
+                                  AutomationProperties.AutomationId="ModelHelpModalResponsiveBody"
+                                  Style="{StaticResource ResponsiveModalBodyScrollViewerStyle}"
+                                  Visibility="{Binding ModelHelpModalContentVisibility}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="12" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
+                                       Text="{Binding ModelHelpIntroText}"
+                                       TextWrapping="Wrap" />
+                            <Border Grid.Row="2"
+                                    MinHeight="260"
+                                    AutomationProperties.AutomationId="ModelHelpContent"
+                                    Style="{StaticResource ResponsiveTableContainerStyle}">
                             <ScrollViewer x:Name="ModelHelpTableViewport"
                                           Style="{StaticResource ResponsiveTableHorizontalScrollViewerStyle}">
                             <Grid MinWidth="760"
@@ -4650,8 +4893,9 @@
                                 </ScrollViewer>
                             </Grid>
                             </ScrollViewer>
-                        </Border>
-                    </Grid>
+                            </Border>
+                        </Grid>
+                    </ScrollViewer>
 
                     <ScrollViewer x:Name="ModelInventoryModalHorizontalViewport"
                                   Grid.Row="1"

@@ -257,7 +257,8 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("ItemsSource=\"{Binding SettingsSectionOptions}\"", settings);
         Assert.Contains("SelectedValue=\"{Binding SelectedSettingsSection", settings);
         Assert.Contains("Height=\"{Binding ActiveModalHeight}\"", xaml);
-        Assert.Contains("ActiveModalHeight => IsSettingsModalOpen ? 650d : double.NaN", viewModel);
+        Assert.Contains("IsSettingsModalOpen || IsModelHelpModalOpen || IsModelInventoryModalOpen", viewModel);
+        Assert.Contains("? 650d", viewModel);
         Assert.Contains("<ScrollViewer Grid.Column=\"2\"", settings);
         Assert.Contains("AutomationProperties.AutomationId=\"CloseSettingsButton\"", xaml);
         Assert.Contains("Grid.Row=\"1\"", settings);

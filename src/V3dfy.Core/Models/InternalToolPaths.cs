@@ -22,6 +22,9 @@ public sealed record InternalToolPaths(
     public string Iw3CliCapabilitiesFile { get; init; } =
         Path.Combine(Iw3EngineDirectory, Iw3EngineBundleContract.CliCapabilitiesFileName);
 
+    public string V3dfyParallaxHelperScript { get; init; } =
+        Path.Combine(Iw3EngineDirectory, "v3dfy", "parallax2d.py");
+
     public string Iw3DefaultStereoRuntimeDependencyFile { get; init; } =
         Path.Combine(
             ModelsDirectory,
