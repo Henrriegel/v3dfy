@@ -2,8 +2,10 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using Forms = System.Windows.Forms;
 using V3dfy.App.Mvvm;
@@ -57,6 +59,34 @@ public enum SettingsSection
     AboutLicenses,
 }
 
+public enum AppSection
+{
+    Home,
+    ImageConversion,
+    VideoConversion,
+}
+
+public enum ImageConversionMode
+{
+    ParallaxPhoto,
+    StereoscopicImage,
+}
+
+public enum ImageConversionStep
+{
+    ModeAndSource,
+    Setup,
+    PreviewAndExport,
+}
+
+public enum ImageStereoOutputFormat
+{
+    SideBySide,
+    HalfTopBottom,
+    Anaglyph,
+    LeftRightPair,
+}
+
 public sealed class MainWindowViewModel : ObservableObject
 {
     private const string SetupHelperExecutableName = "V3dfy.SetupHelper.exe";
@@ -66,6 +96,12 @@ public sealed class MainWindowViewModel : ObservableObject
         None,
         LogCopy,
         PreviewStageReset,
+    }
+
+    private enum ActivityLogModalKind
+    {
+        General,
+        Image,
     }
 
     private static readonly TimeSpan LogCopyNotificationDuration = TimeSpan.FromSeconds(2);
@@ -81,6 +117,17 @@ public sealed class MainWindowViewModel : ObservableObject
         ".webm",
     ];
 
+    private static readonly HashSet<string> SupportedImageExtensions =
+    [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".bmp",
+        ".tif",
+        ".tiff",
+        ".webp",
+    ];
+
     private enum ToolStatusComponent
     {
         BundledTool,
@@ -89,6 +136,16 @@ public sealed class MainWindowViewModel : ObservableObject
         Models,
         Iw3RuntimeDependency,
     }
+
+    private sealed record ImageMetadata(
+        int Width,
+        int Height,
+        string WidthText,
+        string HeightText,
+        string AspectRatio,
+        string Format,
+        string PixelFormat,
+        string FileSizeText);
 
     private readonly InternalToolPaths _toolPaths;
     private readonly InternalToolsHealthChecker _healthChecker;
@@ -119,6 +176,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly ConversionWorkflowState _workflowState = new();
     private readonly ConversionProgressTimingSmoother _conversionTimingSmoother = new();
     private readonly StringBuilder _previewGenerationLogTextBuilder = new();
+    private ActivityLogModalKind _activeActivityLogModalKind;
     private string? _selectedVideoPath;
     private string _selectedLanguage = "English";
     private string _selectedTheme = "Dark";
@@ -153,7 +211,27 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _previewGpuMetricsStatusText = "GPU metrics: Detecting...";
     private string _previewStageEnglishText = "Preparing preview";
     private string _previewStageSpanishText = "Preparando vista previa";
+    private AppSection _selectedAppSection = AppSection.Home;
     private SettingsSection _selectedSettingsSection = SettingsSection.VisualSettings;
+    private bool _isSidebarPinnedExpanded = true;
+    private bool _isSidebarHoverExpanded;
+    private string? _selectedImagePath;
+    private ImageMetadata? _selectedImageMetadata;
+    private ImageConversionMode? _selectedImageConversionMode;
+    private ImageConversionStep _selectedImageConversionStep = ImageConversionStep.ModeAndSource;
+    private bool _isImageWorkflowChooserExpanded;
+    private string _selectedParallaxDepthIntensity = "Medium";
+    private string _selectedParallaxMotionDirection = "Left to right";
+    private string _selectedParallaxZoomAmplitude = "Subtle";
+    private string _selectedParallaxDuration = "6 seconds";
+    private string _selectedParallaxSmoothing = "Enabled";
+    private string _selectedParallaxLayerBehavior = "Foreground / mid / background";
+    private ImageStereoOutputFormat _selectedStereoOutputFormat = ImageStereoOutputFormat.SideBySide;
+    private string _selectedStereoEyeSeparation = "4.0%";
+    private string _selectedStereoConvergence = "Neutral";
+    private bool _imageStereoSwapEyes;
+    private string _selectedStereoAnaglyphMode = "Red/Cyan";
+    private bool _hasEnteredImagePreviewExportStage;
     private string _modelPackImportStatusEnglishText = "No model pack import has run yet.";
     private string _modelPackImportStatusSpanishText = "Aun no se ha importado ningun paquete de modelos.";
     private string _lastModelPackImportSummaryEnglishText = string.Empty;
@@ -256,6 +334,32 @@ public sealed class MainWindowViewModel : ObservableObject
         RefreshEngineStatusCommand = new AsyncRelayCommand(
             () => RefreshEngineStatusWithGlobalBusyAsync(logRefresh: true),
             () => CanUseSystemStatusActions);
+        ToggleSidebarCommand = new RelayCommand(ToggleSidebar);
+        SelectHomeSectionCommand = new RelayCommand(() => SelectAppSection(AppSection.Home));
+        SelectImageConversionSectionCommand = new RelayCommand(() => SelectAppSection(AppSection.ImageConversion));
+        SelectVideoConversionSectionCommand = new RelayCommand(() => SelectAppSection(AppSection.VideoConversion));
+        SelectImageParallaxModeCommand = new RelayCommand(() => SelectImageConversionMode(ImageConversionMode.ParallaxPhoto));
+        SelectImageStereoModeCommand = new RelayCommand(() => SelectImageConversionMode(ImageConversionMode.StereoscopicImage));
+        ToggleImageWorkflowChooserCommand = new RelayCommand(ToggleImageWorkflowChooser);
+        SelectImageModeSourceStepCommand = new RelayCommand(() => SelectImageConversionStep(ImageConversionStep.ModeAndSource));
+        SelectImageSetupStepCommand = new RelayCommand(
+            () => SelectImageConversionStep(ImageConversionStep.Setup),
+            () => CanOpenImageSetupStep);
+        SelectImagePreviewExportStepCommand = new RelayCommand(
+            () => SelectImageConversionStep(ImageConversionStep.PreviewAndExport),
+            () => CanOpenImagePreviewExportStep);
+        SelectImageCommand = new RelayCommand(SelectImage);
+        AnalyzeImageCommand = new RelayCommand(AnalyzeImage, () => CanAnalyzeImage);
+        ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0);
+        ImageWizardBackCommand = new RelayCommand(
+            MoveImageWizardBack,
+            () => CanMoveImageWizardBack);
+        ImageWizardNextCommand = new RelayCommand(
+            MoveImageWizardNext,
+            () => CanMoveImageWizardNext);
+        ContinueWithImageConversionCommand = new RelayCommand(
+            ContinueWithImageConversion,
+            () => CanContinueWithImageConversion);
         OpenSettingsCommand = new RelayCommand(OpenSettings);
         OpenToolsEngineSettingsCommand = new RelayCommand(OpenToolsEngineSettings);
         CloseSettingsCommand = new RelayCommand(CloseSettings);
@@ -297,6 +401,7 @@ public sealed class MainWindowViewModel : ObservableObject
         DeletePreviewCommand = new RelayCommand(DeletePreview, () => CanDeletePreview);
         ContinuePreviewCommand = new RelayCommand(ContinuePreview, () => CanContinuePreview);
         ViewActivityLogCommand = new RelayCommand(ViewActivityLog);
+        ViewImageActivityLogCommand = new RelayCommand(ViewImageActivityLog);
         CopyFullLogCommand = new RelayCommand(CopyFullLog);
         CopyPreviewLogCommand = new RelayCommand(CopyPreviewLog);
         CloseActivityLogCommand = new RelayCommand(CloseActivityLog);
@@ -325,9 +430,745 @@ public sealed class MainWindowViewModel : ObservableObject
         AddLog(
             "Application shell ready. Select a video to begin.",
             "La aplicación está lista. Selecciona un video para comenzar.");
+        AddImageLog(
+            "Image workflow ready. Select an image to begin.",
+            "Flujo de imagen listo. Selecciona una imagen para comenzar.");
     }
 
     public string AppTitle => "v3dfy";
+
+    public string ShellTaglineText => Text("local 2D to 3D", "2D a 3D local");
+
+    public bool IsSidebarExpanded
+    {
+        get => _isSidebarPinnedExpanded;
+        private set
+        {
+            if (SetProperty(ref _isSidebarPinnedExpanded, value))
+            {
+                RaiseSidebarPropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsSidebarPinnedExpanded => IsSidebarExpanded;
+
+    public bool IsSidebarHoverExpanded
+    {
+        get => _isSidebarHoverExpanded;
+        private set
+        {
+            if (SetProperty(ref _isSidebarHoverExpanded, value))
+            {
+                RaiseSidebarPropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsSidebarEffectivelyExpanded => IsSidebarPinnedExpanded || IsSidebarHoverExpanded;
+
+    public double SidebarExpandedWidth => 208d;
+
+    public double SidebarCollapsedWidth => 64d;
+
+    public double SidebarTargetWidth => IsSidebarEffectivelyExpanded ? SidebarExpandedWidth : SidebarCollapsedWidth;
+
+    public GridLength SidebarColumnWidth =>
+        new(SidebarTargetWidth);
+
+    public Thickness SidebarPadding =>
+        IsSidebarEffectivelyExpanded ? new Thickness(14d, 18d, 14d, 18d) : new Thickness(6d, 18d, 6d, 18d);
+
+    public Visibility SidebarExpandedContentVisibility =>
+        IsSidebarEffectivelyExpanded ? Visibility.Visible : Visibility.Collapsed;
+
+    public System.Windows.HorizontalAlignment SidebarNavContentHorizontalAlignment =>
+        IsSidebarEffectivelyExpanded ? System.Windows.HorizontalAlignment.Left : System.Windows.HorizontalAlignment.Center;
+
+    public string SidebarToggleGlyphText => IsSidebarExpanded ? "\uE72B" : "\uE72A";
+
+    public string SidebarToggleText => Text(
+        IsSidebarExpanded ? "Collapse sidebar" : "Expand sidebar",
+        IsSidebarExpanded ? "Contraer barra lateral" : "Expandir barra lateral");
+
+    public string SidebarToggleToolTipText => SidebarToggleText;
+
+    public AppSection SelectedAppSection
+    {
+        get => _selectedAppSection;
+        private set
+        {
+            if (SetProperty(ref _selectedAppSection, value))
+            {
+                RaiseAppSectionPropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsHomeSectionSelected => SelectedAppSection == AppSection.Home;
+
+    public bool IsImageConversionSectionSelected => SelectedAppSection == AppSection.ImageConversion;
+
+    public bool IsVideoConversionSectionSelected => SelectedAppSection == AppSection.VideoConversion;
+
+    public Visibility HomeSectionVisibility =>
+        IsHomeSectionSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ImageConversionSectionVisibility =>
+        IsImageConversionSectionSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility VideoConversionSectionVisibility =>
+        IsVideoConversionSectionSelected ? Visibility.Visible : Visibility.Collapsed;
+
+    public string HomeNavigationText => Text("Home", "Inicio");
+
+    public string ImageConversionNavigationText => Text("Image conversion", "Conversion de imagen");
+
+    public string VideoConversionNavigationText => Text("Video conversion", "Conversion de video");
+
+    public string HomeTitleText => Text("Welcome to v3dfy", "Bienvenido a v3dfy");
+
+    public string HomeDescriptionText => Text(
+        "Local/offline tools for creating 3D media from existing 2D video and image sources.",
+        "Herramientas locales/offline para crear medios 3D desde fuentes 2D de video e imagen.");
+
+    public string HomeVideoCardTitleText => Text("Convert videos to 3D", "Convertir videos a 3D");
+
+    public string HomeVideoCardBodyText => Text(
+        "Ready now: analyze a video, choose the LG 3D preset, generate a preview, then convert locally.",
+        "Listo ahora: analiza un video, elige el perfil LG 3D, genera una vista previa y convierte localmente.");
+
+    public string HomeImageCardTitleText => Text("Convert images to 3D", "Convertir imagenes a 3D");
+
+    public string HomeImageCardBodyText => Text(
+        "Coming next: image depth, parallax motion, and 3D still-output formats.",
+        "Proximamente: profundidad de imagen, movimiento parallax y formatos 3D para imagen fija.");
+
+    public string HomeSettingsCardTitleText => Text("Manage models/settings", "Administrar modelos/ajustes");
+
+    public string HomeSettingsCardBodyText => Text(
+        "Check local tools, models, diagnostics, language, theme, and licenses.",
+        "Revisa herramientas locales, modelos, diagnostico, idioma, tema y licencias.");
+
+    public string HomeStatusSummaryText => Text(
+        "Video conversion is ready. Image conversion scaffolding is prepared for the next engine work.",
+        "La conversion de video esta lista. El scaffolding de imagen queda preparado para el siguiente trabajo de motor.");
+
+    public string HomeLocalOnlyBadgeText => Text("Local/offline", "Local/offline");
+
+    public string HomeVideoStatusText => Text("Video workflow ready", "Flujo de video listo");
+
+    public string HomeImageStatusText => Text("Image module scaffold", "Scaffold de imagen");
+
+    public string HomeModelsStatusText => Text("Models and tools", "Modelos y herramientas");
+
+    public string OpenSectionText => Text("Open", "Abrir");
+
+    public string ReadyNowText => Text("Ready now", "Listo ahora");
+
+    public string ComingNextText => Text("Coming next", "Proximamente");
+
+    public string ImageConversionTitleText => Text("Image conversion", "Conversion de imagen");
+
+    public string ImageConversionIntroText => Text(
+        "Select an image, inspect local metadata, choose a 3D image workflow, and prepare a preview/export plan. Engine conversion is not wired yet.",
+        "Selecciona una imagen, revisa metadata local, elige un flujo de imagen 3D y prepara un plan de preview/exportacion. La conversion de motor aun no esta conectada.");
+
+    public string ImageParallaxModeTitleText => Text("2.5D Photo", "Foto 2.5D");
+
+    public string ImageParallaxModeBodyText => Text(
+        "Planned: generate a depth/parallax effect with configurable depth, movement, zoom, direction, duration, smoothing, layers, and export options.",
+        "Planeado: generar un efecto de profundidad/parallax con profundidad, movimiento, zoom, direccion, duracion, suavizado, capas y opciones de exportacion configurables.");
+
+    public string Image3DOutputModeTitleText => Text("Stereoscopic image", "Imagen estereoscopica");
+
+    public string Image3DOutputModeBodyText => Text(
+        "Planned: use local depth models to create SBS, Half Top-Bottom, and Anaglyph-style image outputs.",
+        "Planeado: usar modelos locales de profundidad para crear salidas de imagen SBS, Half Top-Bottom y estilo anaglifo.");
+
+    public string DisabledPlaceholderText => Text("Disabled until implemented", "Deshabilitado hasta implementarse");
+
+    public string ImageSourcePanelTitleText => Text("Source image", "Imagen de origen");
+
+    public string ImageDepthPanelTitleText => Text(
+        "Depth map placeholder / generated later",
+        "Placeholder de mapa de profundidad / se generara despues");
+
+    public string ImageParallaxPreviewTitleText => Text("Parallax preview", "Preview parallax");
+
+    public string ImageParameterPanelTitleText => Text("Motion parameters", "Parametros de movimiento");
+
+    public string ImageQuickSummaryTitleText => Text("Quick summary", "Resumen rapido");
+
+    public string ImageScaffoldLogTitleText => Text("Module log", "Log del modulo");
+
+    public string ImageScaffoldLogText => Text(
+        "Ready for UI validation. Image selection, model inference, preview rendering, and export commands are not connected yet.",
+        "Listo para validacion de UI. Seleccion de imagen, inferencia de modelo, preview y exportacion aun no estan conectados.");
+
+    public string ImageDepthParameterText => Text("Depth: medium", "Profundidad: media");
+
+    public string ImageMotionParameterText => Text("Movement: slow push", "Movimiento: avance suave");
+
+    public string ImageZoomParameterText => Text("Zoom: subtle", "Zoom: sutil");
+
+    public string ImageDirectionParameterText => Text("Direction: left to right", "Direccion: izquierda a derecha");
+
+    public string ImageDurationParameterText => Text("Duration: 6 seconds", "Duracion: 6 segundos");
+
+    public string ImageSmoothingParameterText => Text("Smoothing: enabled", "Suavizado: activado");
+
+    public string ImageLayersParameterText => Text("Layers: foreground / mid / background", "Capas: primer plano / medio / fondo");
+
+    public string ImagePreviewActionText => Text("Preview scaffold", "Scaffold de preview");
+
+    public string ImageExportActionText => Text("Export scaffold", "Scaffold de exportacion");
+
+    public string ImageOpenOutputFolderActionText => Text("Open output folder", "Abrir carpeta de salida");
+
+    public string ImageNewConversionActionText => Text("New conversion", "Nueva conversion");
+
+    public string ImageResultParallaxTitleText => Text("2.5D result/export", "Resultado/exportacion 2.5D");
+
+    public string ImageExportOptionsTitleText => Text("Export options", "Opciones de exportacion");
+
+    public string ImageResultSummaryTitleText => Text("Result summary", "Resumen del resultado");
+
+    public string ImageResultSummaryText => Text(
+        "Preview target: 1080p parallax video, loop-friendly motion, local depth model pending.",
+        "Objetivo de preview: video parallax 1080p, movimiento para loop, modelo local pendiente.");
+
+    public string ImageStereoPreviewTitleText => Text("Stereo preview", "Preview estereo");
+
+    public string ImageStereoControlsTitleText => Text("Stereo controls", "Controles estereo");
+
+    public string ImageStereoSummaryText => Text(
+        "Modes planned: SBS, Half Top-Bottom, Anaglyph, and L/R pair outputs.",
+        "Modos planeados: SBS, Half Top-Bottom, anaglifo y salidas par L/R.");
+
+    public string ImageStereoSeparationText => Text("Eye separation: 4.0%", "Separacion ocular: 4.0%");
+
+    public string ImageStereoConvergenceText => Text("Convergence: neutral", "Convergencia: neutral");
+
+    public string ImageStereoAnaglyphText => Text("Anaglyph: red/cyan", "Anaglifo: rojo/cian");
+
+    public string ImageStereoResultTitleText => Text("Stereoscopic results", "Resultados estereoscopicos");
+
+    public string ImageGeneratedFilesTitleText => Text("Generated files", "Archivos generados");
+
+    public string ImageOutputPanelTitleText => Text("Output panel", "Panel de salida");
+
+    public string ImageComparisonTitleText => Text("Comparison views", "Vistas comparativas");
+
+    public ImageConversionMode? SelectedImageConversionMode
+    {
+        get => _selectedImageConversionMode;
+        private set
+        {
+            if (SetProperty(ref _selectedImageConversionMode, value))
+            {
+                RaiseImageConversionPropertiesChanged();
+            }
+        }
+    }
+
+    public ImageConversionStep SelectedImageConversionStep
+    {
+        get => _selectedImageConversionStep;
+        private set
+        {
+            if (SetProperty(ref _selectedImageConversionStep, value))
+            {
+                RaiseImageConversionPropertiesChanged();
+            }
+        }
+    }
+
+    public bool IsImageParallaxModeSelected => SelectedImageConversionMode == ImageConversionMode.ParallaxPhoto;
+
+    public bool IsImageStereoModeSelected => SelectedImageConversionMode == ImageConversionMode.StereoscopicImage;
+
+    public bool HasSelectedImageMode => SelectedImageConversionMode is not null;
+
+    public string ImageParallaxModeSelectionState => IsImageParallaxModeSelected ? "Active" : "Pending";
+
+    public string ImageStereoModeSelectionState => IsImageStereoModeSelected ? "Active" : "Pending";
+
+    public string ImageParallaxModeCardStatusText => IsImageParallaxModeSelected
+        ? Text("Selected", "Seleccionado")
+        : Text("Choose workflow", "Elegir flujo");
+
+    public string ImageStereoModeCardStatusText => IsImageStereoModeSelected
+        ? Text("Selected", "Seleccionado")
+        : Text("Choose workflow", "Elegir flujo");
+
+    public bool IsImageWorkflowChooserExpanded
+    {
+        get => _isImageWorkflowChooserExpanded;
+        private set
+        {
+            if (SetProperty(ref _isImageWorkflowChooserExpanded, value))
+            {
+                RaiseImageConversionPropertiesChanged();
+            }
+        }
+    }
+
+    public Visibility ImageWorkflowSummaryVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.Setup && HasSelectedImageMode
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageWorkflowChooserVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.Setup &&
+        (!HasSelectedImageMode || IsImageWorkflowChooserExpanded)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string ImageWorkflowChooserChevronText => IsImageWorkflowChooserExpanded ? "v" : ">";
+
+    public string ImageWorkflowSummaryText => Text(
+        $"Workflow: {SelectedImageModeName}",
+        $"Flujo: {SelectedImageModeName}");
+
+    public string ImageModeSourceStepState => ImageStepState(ImageConversionStep.ModeAndSource);
+
+    public string ImageSetupStepState => ImageStepState(ImageConversionStep.Setup);
+
+    public string ImagePreviewExportStepState => ImageStepState(ImageConversionStep.PreviewAndExport);
+
+    public string ImageModeSourceStepMarkerText => ImageStepMarkerText(ImageConversionStep.ModeAndSource, "1");
+
+    public string ImageSetupStepMarkerText => ImageStepMarkerText(ImageConversionStep.Setup, "2");
+
+    public string ImagePreviewExportStepMarkerText => ImageStepMarkerText(ImageConversionStep.PreviewAndExport, "3");
+
+    public Visibility ImageModeSourceStepVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.ModeAndSource ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ImageSetupStepVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.Setup ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ImageParallaxSetupStepVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.Setup && IsImageParallaxModeSelected
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageStereoSetupStepVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.Setup && IsImageStereoModeSelected
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageNoModeSetupHintVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.Setup && !HasSelectedImageMode
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageParallaxPreviewExportStepVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport && IsImageParallaxModeSelected
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageStereoPreviewExportStepVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport && IsImageStereoModeSelected
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public string ImageModeSourceStepTitleText => Text("Source & analysis", "Origen y analisis");
+
+    public string ImageSetupStepTitleText => Text("Setup", "Configuracion");
+
+    public string ImagePreviewExportStepTitleText => Text("Preview & export", "Preview y exportacion");
+
+    public string ImageSourceModeStepTitleText => Text("Source & mode", "Origen y modo");
+
+    public string ImageModeSelectionTitleText => Text("Choose an image workflow", "Elige un flujo de imagen");
+
+    public string ChangeImageWorkflowText => Text("Change workflow", "Cambiar flujo");
+
+    public string ImageModeSourceBodyText => Text(
+        "Select one local image first, then analyze it locally to unlock setup.",
+        "Selecciona primero una imagen local y luego analizala localmente para habilitar configuracion.");
+
+    public string ImageSourceAnalysisTitleText => Text("Source image", "Imagen de origen");
+
+    public string DropImageText => Text(
+        "Drop one image file here or browse for a file.",
+        "Arrastra un archivo de imagen aqui o selecciona uno.");
+
+    public string ImageNoModeSetupHintText => Text(
+        "Choose a workflow to configure image setup.",
+        "Elige un flujo para configurar la imagen.");
+
+    public string AnalyzeImageText => Text("Analyze image", "Analizar imagen");
+
+    public string ImageAnalysisTitleText => Text("Image analysis", "Analisis de imagen");
+
+    public string SelectedImageModeName =>
+        SelectedImageConversionMode switch
+        {
+            ImageConversionMode.ParallaxPhoto => ImageParallaxModeTitleText,
+            ImageConversionMode.StereoscopicImage => Image3DOutputModeTitleText,
+            _ => Text("No mode selected", "Sin modo seleccionado"),
+        };
+
+    public string SelectedImageStepName => SelectedImageConversionStep switch
+    {
+        ImageConversionStep.ModeAndSource => ImageModeSourceStepTitleText,
+        ImageConversionStep.Setup => ImageSetupStepTitleText,
+        ImageConversionStep.PreviewAndExport => ImagePreviewExportStepTitleText,
+        _ => ImageModeSourceStepTitleText,
+    };
+
+    public string ImageSummaryStatusTitleText => Text("Image summary", "Resumen de imagen");
+
+    public string ImageSelectedModeSummaryText => Text(
+        $"Mode: {SelectedImageModeName}",
+        $"Modo: {SelectedImageModeName}");
+
+    public string ImageCurrentStepSummaryText => Text(
+        $"Phase: {SelectedImageStepName}",
+        $"Fase: {SelectedImageStepName}");
+
+    public string ImageSupportedInputFormatsText => Text(
+        "Supported inputs: JPG, JPEG, PNG, BMP, TIF, TIFF, WEBP",
+        "Entradas soportadas: JPG, JPEG, PNG, BMP, TIF, TIFF, WEBP");
+
+    public string ImagePlannedOutputFormatsText => IsImageParallaxModeSelected
+        ? Text("Outputs planned: MP4 parallax, preview stills, project metadata", "Salidas planeadas: MP4 parallax, imagenes de preview, metadata de proyecto")
+        : IsImageStereoModeSelected
+            ? Text("Outputs planned: SBS, Half Top-Bottom, Anaglyph, L/R pair", "Salidas planeadas: SBS, Half Top-Bottom, anaglifo, par L/R")
+            : Text("Choose a mode to see planned outputs.", "Elige un modo para ver salidas planeadas.");
+
+    public string ImageLocalModelReadinessNoteText => Text(
+        "Local depth model readiness will appear here when image processing is implemented.",
+        "La disponibilidad del modelo local de profundidad aparecera aqui cuando se implemente imagen.");
+
+    public string ImageNotImplementedStateText => Text(
+        "Scaffold only - no image processing command is wired yet.",
+        "Solo scaffold: aun no hay comandos de procesamiento de imagen conectados.");
+
+    public string ImageActivityLogTitleText => Text("Image activity log", "Log de actividad de imagen");
+
+    public string ImageActivityLogText =>
+        ImageLogs.Count == 0
+            ? ImageScaffoldLogText
+            : string.Join(Environment.NewLine, ImageLogs.Select(log => log.DisplayText));
+
+    public string SelectImageText => Text("Select image", "Seleccionar imagen");
+
+    public string ImageSelectedTitleText => Text("Selected image", "Imagen seleccionada");
+
+    public string NoImageSelectedText => Text("No image selected yet.", "Aun no hay imagen seleccionada.");
+
+    public string SelectedImageDisplayPath => SelectedImagePath ?? NoImageSelectedText;
+
+    public string SelectedImageFileName => HasSelectedImage
+        ? Path.GetFileName(SelectedImagePath) ?? NoImageSelectedText
+        : NoImageSelectedText;
+
+    public string? SelectedImagePath
+    {
+        get => _selectedImagePath;
+        private set
+        {
+            if (SetProperty(ref _selectedImagePath, value))
+            {
+                RaiseImageConversionPropertiesChanged();
+            }
+        }
+    }
+
+    public bool HasSelectedImage => !string.IsNullOrWhiteSpace(SelectedImagePath);
+
+    public bool HasImageMetadata => _selectedImageMetadata is not null;
+
+    public bool CanAnalyzeImage => HasSelectedImage;
+
+    public bool HasImageWorkflowPrerequisites => HasImageMetadata && HasSelectedImageMode;
+
+    public bool CanOpenImageSetupStep => HasImageMetadata;
+
+    public bool IsImageModeSetupValid => IsImageParallaxModeSelected
+        ? !string.IsNullOrWhiteSpace(SelectedParallaxDepthIntensity) &&
+            !string.IsNullOrWhiteSpace(SelectedParallaxMotionDirection) &&
+            !string.IsNullOrWhiteSpace(SelectedParallaxZoomAmplitude) &&
+            !string.IsNullOrWhiteSpace(SelectedParallaxDuration) &&
+            !string.IsNullOrWhiteSpace(SelectedParallaxSmoothing) &&
+            !string.IsNullOrWhiteSpace(SelectedParallaxLayerBehavior)
+        : IsImageStereoModeSelected &&
+            !string.IsNullOrWhiteSpace(SelectedStereoEyeSeparation) &&
+            !string.IsNullOrWhiteSpace(SelectedStereoConvergence) &&
+            !string.IsNullOrWhiteSpace(SelectedStereoAnaglyphMode);
+
+    public bool IsImageSetupValid => HasImageMetadata && HasSelectedImageMode && IsImageModeSetupValid;
+
+    public bool CanOpenImagePreviewExportStep => IsImageSetupValid;
+
+    public bool CanMoveImageWizardBack => SelectedImageConversionStep != ImageConversionStep.ModeAndSource;
+
+    public bool CanMoveImageWizardNext => SelectedImageConversionStep switch
+    {
+        ImageConversionStep.ModeAndSource => CanOpenImageSetupStep,
+        ImageConversionStep.Setup => CanOpenImagePreviewExportStep,
+        _ => false,
+    };
+
+    public Visibility ImageWizardBackButtonVisibility =>
+        CanMoveImageWizardBack ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ImageWizardNextButtonVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility ContinueWithImageConversionFooterVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool CanContinueWithImageConversion =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport && IsImageSetupValid;
+
+    public string ImageWizardNextToolTipText => CanMoveImageWizardNext
+        ? string.Empty
+        : SelectedImageConversionStep == ImageConversionStep.ModeAndSource
+            ? Text("Select and analyze a readable image before continuing.", "Selecciona y analiza una imagen legible antes de continuar.")
+            : Text("Choose an image workflow before continuing.", "Elige un flujo de imagen antes de continuar.");
+
+    public string ContinueWithImageConversionText => Text(
+        "Prepare image preview/export plan",
+        "Preparar plan de preview/exportacion de imagen");
+
+    public Visibility ImagePreviewExportStatusCardVisibility =>
+        _hasEnteredImagePreviewExportStage ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ImageAnalysisResultsVisibility =>
+        HasImageMetadata ? Visibility.Visible : Visibility.Collapsed;
+
+    public bool IsSelectedImageVertical =>
+        _selectedImageMetadata is { } metadata &&
+        metadata.Height > metadata.Width &&
+        !IsImageNearlySquare(metadata.Width, metadata.Height);
+
+    public bool IsSelectedImageHorizontalOrSquare => !IsSelectedImageVertical;
+
+    public Visibility ImageParallaxPreviewExportVerticalLayoutVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport &&
+        IsImageParallaxModeSelected &&
+        IsSelectedImageVertical
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageParallaxPreviewExportWideLayoutVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport &&
+        IsImageParallaxModeSelected &&
+        IsSelectedImageHorizontalOrSquare
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageStereoPreviewExportVerticalLayoutVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport &&
+        IsImageStereoModeSelected &&
+        IsSelectedImageVertical
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageStereoPreviewExportWideLayoutVisibility =>
+        SelectedImageConversionStep == ImageConversionStep.PreviewAndExport &&
+        IsImageStereoModeSelected &&
+        IsSelectedImageHorizontalOrSquare
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public Visibility ImageSummaryVisibility =>
+        ImagePreviewExportStatusCardVisibility;
+
+    public GridLength ImageSummaryRowHeight =>
+        ImagePreviewExportStatusRowHeight;
+
+    public GridLength ImagePreviewExportStatusRowHeight =>
+        _hasEnteredImagePreviewExportStage ? GridLength.Auto : new GridLength(0d);
+
+    public Thickness ImageActivityLogCardMargin =>
+        _hasEnteredImagePreviewExportStage ? new Thickness(0d, 14d, 0d, 0d) : new Thickness(0d);
+
+    public string ImagePreviewExportStatusTitleText => Text(
+        "Image preview/export plan",
+        "Plan de preview/exportacion de imagen");
+
+    public string ImagePreviewExportStatusText => _hasEnteredImagePreviewExportStage
+        ? Text("Plan prepared. Engine preview/export is not implemented yet.", "Plan preparado. Preview/exportacion con motor aun no esta implementado.")
+        : Text("Prepare the plan in Step 3 to see image preview/export status.", "Prepara el plan en el paso 3 para ver el estado de preview/exportacion de imagen.");
+
+    public string ImageSupportedExtensionsText => Text(
+        ".jpg, .jpeg, .png, .bmp, .tif, .tiff, .webp",
+        ".jpg, .jpeg, .png, .bmp, .tif, .tiff, .webp");
+
+    public string ImageMetadataTitleText => Text("Image metadata", "Metadata de imagen");
+
+    public string ImageMetadataWidthText => LabelValue("Width", "Ancho", _selectedImageMetadata?.WidthText);
+
+    public string ImageMetadataHeightText => LabelValue("Height", "Alto", _selectedImageMetadata?.HeightText);
+
+    public string ImageMetadataAspectRatioText => LabelValue("Aspect ratio", "Relacion de aspecto", _selectedImageMetadata?.AspectRatio);
+
+    public string ImageMetadataFormatText => LabelValue("Format", "Formato", _selectedImageMetadata?.Format);
+
+    public string ImageMetadataPixelFormatText => LabelValue("Pixel format", "Formato de pixel", _selectedImageMetadata?.PixelFormat);
+
+    public string ImageMetadataFileSizeText => LabelValue("File size", "Tamano de archivo", _selectedImageMetadata?.FileSizeText);
+
+    public string ImageMetadataSummaryText => HasImageMetadata
+        ? $"{_selectedImageMetadata!.WidthText} x {_selectedImageMetadata.HeightText} · {_selectedImageMetadata.AspectRatio} · {_selectedImageMetadata.Format} · {_selectedImageMetadata.FileSizeText}"
+        : Text("No image metadata yet.", "Aun no hay metadata de imagen.");
+
+    public string ImageSourceStatusText => HasImageMetadata
+        ? Text("Image metadata analyzed locally.", "Metadata de imagen analizada localmente.")
+        : Text("Select a supported image to unlock setup.", "Selecciona una imagen compatible para habilitar configuracion.");
+
+    public string ImageOutputPlanText => IsImageParallaxModeSelected
+        ? Text("Planned output: parallax preview/export next to the source image. Engine export is disabled.", "Salida planeada: preview/exportacion parallax junto a la imagen de origen. Exportacion de motor deshabilitada.")
+        : IsImageStereoModeSelected
+            ? Text("Planned output: stereoscopic still formats next to the source image. Engine export is disabled.", "Salida planeada: formatos estereoscopicos de imagen fija junto a la imagen de origen. Exportacion de motor deshabilitada.")
+            : Text("Choose an image workflow to prepare an output plan.", "Elige un flujo de imagen para preparar un plan de salida.");
+
+    public string ImageSetupSummaryText => IsImageParallaxModeSelected
+        ? Text(
+            $"2.5D setup: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}.",
+            $"Configuracion 2.5D: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}.")
+        : IsImageStereoModeSelected
+            ? Text(
+                $"Stereo setup: {SelectedStereoOutputFormatDisplayText}, separation {SelectedStereoEyeSeparation}, convergence {SelectedStereoConvergence}.",
+                $"Configuracion estereo: {SelectedStereoOutputFormatDisplayText}, separacion {SelectedStereoEyeSeparation}, convergencia {SelectedStereoConvergence}.")
+            : Text("Select a workflow mode before configuring image setup.", "Selecciona un modo de flujo antes de configurar imagen.");
+
+    public string ImageDepthIntensityLabelText => Text("Depth intensity", "Intensidad de profundidad");
+
+    public string ImageMotionDirectionLabelText => Text("Motion direction", "Direccion de movimiento");
+
+    public string ImageZoomAmplitudeLabelText => Text("Zoom/amplitude", "Zoom/amplitud");
+
+    public string ImageDurationLabelText => Text("Duration", "Duracion");
+
+    public string ImageSmoothingLabelText => Text("Smoothing", "Suavizado");
+
+    public string ImageLayerBehaviorLabelText => Text("Layer/depth behavior", "Comportamiento de capas/profundidad");
+
+    public string ImageStereoOutputFormatLabelText => Text("Output format", "Formato de salida");
+
+    public string ImageStereoEyeSeparationLabelText => Text("Eye separation", "Separacion ocular");
+
+    public string ImageStereoConvergenceLabelText => Text("Convergence", "Convergencia");
+
+    public string ImageStereoSwapEyesLabelText => Text("Swap eyes", "Intercambiar ojos");
+
+    public string ImageStereoAnaglyphModeLabelText => Text("Anaglyph mode", "Modo anaglifo");
+
+    public IReadOnlyList<string> ParallaxDepthIntensityOptions { get; } = ["Low", "Medium", "High"];
+
+    public IReadOnlyList<string> ParallaxMotionDirectionOptions { get; } =
+        ["Left to right", "Right to left", "Push in", "Pull back", "Orbit"];
+
+    public IReadOnlyList<string> ParallaxZoomAmplitudeOptions { get; } = ["Subtle", "Medium", "Strong"];
+
+    public IReadOnlyList<string> ParallaxDurationOptions { get; } = ["4 seconds", "6 seconds", "8 seconds", "12 seconds"];
+
+    public IReadOnlyList<string> ParallaxSmoothingOptions { get; } = ["Enabled", "Balanced", "Strong"];
+
+    public IReadOnlyList<string> ParallaxLayerBehaviorOptions { get; } =
+        ["Foreground / mid / background", "Depth slices", "Soft depth ramp"];
+
+    public IReadOnlyList<LocalizedOptionViewModel<ImageStereoOutputFormat>> StereoOutputFormatOptions { get; } =
+    [
+        new(ImageStereoOutputFormat.SideBySide, "SBS", "SBS"),
+        new(ImageStereoOutputFormat.HalfTopBottom, "Half Top-Bottom / TAB", "Half Top-Bottom / TAB"),
+        new(ImageStereoOutputFormat.Anaglyph, "Anaglyph", "Anaglifo"),
+        new(ImageStereoOutputFormat.LeftRightPair, "L/R pair", "Par L/R"),
+    ];
+
+    public IReadOnlyList<string> StereoEyeSeparationOptions { get; } = ["2.0%", "4.0%", "6.0%", "8.0%"];
+
+    public IReadOnlyList<string> StereoConvergenceOptions { get; } = ["Near", "Neutral", "Far"];
+
+    public IReadOnlyList<string> StereoAnaglyphModeOptions { get; } = ["Red/Cyan", "Green/Magenta", "Amber/Blue"];
+
+    public string SelectedParallaxDepthIntensity
+    {
+        get => _selectedParallaxDepthIntensity;
+        set => SetImageSetupString(ref _selectedParallaxDepthIntensity, value);
+    }
+
+    public string SelectedParallaxMotionDirection
+    {
+        get => _selectedParallaxMotionDirection;
+        set => SetImageSetupString(ref _selectedParallaxMotionDirection, value);
+    }
+
+    public string SelectedParallaxZoomAmplitude
+    {
+        get => _selectedParallaxZoomAmplitude;
+        set => SetImageSetupString(ref _selectedParallaxZoomAmplitude, value);
+    }
+
+    public string SelectedParallaxDuration
+    {
+        get => _selectedParallaxDuration;
+        set => SetImageSetupString(ref _selectedParallaxDuration, value);
+    }
+
+    public string SelectedParallaxSmoothing
+    {
+        get => _selectedParallaxSmoothing;
+        set => SetImageSetupString(ref _selectedParallaxSmoothing, value);
+    }
+
+    public string SelectedParallaxLayerBehavior
+    {
+        get => _selectedParallaxLayerBehavior;
+        set => SetImageSetupString(ref _selectedParallaxLayerBehavior, value);
+    }
+
+    public ImageStereoOutputFormat SelectedStereoOutputFormat
+    {
+        get => _selectedStereoOutputFormat;
+        set
+        {
+            if (SetProperty(ref _selectedStereoOutputFormat, value))
+            {
+                ApplyImageSetupChanged();
+            }
+        }
+    }
+
+    public string SelectedStereoOutputFormatDisplayText =>
+        StereoOutputFormatOptions.First(option => option.Value == SelectedStereoOutputFormat).DisplayName;
+
+    public string SelectedStereoEyeSeparation
+    {
+        get => _selectedStereoEyeSeparation;
+        set => SetImageSetupString(ref _selectedStereoEyeSeparation, value);
+    }
+
+    public string SelectedStereoConvergence
+    {
+        get => _selectedStereoConvergence;
+        set => SetImageSetupString(ref _selectedStereoConvergence, value);
+    }
+
+    public bool ImageStereoSwapEyes
+    {
+        get => _imageStereoSwapEyes;
+        set
+        {
+            if (SetProperty(ref _imageStereoSwapEyes, value))
+            {
+                ApplyImageSetupChanged();
+            }
+        }
+    }
+
+    public string SelectedStereoAnaglyphMode
+    {
+        get => _selectedStereoAnaglyphMode;
+        set => SetImageSetupString(ref _selectedStereoAnaglyphMode, value);
+    }
 
     public string? SelectedVideoPath
     {
@@ -2342,7 +3183,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
             if (IsActivityLogModalOpen)
             {
-                return ActivityLogTitle;
+                return ActiveActivityLogModalTitleText;
             }
 
             if (IsSettingsModalOpen)
@@ -2919,6 +3760,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ActivityLogTitle => Text("Activity log", "Registro de actividad");
 
+    public string ActiveActivityLogModalTitleText =>
+        _activeActivityLogModalKind == ActivityLogModalKind.Image ? ImageActivityLogTitleText : ActivityLogTitle;
+
     public string ClearText => Text("Clear", "Limpiar");
 
     public string RecommendedPresetTitle => Text(
@@ -2974,6 +3818,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public ObservableCollection<LogEntryViewModel> Logs { get; } = [];
 
+    public ObservableCollection<LogEntryViewModel> ImageLogs { get; } = [];
+
     public ObservableCollection<LogEntryViewModel> ConversionLogs { get; } = [];
 
     public ObservableCollection<string> PreviewGenerationLogs { get; } = [];
@@ -2985,6 +3831,38 @@ public sealed class MainWindowViewModel : ObservableObject
     public AsyncRelayCommand AnalyzeCommand { get; }
 
     public AsyncRelayCommand RefreshEngineStatusCommand { get; }
+
+    public RelayCommand ToggleSidebarCommand { get; }
+
+    public RelayCommand SelectHomeSectionCommand { get; }
+
+    public RelayCommand SelectImageConversionSectionCommand { get; }
+
+    public RelayCommand SelectVideoConversionSectionCommand { get; }
+
+    public RelayCommand SelectImageCommand { get; }
+
+    public RelayCommand AnalyzeImageCommand { get; }
+
+    public RelayCommand ClearImageLogCommand { get; }
+
+    public RelayCommand SelectImageParallaxModeCommand { get; }
+
+    public RelayCommand SelectImageStereoModeCommand { get; }
+
+    public RelayCommand ToggleImageWorkflowChooserCommand { get; }
+
+    public RelayCommand SelectImageModeSourceStepCommand { get; }
+
+    public RelayCommand SelectImageSetupStepCommand { get; }
+
+    public RelayCommand SelectImagePreviewExportStepCommand { get; }
+
+    public RelayCommand ImageWizardBackCommand { get; }
+
+    public RelayCommand ImageWizardNextCommand { get; }
+
+    public RelayCommand ContinueWithImageConversionCommand { get; }
 
     public RelayCommand OpenSettingsCommand { get; }
 
@@ -3031,6 +3909,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public RelayCommand ContinuePreviewCommand { get; }
 
     public RelayCommand ViewActivityLogCommand { get; }
+
+    public RelayCommand ViewImageActivityLogCommand { get; }
 
     public RelayCommand CopyFullLogCommand { get; }
 
@@ -3080,6 +3960,16 @@ public sealed class MainWindowViewModel : ObservableObject
         await TrySelectVideoAndAnalyzeAsync(path);
     }
 
+    public void SelectDroppedImage(string path)
+    {
+        if (!IsImageConversionSectionSelected)
+        {
+            return;
+        }
+
+        TrySelectImage(path);
+    }
+
     private bool IsSpanish =>
         string.Equals(SelectedLanguage, "Español", StringComparison.Ordinal);
 
@@ -3104,6 +3994,114 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             await TrySelectVideoAndAnalyzeAsync(dialog.FileName);
         }
+    }
+
+    private void SelectImage()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = Text("Select an image", "Selecciona una imagen"),
+            Filter = Text("Image files", "Archivos de imagen") +
+                "|*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff;*.webp|" +
+                Text("All files", "Todos los archivos") + "|*.*",
+            Multiselect = false,
+            CheckFileExists = true,
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            TrySelectImage(dialog.FileName);
+        }
+    }
+
+    private void TrySelectImage(string path)
+    {
+        if (!IsSupportedImageFile(path))
+        {
+            AddImageLog(
+                "The selected file is not a supported image format.",
+                "El archivo seleccionado no tiene un formato de imagen compatible.");
+            return;
+        }
+
+        SelectedImagePath = path;
+        _selectedImageMetadata = null;
+        ResetImageSetupState();
+        _hasEnteredImagePreviewExportStage = false;
+        SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
+        AddImageLog(
+            $"Image selected: {Path.GetFileName(path)}",
+            $"Imagen seleccionada: {Path.GetFileName(path)}");
+        AddImageLog(
+            "Analyze image to read metadata and unlock image setup.",
+            "Analiza la imagen para leer metadata y habilitar configuracion.");
+
+        RaiseImageConversionPropertiesChanged();
+    }
+
+    private void AnalyzeImage()
+    {
+        if (!HasSelectedImage || SelectedImagePath is null)
+        {
+            AddImageLog(
+                "Select an image before analysis.",
+                "Selecciona una imagen antes del analisis.");
+            return;
+        }
+
+        try
+        {
+            _selectedImageMetadata = ReadImageMetadata(SelectedImagePath);
+            _hasEnteredImagePreviewExportStage = false;
+            SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
+            AddImageLog(
+                $"Image metadata analyzed: {_selectedImageMetadata.WidthText} x {_selectedImageMetadata.HeightText}, {_selectedImageMetadata.Format}.",
+                $"Metadata de imagen analizada: {_selectedImageMetadata.WidthText} x {_selectedImageMetadata.HeightText}, {_selectedImageMetadata.Format}.");
+        }
+        catch (Exception exception)
+        {
+            _selectedImageMetadata = null;
+            AddImageLog(
+                $"Could not read image metadata: {exception.Message}",
+                $"No se pudo leer la metadata de imagen: {exception.Message}");
+        }
+
+        RaiseImageConversionPropertiesChanged();
+    }
+
+    private static ImageMetadata ReadImageMetadata(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var decoder = BitmapDecoder.Create(
+            stream,
+            BitmapCreateOptions.IgnoreColorProfile,
+            BitmapCacheOption.OnLoad);
+        var frame = decoder.Frames.FirstOrDefault() ??
+            throw new InvalidOperationException("The image does not contain a readable frame.");
+        var width = frame.PixelWidth;
+        var height = frame.PixelHeight;
+        var fileSize = new FileInfo(path).Length;
+        var format = decoder.CodecInfo?.FriendlyName;
+        if (string.IsNullOrWhiteSpace(format))
+        {
+            format = Path.GetExtension(path).TrimStart('.').ToUpperInvariant();
+        }
+
+        var pixelFormat = frame.Format.ToString();
+        if (frame.Format.BitsPerPixel > 0)
+        {
+            pixelFormat = $"{pixelFormat} / {frame.Format.BitsPerPixel} bpp";
+        }
+
+        return new ImageMetadata(
+            Width: width,
+            Height: height,
+            WidthText: width.ToString("N0"),
+            HeightText: height.ToString("N0"),
+            AspectRatio: FormatAspectRatio(width, height),
+            Format: format,
+            PixelFormat: pixelFormat,
+            FileSizeText: FormatImageFileSize(fileSize));
     }
 
     private async Task AnalyzeAsync()
@@ -4269,6 +5267,231 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void SelectAppSection(AppSection section)
+    {
+        SelectedAppSection = section;
+    }
+
+    public void ExpandSidebarForHover()
+    {
+        if (!IsSidebarPinnedExpanded)
+        {
+            IsSidebarHoverExpanded = true;
+        }
+    }
+
+    public void CollapseSidebarAfterHover()
+    {
+        if (!IsSidebarPinnedExpanded)
+        {
+            IsSidebarHoverExpanded = false;
+        }
+    }
+
+    private void ToggleSidebar()
+    {
+        IsSidebarExpanded = !IsSidebarExpanded;
+        IsSidebarHoverExpanded = false;
+    }
+
+    private void SelectImageConversionMode(ImageConversionMode mode)
+    {
+        if (SelectedImageConversionMode == mode)
+        {
+            IsImageWorkflowChooserExpanded = false;
+            return;
+        }
+
+        SelectedImageConversionMode = mode;
+        IsImageWorkflowChooserExpanded = false;
+        ApplyImageSetupChanged();
+        AddImageLog(
+            $"Image workflow mode changed: {SelectedImageModeName}.",
+            $"Modo de flujo de imagen cambiado: {SelectedImageModeName}.");
+        if (SelectedImageConversionStep == ImageConversionStep.ModeAndSource)
+        {
+            return;
+        }
+
+        RaiseImageConversionPropertiesChanged();
+    }
+
+    private void ToggleImageWorkflowChooser()
+    {
+        if (!HasSelectedImageMode)
+        {
+            IsImageWorkflowChooserExpanded = true;
+            return;
+        }
+
+        IsImageWorkflowChooserExpanded = !IsImageWorkflowChooserExpanded;
+    }
+
+    private void SelectImageConversionStep(ImageConversionStep step)
+    {
+        if (step == ImageConversionStep.Setup && !CanOpenImageSetupStep)
+        {
+            AddImageLog(
+                "Analyze a readable image before opening image setup.",
+                "Analiza una imagen legible antes de abrir la configuracion.");
+            return;
+        }
+
+        if (step == ImageConversionStep.PreviewAndExport && !CanOpenImagePreviewExportStep)
+        {
+            AddImageLog(
+                "Choose an image workflow and complete setup before opening the preview/export plan.",
+                "Elige un flujo de imagen y completa la configuracion antes de abrir el plan de preview/exportacion.");
+            return;
+        }
+
+        SelectedImageConversionStep = step;
+    }
+
+    private void MoveImageWizardBack()
+    {
+        if (!CanMoveImageWizardBack)
+        {
+            return;
+        }
+
+        SelectedImageConversionStep = SelectedImageConversionStep switch
+        {
+            ImageConversionStep.PreviewAndExport => ImageConversionStep.Setup,
+            ImageConversionStep.Setup => ImageConversionStep.ModeAndSource,
+            _ => ImageConversionStep.ModeAndSource,
+        };
+    }
+
+    private void MoveImageWizardNext()
+    {
+        if (!CanMoveImageWizardNext)
+        {
+            AddImageLog(
+                "Image workflow cannot continue until the current phase is ready.",
+                "El flujo de imagen no puede continuar hasta que la fase actual este lista.");
+            return;
+        }
+
+        SelectedImageConversionStep = SelectedImageConversionStep switch
+        {
+            ImageConversionStep.ModeAndSource => ImageConversionStep.Setup,
+            ImageConversionStep.Setup => ImageConversionStep.PreviewAndExport,
+            _ => ImageConversionStep.PreviewAndExport,
+        };
+
+        if (SelectedImageConversionStep == ImageConversionStep.PreviewAndExport)
+        {
+            AddImageLog(
+                "Image preview/export plan is ready for review.",
+                "El plan de preview/exportacion de imagen esta listo para revisar.");
+        }
+    }
+
+    private void ContinueWithImageConversion()
+    {
+        if (!CanContinueWithImageConversion)
+        {
+            AddImageLog(
+                "Review image setup before preparing the preview/export plan.",
+                "Revisa la configuracion de imagen antes de preparar el plan de preview/exportacion.");
+            return;
+        }
+
+        _hasEnteredImagePreviewExportStage = true;
+        AddImageLog(
+            "Image preview/export plan prepared. Engine processing is not implemented yet.",
+            "Plan de preview/exportacion de imagen preparado. El procesamiento de motor aun no esta implementado.");
+        ShowLogCopyNotification(
+            "Image preview/export plan prepared",
+            "Plan de preview/exportacion de imagen preparado");
+        RaiseImageConversionPropertiesChanged();
+    }
+
+    private void ApplyImageSetupChanged()
+    {
+        if (_hasEnteredImagePreviewExportStage)
+        {
+            _hasEnteredImagePreviewExportStage = false;
+            ShowLogCopyNotification(
+                "Image setup changed. Preview/export plan reset.",
+                "La configuracion de imagen cambio. Plan de preview/exportacion restablecido.");
+            AddImageLog(
+                "Image setup changed; preview/export plan reset.",
+                "La configuracion de imagen cambio; plan de preview/exportacion restablecido.");
+        }
+        else
+        {
+            AddImageLog(
+                "Image setup changed.",
+                "Configuracion de imagen cambiada.");
+        }
+
+        RaiseImageConversionPropertiesChanged();
+    }
+
+    private void ResetImageSetupState()
+    {
+        _selectedImageConversionMode = null;
+        _isImageWorkflowChooserExpanded = false;
+        _selectedParallaxDepthIntensity = "Medium";
+        _selectedParallaxMotionDirection = "Left to right";
+        _selectedParallaxZoomAmplitude = "Subtle";
+        _selectedParallaxDuration = "6 seconds";
+        _selectedParallaxSmoothing = "Enabled";
+        _selectedParallaxLayerBehavior = "Foreground / mid / background";
+        _selectedStereoOutputFormat = ImageStereoOutputFormat.SideBySide;
+        _selectedStereoEyeSeparation = "4.0%";
+        _selectedStereoConvergence = "Neutral";
+        _imageStereoSwapEyes = false;
+        _selectedStereoAnaglyphMode = "Red/Cyan";
+    }
+
+    private void SetImageSetupString(
+        ref string field,
+        string value,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (SetProperty(ref field, value, propertyName))
+        {
+            ApplyImageSetupChanged();
+        }
+    }
+
+    private string ImageStepState(ImageConversionStep step)
+    {
+        if (SelectedImageConversionStep == step)
+        {
+            if (step == ImageConversionStep.Setup && !CanOpenImageSetupStep)
+            {
+                return "Locked";
+            }
+
+            if (step == ImageConversionStep.PreviewAndExport && !CanOpenImagePreviewExportStep)
+            {
+                return "Locked";
+            }
+
+            return "Active";
+        }
+
+        return step switch
+        {
+            ImageConversionStep.ModeAndSource when
+                SelectedImageConversionStep > ImageConversionStep.ModeAndSource && HasImageMetadata => "Completed",
+            ImageConversionStep.ModeAndSource => "Pending",
+            ImageConversionStep.Setup when !CanOpenImageSetupStep => "Locked",
+            ImageConversionStep.Setup when
+                SelectedImageConversionStep > ImageConversionStep.Setup && IsImageSetupValid => "Completed",
+            ImageConversionStep.Setup => "Pending",
+            ImageConversionStep.PreviewAndExport when !CanOpenImagePreviewExportStep => "Locked",
+            _ => "Pending",
+        };
+    }
+
+    private string ImageStepMarkerText(ImageConversionStep step, string pendingText) =>
+        ImageStepState(step) == "Completed" ? "\u2713" : pendingText;
+
     private void OpenSettings()
     {
         if (IsConversionRunning ||
@@ -4462,19 +5685,28 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ViewActivityLog()
     {
+        _activeActivityLogModalKind = ActivityLogModalKind.General;
         ActivityLogModalText = CreateFullActivityLogText();
         IsSettingsModalOpen = false;
         IsActivityLogModalOpen = true;
     }
 
+    private void ViewImageActivityLog()
+    {
+        _activeActivityLogModalKind = ActivityLogModalKind.Image;
+        ActivityLogModalText = CreateFullImageActivityLogText();
+        IsActivityLogModalOpen = true;
+    }
+
     private void CopyFullLog()
     {
-        var logText = CreateFullActivityLogText();
+        var isImageLogModal = IsActivityLogModalOpen && _activeActivityLogModalKind == ActivityLogModalKind.Image;
+        var logText = isImageLogModal ? CreateFullImageActivityLogText() : CreateFullActivityLogText();
         ActivityLogModalText = logText;
         CopyLogToClipboard(
             logText,
-            englishLogName: "activity log",
-            spanishLogName: "registro de actividad",
+            englishLogName: isImageLogModal ? "image activity log" : "activity log",
+            spanishLogName: isImageLogModal ? "log de actividad de imagen" : "registro de actividad",
             appendFailureToPreviewLog: false);
     }
 
@@ -4515,6 +5747,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void CloseActivityLog()
     {
         IsActivityLogModalOpen = false;
+        _activeActivityLogModalKind = ActivityLogModalKind.General;
     }
 
     private void ClearLogs()
@@ -4525,6 +5758,18 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             ActivityLogModalText = CreateFullActivityLogText();
         }
+    }
+
+    private void ClearImageLog()
+    {
+        ImageLogs.Clear();
+        OnPropertyChanged(nameof(ImageActivityLogText));
+        if (IsActivityLogModalOpen && _activeActivityLogModalKind == ActivityLogModalKind.Image)
+        {
+            ActivityLogModalText = CreateFullImageActivityLogText();
+        }
+
+        ClearImageLogCommand.RaiseCanExecuteChanged();
     }
 
     private void ConfirmReplaceVideo()
@@ -6831,6 +8076,59 @@ public sealed class MainWindowViewModel : ObservableObject
         !string.IsNullOrWhiteSpace(path) &&
         SupportedVideoExtensions.Contains(Path.GetExtension(path));
 
+    private static bool IsSupportedImageFile(string path) =>
+        !string.IsNullOrWhiteSpace(path) &&
+        SupportedImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+
+    private static string FormatImageFileSize(long bytes)
+    {
+        const double mib = 1024d * 1024d;
+        const double kib = 1024d;
+        if (bytes >= mib)
+        {
+            return $"{bytes / mib:0.0} MB";
+        }
+
+        return bytes >= kib ? $"{bytes / kib:0} KB" : $"{bytes} B";
+    }
+
+    private static string FormatAspectRatio(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return "-";
+        }
+
+        var divisor = GreatestCommonDivisor(width, height);
+        return $"{width / divisor}:{height / divisor}";
+    }
+
+    private static bool IsImageNearlySquare(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        var largerSide = Math.Max(width, height);
+        var sideDelta = Math.Abs(width - height);
+        return sideDelta <= largerSide * 0.03d;
+    }
+
+    private static int GreatestCommonDivisor(int left, int right)
+    {
+        left = Math.Abs(left);
+        right = Math.Abs(right);
+        while (right != 0)
+        {
+            var remainder = left % right;
+            left = right;
+            right = remainder;
+        }
+
+        return Math.Max(1, left);
+    }
+
     private void PlanOptionChanged(
         string englishMessage,
         string spanishMessage,
@@ -7128,6 +8426,22 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
+    private void AddImageLog(string englishMessage, string spanishMessage)
+    {
+        ImageLogs.Add(new LogEntryViewModel(
+            timestamp: DateTime.Now,
+            englishMessage,
+            spanishMessage,
+            isSpanish: IsSpanish));
+        OnPropertyChanged(nameof(ImageActivityLogText));
+        if (IsActivityLogModalOpen && _activeActivityLogModalKind == ActivityLogModalKind.Image)
+        {
+            ActivityLogModalText = CreateFullImageActivityLogText();
+        }
+
+        ClearImageLogCommand.RaiseCanExecuteChanged();
+    }
+
     private void LoadPerformanceHistory()
     {
         var result = _performanceHistoryStore.Load();
@@ -7398,6 +8712,11 @@ public sealed class MainWindowViewModel : ObservableObject
     private string CreateFullActivityLogText() =>
         string.Join(Environment.NewLine, Logs.Select(log => log.DisplayText));
 
+    private string CreateFullImageActivityLogText() =>
+        ImageLogs.Count == 0
+            ? ImageScaffoldLogText
+            : string.Join(Environment.NewLine, ImageLogs.Select(log => log.DisplayText));
+
     private void UpdateLogLanguages()
     {
         foreach (var log in Logs)
@@ -7410,10 +8729,18 @@ public sealed class MainWindowViewModel : ObservableObject
             log.SetLanguage(IsSpanish);
         }
 
+        foreach (var log in ImageLogs)
+        {
+            log.SetLanguage(IsSpanish);
+        }
+
         OnPropertyChanged(nameof(ActivityLogPanelText));
+        OnPropertyChanged(nameof(ImageActivityLogText));
         if (IsActivityLogModalOpen)
         {
-            ActivityLogModalText = CreateFullActivityLogText();
+            ActivityLogModalText = _activeActivityLogModalKind == ActivityLogModalKind.Image
+                ? CreateFullImageActivityLogText()
+                : CreateFullActivityLogText();
         }
     }
 
@@ -7444,14 +8771,257 @@ public sealed class MainWindowViewModel : ObservableObject
             option.SetLanguage(IsSpanish);
         }
 
+        foreach (var option in StereoOutputFormatOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
         foreach (var option in SettingsSectionOptions)
         {
             option.SetLanguage(IsSpanish);
         }
     }
 
+    private void RaiseSidebarPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(IsSidebarExpanded));
+        OnPropertyChanged(nameof(IsSidebarPinnedExpanded));
+        OnPropertyChanged(nameof(IsSidebarHoverExpanded));
+        OnPropertyChanged(nameof(IsSidebarEffectivelyExpanded));
+        OnPropertyChanged(nameof(SidebarExpandedWidth));
+        OnPropertyChanged(nameof(SidebarCollapsedWidth));
+        OnPropertyChanged(nameof(SidebarTargetWidth));
+        OnPropertyChanged(nameof(SidebarColumnWidth));
+        OnPropertyChanged(nameof(SidebarPadding));
+        OnPropertyChanged(nameof(SidebarExpandedContentVisibility));
+        OnPropertyChanged(nameof(SidebarNavContentHorizontalAlignment));
+        OnPropertyChanged(nameof(SidebarToggleGlyphText));
+        OnPropertyChanged(nameof(SidebarToggleText));
+        OnPropertyChanged(nameof(SidebarToggleToolTipText));
+    }
+
+    private void RaiseImageConversionPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedImagePath));
+        OnPropertyChanged(nameof(SelectedImageDisplayPath));
+        OnPropertyChanged(nameof(SelectedImageFileName));
+        OnPropertyChanged(nameof(HasSelectedImage));
+        OnPropertyChanged(nameof(HasImageMetadata));
+        OnPropertyChanged(nameof(CanAnalyzeImage));
+        OnPropertyChanged(nameof(HasSelectedImageMode));
+        OnPropertyChanged(nameof(HasImageWorkflowPrerequisites));
+        OnPropertyChanged(nameof(IsImageWorkflowChooserExpanded));
+        OnPropertyChanged(nameof(ImageWorkflowSummaryVisibility));
+        OnPropertyChanged(nameof(ImageWorkflowChooserVisibility));
+        OnPropertyChanged(nameof(ImageWorkflowChooserChevronText));
+        OnPropertyChanged(nameof(ImageWorkflowSummaryText));
+        OnPropertyChanged(nameof(CanOpenImageSetupStep));
+        OnPropertyChanged(nameof(IsImageModeSetupValid));
+        OnPropertyChanged(nameof(IsImageSetupValid));
+        OnPropertyChanged(nameof(CanOpenImagePreviewExportStep));
+        OnPropertyChanged(nameof(CanMoveImageWizardBack));
+        OnPropertyChanged(nameof(CanMoveImageWizardNext));
+        OnPropertyChanged(nameof(ImageWizardBackButtonVisibility));
+        OnPropertyChanged(nameof(ImageWizardNextButtonVisibility));
+        OnPropertyChanged(nameof(ContinueWithImageConversionFooterVisibility));
+        OnPropertyChanged(nameof(CanContinueWithImageConversion));
+        OnPropertyChanged(nameof(ImageWizardNextToolTipText));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusCardVisibility));
+        OnPropertyChanged(nameof(ImageAnalysisResultsVisibility));
+        OnPropertyChanged(nameof(ImageSummaryVisibility));
+        OnPropertyChanged(nameof(ImageSummaryRowHeight));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusRowHeight));
+        OnPropertyChanged(nameof(ImageActivityLogCardMargin));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusText));
+        OnPropertyChanged(nameof(IsSelectedImageVertical));
+        OnPropertyChanged(nameof(IsSelectedImageHorizontalOrSquare));
+        OnPropertyChanged(nameof(ImageParallaxPreviewExportVerticalLayoutVisibility));
+        OnPropertyChanged(nameof(ImageParallaxPreviewExportWideLayoutVisibility));
+        OnPropertyChanged(nameof(ImageStereoPreviewExportVerticalLayoutVisibility));
+        OnPropertyChanged(nameof(ImageStereoPreviewExportWideLayoutVisibility));
+        OnPropertyChanged(nameof(ImageMetadataWidthText));
+        OnPropertyChanged(nameof(ImageMetadataHeightText));
+        OnPropertyChanged(nameof(ImageMetadataAspectRatioText));
+        OnPropertyChanged(nameof(ImageMetadataFormatText));
+        OnPropertyChanged(nameof(ImageMetadataPixelFormatText));
+        OnPropertyChanged(nameof(ImageMetadataFileSizeText));
+        OnPropertyChanged(nameof(ImageMetadataSummaryText));
+        OnPropertyChanged(nameof(ImageSourceStatusText));
+        OnPropertyChanged(nameof(ImageOutputPlanText));
+        OnPropertyChanged(nameof(ImageSetupSummaryText));
+        OnPropertyChanged(nameof(SelectedImageConversionMode));
+        OnPropertyChanged(nameof(SelectedImageConversionStep));
+        OnPropertyChanged(nameof(IsImageParallaxModeSelected));
+        OnPropertyChanged(nameof(IsImageStereoModeSelected));
+        OnPropertyChanged(nameof(ImageParallaxModeSelectionState));
+        OnPropertyChanged(nameof(ImageStereoModeSelectionState));
+        OnPropertyChanged(nameof(ImageParallaxModeCardStatusText));
+        OnPropertyChanged(nameof(ImageStereoModeCardStatusText));
+        OnPropertyChanged(nameof(ImageModeSourceStepState));
+        OnPropertyChanged(nameof(ImageSetupStepState));
+        OnPropertyChanged(nameof(ImagePreviewExportStepState));
+        OnPropertyChanged(nameof(ImageModeSourceStepMarkerText));
+        OnPropertyChanged(nameof(ImageSetupStepMarkerText));
+        OnPropertyChanged(nameof(ImagePreviewExportStepMarkerText));
+        OnPropertyChanged(nameof(ImageModeSourceStepVisibility));
+        OnPropertyChanged(nameof(ImageSetupStepVisibility));
+        OnPropertyChanged(nameof(ImageParallaxSetupStepVisibility));
+        OnPropertyChanged(nameof(ImageStereoSetupStepVisibility));
+        OnPropertyChanged(nameof(ImageNoModeSetupHintVisibility));
+        OnPropertyChanged(nameof(ImageParallaxPreviewExportStepVisibility));
+        OnPropertyChanged(nameof(ImageStereoPreviewExportStepVisibility));
+        OnPropertyChanged(nameof(SelectedImageModeName));
+        OnPropertyChanged(nameof(SelectedImageStepName));
+        OnPropertyChanged(nameof(ImageSelectedModeSummaryText));
+        OnPropertyChanged(nameof(ImageCurrentStepSummaryText));
+        OnPropertyChanged(nameof(ImagePlannedOutputFormatsText));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatDisplayText));
+        AnalyzeImageCommand.RaiseCanExecuteChanged();
+        SelectImageSetupStepCommand.RaiseCanExecuteChanged();
+        SelectImagePreviewExportStepCommand.RaiseCanExecuteChanged();
+        ImageWizardBackCommand.RaiseCanExecuteChanged();
+        ImageWizardNextCommand.RaiseCanExecuteChanged();
+        ContinueWithImageConversionCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RaiseAppSectionPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(SelectedAppSection));
+        OnPropertyChanged(nameof(IsHomeSectionSelected));
+        OnPropertyChanged(nameof(IsImageConversionSectionSelected));
+        OnPropertyChanged(nameof(IsVideoConversionSectionSelected));
+        OnPropertyChanged(nameof(HomeSectionVisibility));
+        OnPropertyChanged(nameof(ImageConversionSectionVisibility));
+        OnPropertyChanged(nameof(VideoConversionSectionVisibility));
+        RaiseShellTextPropertiesChanged();
+    }
+
+    private void RaiseShellTextPropertiesChanged()
+    {
+        OnPropertyChanged(nameof(ShellTaglineText));
+        OnPropertyChanged(nameof(SidebarToggleGlyphText));
+        OnPropertyChanged(nameof(SidebarToggleText));
+        OnPropertyChanged(nameof(SidebarToggleToolTipText));
+        OnPropertyChanged(nameof(HomeNavigationText));
+        OnPropertyChanged(nameof(ImageConversionNavigationText));
+        OnPropertyChanged(nameof(VideoConversionNavigationText));
+        OnPropertyChanged(nameof(HomeTitleText));
+        OnPropertyChanged(nameof(HomeDescriptionText));
+        OnPropertyChanged(nameof(HomeVideoCardTitleText));
+        OnPropertyChanged(nameof(HomeVideoCardBodyText));
+        OnPropertyChanged(nameof(HomeImageCardTitleText));
+        OnPropertyChanged(nameof(HomeImageCardBodyText));
+        OnPropertyChanged(nameof(HomeSettingsCardTitleText));
+        OnPropertyChanged(nameof(HomeSettingsCardBodyText));
+        OnPropertyChanged(nameof(HomeStatusSummaryText));
+        OnPropertyChanged(nameof(HomeLocalOnlyBadgeText));
+        OnPropertyChanged(nameof(HomeVideoStatusText));
+        OnPropertyChanged(nameof(HomeImageStatusText));
+        OnPropertyChanged(nameof(HomeModelsStatusText));
+        OnPropertyChanged(nameof(OpenSectionText));
+        OnPropertyChanged(nameof(ReadyNowText));
+        OnPropertyChanged(nameof(ComingNextText));
+        OnPropertyChanged(nameof(ImageConversionTitleText));
+        OnPropertyChanged(nameof(ImageConversionIntroText));
+        OnPropertyChanged(nameof(ImageParallaxModeTitleText));
+        OnPropertyChanged(nameof(ImageParallaxModeBodyText));
+        OnPropertyChanged(nameof(Image3DOutputModeTitleText));
+        OnPropertyChanged(nameof(Image3DOutputModeBodyText));
+        OnPropertyChanged(nameof(DisabledPlaceholderText));
+        OnPropertyChanged(nameof(ImageSourcePanelTitleText));
+        OnPropertyChanged(nameof(ImageDepthPanelTitleText));
+        OnPropertyChanged(nameof(ImageParallaxPreviewTitleText));
+        OnPropertyChanged(nameof(ImageParameterPanelTitleText));
+        OnPropertyChanged(nameof(ImageQuickSummaryTitleText));
+        OnPropertyChanged(nameof(ImageScaffoldLogTitleText));
+        OnPropertyChanged(nameof(ImageScaffoldLogText));
+        OnPropertyChanged(nameof(ImageDepthParameterText));
+        OnPropertyChanged(nameof(ImageMotionParameterText));
+        OnPropertyChanged(nameof(ImageZoomParameterText));
+        OnPropertyChanged(nameof(ImageDirectionParameterText));
+        OnPropertyChanged(nameof(ImageDurationParameterText));
+        OnPropertyChanged(nameof(ImageSmoothingParameterText));
+        OnPropertyChanged(nameof(ImageLayersParameterText));
+        OnPropertyChanged(nameof(ImagePreviewActionText));
+        OnPropertyChanged(nameof(ImageExportActionText));
+        OnPropertyChanged(nameof(ImageOpenOutputFolderActionText));
+        OnPropertyChanged(nameof(ImageNewConversionActionText));
+        OnPropertyChanged(nameof(ImageResultParallaxTitleText));
+        OnPropertyChanged(nameof(ImageExportOptionsTitleText));
+        OnPropertyChanged(nameof(ImageResultSummaryTitleText));
+        OnPropertyChanged(nameof(ImageResultSummaryText));
+        OnPropertyChanged(nameof(ImageStereoPreviewTitleText));
+        OnPropertyChanged(nameof(ImageStereoControlsTitleText));
+        OnPropertyChanged(nameof(ImageStereoSummaryText));
+        OnPropertyChanged(nameof(ImageStereoSeparationText));
+        OnPropertyChanged(nameof(ImageStereoConvergenceText));
+        OnPropertyChanged(nameof(ImageStereoAnaglyphText));
+        OnPropertyChanged(nameof(ImageStereoResultTitleText));
+        OnPropertyChanged(nameof(ImageGeneratedFilesTitleText));
+        OnPropertyChanged(nameof(ImageOutputPanelTitleText));
+        OnPropertyChanged(nameof(ImageComparisonTitleText));
+        OnPropertyChanged(nameof(ImageModeSourceStepTitleText));
+        OnPropertyChanged(nameof(ImageSetupStepTitleText));
+        OnPropertyChanged(nameof(ImagePreviewExportStepTitleText));
+        OnPropertyChanged(nameof(ImageSourceModeStepTitleText));
+        OnPropertyChanged(nameof(ImageModeSelectionTitleText));
+        OnPropertyChanged(nameof(ChangeImageWorkflowText));
+        OnPropertyChanged(nameof(ImageModeSourceBodyText));
+        OnPropertyChanged(nameof(ImageSourceAnalysisTitleText));
+        OnPropertyChanged(nameof(DropImageText));
+        OnPropertyChanged(nameof(ImageNoModeSetupHintText));
+        OnPropertyChanged(nameof(AnalyzeImageText));
+        OnPropertyChanged(nameof(ImageAnalysisTitleText));
+        OnPropertyChanged(nameof(SelectedImageModeName));
+        OnPropertyChanged(nameof(SelectedImageStepName));
+        OnPropertyChanged(nameof(ImageSummaryStatusTitleText));
+        OnPropertyChanged(nameof(ImageSelectedModeSummaryText));
+        OnPropertyChanged(nameof(ImageCurrentStepSummaryText));
+        OnPropertyChanged(nameof(ImageSupportedInputFormatsText));
+        OnPropertyChanged(nameof(ImagePlannedOutputFormatsText));
+        OnPropertyChanged(nameof(ImageLocalModelReadinessNoteText));
+        OnPropertyChanged(nameof(ImageNotImplementedStateText));
+        OnPropertyChanged(nameof(ImageActivityLogTitleText));
+        OnPropertyChanged(nameof(ActiveActivityLogModalTitleText));
+        OnPropertyChanged(nameof(ImageActivityLogText));
+        OnPropertyChanged(nameof(SelectImageText));
+        OnPropertyChanged(nameof(ImageSelectedTitleText));
+        OnPropertyChanged(nameof(NoImageSelectedText));
+        OnPropertyChanged(nameof(SelectedImageDisplayPath));
+        OnPropertyChanged(nameof(SelectedImageFileName));
+        OnPropertyChanged(nameof(ImageWizardNextToolTipText));
+        OnPropertyChanged(nameof(ContinueWithImageConversionText));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusTitleText));
+        OnPropertyChanged(nameof(ImagePreviewExportStatusText));
+        OnPropertyChanged(nameof(ImageSupportedExtensionsText));
+        OnPropertyChanged(nameof(ImageMetadataTitleText));
+        OnPropertyChanged(nameof(ImageMetadataWidthText));
+        OnPropertyChanged(nameof(ImageMetadataHeightText));
+        OnPropertyChanged(nameof(ImageMetadataAspectRatioText));
+        OnPropertyChanged(nameof(ImageMetadataFormatText));
+        OnPropertyChanged(nameof(ImageMetadataPixelFormatText));
+        OnPropertyChanged(nameof(ImageMetadataFileSizeText));
+        OnPropertyChanged(nameof(ImageMetadataSummaryText));
+        OnPropertyChanged(nameof(ImageSourceStatusText));
+        OnPropertyChanged(nameof(ImageOutputPlanText));
+        OnPropertyChanged(nameof(ImageSetupSummaryText));
+        OnPropertyChanged(nameof(ImageDepthIntensityLabelText));
+        OnPropertyChanged(nameof(ImageMotionDirectionLabelText));
+        OnPropertyChanged(nameof(ImageZoomAmplitudeLabelText));
+        OnPropertyChanged(nameof(ImageDurationLabelText));
+        OnPropertyChanged(nameof(ImageSmoothingLabelText));
+        OnPropertyChanged(nameof(ImageLayerBehaviorLabelText));
+        OnPropertyChanged(nameof(ImageStereoOutputFormatLabelText));
+        OnPropertyChanged(nameof(ImageStereoEyeSeparationLabelText));
+        OnPropertyChanged(nameof(ImageStereoConvergenceLabelText));
+        OnPropertyChanged(nameof(ImageStereoSwapEyesLabelText));
+        OnPropertyChanged(nameof(ImageStereoAnaglyphModeLabelText));
+        OnPropertyChanged(nameof(SelectedStereoOutputFormatDisplayText));
+    }
+
     private void RaiseLocalizedPropertiesChanged()
     {
+        RaiseShellTextPropertiesChanged();
         OnPropertyChanged(nameof(SubtitleText));
         OnPropertyChanged(nameof(LanguageLabel));
         OnPropertyChanged(nameof(ThemeLabel));
@@ -7490,6 +9060,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LogCopiedText));
         OnPropertyChanged(nameof(CouldNotCopyLogText));
         OnPropertyChanged(nameof(LogCopyNotificationText));
+        OnPropertyChanged(nameof(ActiveActivityLogModalTitleText));
         OnPropertyChanged(nameof(GlobalBusyText));
         OnPropertyChanged(nameof(ClearText));
         OnPropertyChanged(nameof(AboutModelNoticesTitleText));

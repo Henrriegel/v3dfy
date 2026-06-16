@@ -179,15 +179,12 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6">
-                            <TextBlock x:Name="ButtonText"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       FontWeight="{TemplateBinding FontWeight}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       Text="{Binding Content,
-                                                      RelativeSource={RelativeSource TemplatedParent}}"
-                                       TextAlignment="Center"
-                                       TextWrapping="NoWrap" />
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              RecognizesAccessKey="True"
+                                              TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -204,8 +201,7 @@
                                 <Setter TargetName="ButtonBorder"
                                         Property="Background"
                                         Value="{DynamicResource DisabledBackgroundBrush}" />
-                                <Setter TargetName="ButtonText"
-                                        Property="Foreground"
+                                <Setter Property="Foreground"
                                         Value="{DynamicResource DisabledTextBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -239,15 +235,12 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="6">
-                            <TextBlock x:Name="ButtonText"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       FontWeight="{TemplateBinding FontWeight}"
-                                       Foreground="{TemplateBinding Foreground}"
-                                       Text="{Binding Content,
-                                                      RelativeSource={RelativeSource TemplatedParent}}"
-                                       TextAlignment="Center"
-                                       TextWrapping="NoWrap" />
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              RecognizesAccessKey="True"
+                                              TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -273,8 +266,7 @@
                                 <Setter TargetName="ButtonBorder"
                                         Property="BorderBrush"
                                         Value="{DynamicResource DisabledBackgroundBrush}" />
-                                <Setter TargetName="ButtonText"
-                                        Property="Foreground"
+                                <Setter Property="Foreground"
                                         Value="{DynamicResource DisabledTextBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>

@@ -158,7 +158,7 @@ public sealed class MainWindowPreviewInvalidationSourceTests
         var topToastBlock = ExtractSourceRange(
             xaml,
             "AutomationProperties.AutomationId=\"LogCopyNotification\"",
-            "<Grid Grid.RowSpan=\"2\"");
+            "<Grid x:Name=\"ModalOverlay\"");
         var modalMethod = ExtractSourceRange(
             source,
             "private void ShowPreviewInvalidationConfirmationModal",

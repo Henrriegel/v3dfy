@@ -27,6 +27,10 @@ public sealed class MainWindowXamlStructureTests
     public void WizardFooter_HasFixedBackNextOutsideScrollableContent()
     {
         var xaml = ReadMainWindowXaml();
+        var wizard = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"MainWorkflowWizard\"",
+            "AutomationProperties.AutomationId=\"PreviewConversionStatusCard\"");
         var footerButtonStyle = ExtractSourceRange(
             xaml,
             "x:Key=\"WizardFooterButtonStyle\"",
@@ -36,11 +40,11 @@ public sealed class MainWindowXamlStructureTests
             "x:Key=\"WizardFooterSecondaryButtonStyle\"",
             "x:Key=\"SettingsMenuListBoxItemStyle\"");
         var scrollContent = ExtractSourceRange(
-            xaml,
+            wizard,
             "<ScrollViewer Grid.Row=\"1\"",
             "AutomationProperties.AutomationId=\"WizardFooter\"");
         var footer = ExtractSourceRange(
-            xaml,
+            wizard,
             "AutomationProperties.AutomationId=\"WizardFooter\"",
             "Visibility=\"{Binding ConversionRunningVisibility}\"");
         var backButton = ExtractSourceRange(
@@ -203,6 +207,8 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("ConversionReadySummary", rightTop);
         Assert.Contains("PreviewConversionMissingToolsText", rightTop);
         Assert.Contains("OpenToolsEngineSettingsCommand", rightTop);
+        Assert.DoesNotContain("ConversionExecutionStepLabel", rightTop);
+        Assert.Equal(1, CountOccurrences(xaml, "Text=\"{Binding ConversionExecutionDetailText}\""));
         Assert.DoesNotContain("ToolStatuses", rightTop);
         Assert.DoesNotContain("RefreshEngineStatusCommand", rightTop);
         Assert.DoesNotContain("ShowTechnicalDetailsCommand", rightTop);
@@ -215,24 +221,38 @@ public sealed class MainWindowXamlStructureTests
     }
 
     [Fact]
-    public void Header_UsesSingleGearAndSettingsModalHasSideMenu()
+    public void AppShell_UsesSidebarSettingsEntryAndSettingsModalHasSideMenu()
     {
         var xaml = ReadMainWindowXaml();
         var viewModel = ReadSourceFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
-        var header = ExtractSourceRange(
+        var sidebar = ExtractSourceRange(
             xaml,
-            "<Grid Margin=\"0,0,0,18\">",
-            "<Grid Grid.Row=\"1\">");
+            "AutomationProperties.AutomationId=\"AppSidebar\"",
+            "AutomationProperties.AutomationId=\"HomeSection\"");
         var settings = ExtractSourceRange(
             xaml,
             "AutomationProperties.AutomationId=\"SettingsModal\"",
             "Visibility=\"{Binding TechnicalDetailsModalContentVisibility}\"");
 
-        Assert.Contains("AutomationProperties.AutomationId=\"SettingsButton\"", header);
-        Assert.Contains("AutomationProperties.Name=\"{Binding SettingsText}\"", header);
-        Assert.Contains("ToolTip=\"{Binding SettingsText}\"", header);
-        Assert.DoesNotContain("LanguageOptions", header);
-        Assert.DoesNotContain("ThemeOptions", header);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SettingsButton\"", xaml);
+        Assert.DoesNotContain("<Grid Margin=\"0,0,0,18\">", xaml);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarBrand\"", sidebar);
+        Assert.Contains("Text=\"{Binding AppTitle}\"", sidebar);
+        Assert.Contains("Text=\"{Binding ShellTaglineText}\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarHomeButton\"", sidebar);
+        Assert.Contains("Command=\"{Binding SelectHomeSectionCommand}\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarImageConversionButton\"", sidebar);
+        Assert.Contains("Command=\"{Binding SelectImageConversionSectionCommand}\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarVideoConversionButton\"", sidebar);
+        Assert.Contains("Command=\"{Binding SelectVideoConversionSectionCommand}\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarBottomActions\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarToggleStripButton\"", sidebar);
+        Assert.Contains("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", sidebar);
+        Assert.Contains("Command=\"{Binding OpenSettingsCommand}\"", sidebar);
+        Assert.Contains("ToolTip=\"{Binding SettingsText}\"", sidebar);
+        Assert.Contains("ShellSidebarNavButtonStyle", xaml);
+        Assert.Contains("<Grid x:Name=\"ModalOverlay\"", xaml);
+        Assert.Contains("Grid.ColumnSpan=\"2\"", xaml);
         Assert.Contains("AutomationProperties.AutomationId=\"SettingsSideMenu\"", settings);
         Assert.Contains("ItemsSource=\"{Binding SettingsSectionOptions}\"", settings);
         Assert.Contains("SelectedValue=\"{Binding SelectedSettingsSection", settings);

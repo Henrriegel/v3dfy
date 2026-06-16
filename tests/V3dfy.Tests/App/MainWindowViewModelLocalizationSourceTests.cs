@@ -149,10 +149,13 @@ public sealed class MainWindowViewModelLocalizationSourceTests
 
         Assert.Contains("public string ActivityLogPanelText", source);
         Assert.Contains("public RelayCommand ViewActivityLogCommand", source);
+        Assert.Contains("public RelayCommand ViewImageActivityLogCommand", source);
         Assert.Contains("public RelayCommand CopyFullLogCommand", source);
         Assert.Contains("public RelayCommand CopyPreviewLogCommand", source);
         Assert.Contains("public RelayCommand CloseActivityLogCommand", source);
-        Assert.Contains("var logText = CreateFullActivityLogText();", copyFullLogMethod);
+        Assert.Contains("ActivityLogModalKind.Image", source);
+        Assert.Contains("CreateFullImageActivityLogText()", copyFullLogMethod);
+        Assert.Contains("CreateFullActivityLogText()", copyFullLogMethod);
         Assert.Contains("ActivityLogModalText = logText;", copyFullLogMethod);
         Assert.Contains("PreviewGenerationLogText", copyPreviewLogMethod);
         Assert.Contains("System.Windows.Clipboard.SetText(logText);", copyHelperMethod);

@@ -1,6 +1,8 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Media.Animation;
 using System.Windows.Media;
 using System.Windows.Threading;
 using V3dfy.App.Services;
@@ -20,6 +22,7 @@ namespace V3dfy.App;
 public partial class MainWindow : Window
 {
     private static readonly TimeSpan PreviewFirstFrameNudge = TimeSpan.FromMilliseconds(33);
+    private static readonly Duration SidebarWidthAnimationDuration = new(TimeSpan.FromMilliseconds(150));
     private const double PreviewDefaultVolume = 0.7;
     private const double PreviewMutedVolumeThreshold = 0.001;
     private const string PreviewPlayGlyph = "\uE768";
@@ -49,9 +52,59 @@ public partial class MainWindow : Window
         DataContext = new MainWindowViewModel();
         if (DataContext is MainWindowViewModel viewModel)
         {
+            viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            ApplySidebarWidth(viewModel.SidebarTargetWidth);
             viewModel.ConversionLogs.CollectionChanged += OnConversionLogsChanged;
             viewModel.PreviewGenerationLogs.CollectionChanged += OnPreviewGenerationLogsChanged;
         }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.SidebarTargetWidth) &&
+            sender is MainWindowViewModel viewModel)
+        {
+            AnimateSidebarWidth(viewModel.SidebarTargetWidth);
+        }
+    }
+
+    private void OnSidebarMouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        GetViewModel()?.ExpandSidebarForHover();
+    }
+
+    private void OnSidebarMouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        GetViewModel()?.CollapseSidebarAfterHover();
+    }
+
+    private void ApplySidebarWidth(double targetWidth)
+    {
+        SidebarColumn.Width = new GridLength(targetWidth);
+    }
+
+    private void AnimateSidebarWidth(double targetWidth)
+    {
+        TryRunPreviewViewAction(
+            "Sidebar width animation",
+            () =>
+            {
+                var currentWidth = SidebarColumn.ActualWidth > 0
+                    ? SidebarColumn.ActualWidth
+                    : SidebarColumn.Width.Value;
+                var animation = new GridLengthAnimation
+                {
+                    From = new GridLength(currentWidth),
+                    To = new GridLength(targetWidth),
+                    Duration = SidebarWidthAnimationDuration,
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                };
+
+                SidebarColumn.BeginAnimation(
+                    System.Windows.Controls.ColumnDefinition.WidthProperty,
+                    animation,
+                    HandoffBehavior.SnapshotAndReplace);
+            });
     }
 
     private void OnDrop(object sender, System.Windows.DragEventArgs e)
@@ -60,6 +113,12 @@ public partial class MainWindow : Window
             !viewModel.IsConversionRunning &&
             e.Data.GetData(System.Windows.DataFormats.FileDrop) is string[] { Length: 1 } files)
         {
+            if (viewModel.IsImageConversionSectionSelected)
+            {
+                viewModel.SelectDroppedImage(files[0]);
+                return;
+            }
+
             viewModel.SelectDroppedVideo(files[0]);
         }
     }
@@ -800,5 +859,62 @@ public partial class MainWindow : Window
         }
 
         return null;
+    }
+
+    private sealed class GridLengthAnimation : AnimationTimeline
+    {
+        public static readonly DependencyProperty FromProperty = DependencyProperty.Register(
+            nameof(From),
+            typeof(GridLength),
+            typeof(GridLengthAnimation),
+            new PropertyMetadata(new GridLength(0)));
+
+        public static readonly DependencyProperty ToProperty = DependencyProperty.Register(
+            nameof(To),
+            typeof(GridLength),
+            typeof(GridLengthAnimation),
+            new PropertyMetadata(new GridLength(0)));
+
+        public static readonly DependencyProperty EasingFunctionProperty = DependencyProperty.Register(
+            nameof(EasingFunction),
+            typeof(IEasingFunction),
+            typeof(GridLengthAnimation));
+
+        public GridLength From
+        {
+            get => (GridLength)GetValue(FromProperty);
+            set => SetValue(FromProperty, value);
+        }
+
+        public GridLength To
+        {
+            get => (GridLength)GetValue(ToProperty);
+            set => SetValue(ToProperty, value);
+        }
+
+        public IEasingFunction? EasingFunction
+        {
+            get => (IEasingFunction?)GetValue(EasingFunctionProperty);
+            set => SetValue(EasingFunctionProperty, value);
+        }
+
+        public override Type TargetPropertyType => typeof(GridLength);
+
+        protected override Freezable CreateInstanceCore() => new GridLengthAnimation();
+
+        public override object GetCurrentValue(
+            object defaultOriginValue,
+            object defaultDestinationValue,
+            AnimationClock animationClock)
+        {
+            var progress = animationClock.CurrentProgress ?? 0d;
+            if (EasingFunction is not null)
+            {
+                progress = EasingFunction.Ease(progress);
+            }
+
+            var width = From.Value + ((To.Value - From.Value) * progress);
+            return new GridLength(width);
+        }
     }
 }

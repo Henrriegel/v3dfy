@@ -27,6 +27,24 @@ unrelated previous work unless explicitly requested.
 Do not create branches, commit, or push from automation or scripts unless
 explicitly requested.
 
+## Main conversion module UI rules
+
+All main conversion modules must follow the same UX pattern unless a task
+explicitly changes it:
+
+- source/analyze step first
+- setup step second
+- conversion/preview plan step third
+- fixed footer buttons outside scrollable content
+- standardized Back/Next/Continue button sizing
+- right panel behavior modeled after Video conversion
+- module activity logs use the same visual pattern
+- module logs provide View log, Copy full log, and Clear actions
+- summary/status cards appear only after the state they summarize is valid
+- avoid duplicating the same data on the left and right panels
+- do not invent a separate Image conversion flow when Video conversion already
+  has a working pattern
+
 ## Manual app validation workflow
 
 Purpose: validate the real local/offline app layout that users receive after
