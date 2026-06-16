@@ -378,15 +378,20 @@ public sealed class MainWindowModelPackImportSourceTests
         var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
         var modalBody = ExtractSourceRange(
             xaml,
-            "Visibility=\"{Binding ModelInventoryModalContentVisibility}\"",
+            "x:Name=\"ModelInventoryModalHorizontalViewport\"",
             "Visibility=\"{Binding ModelPackImportConfirmationModalContentVisibility}\"");
 
+        Assert.Contains("x:Name=\"ModelInventoryModalHorizontalViewport\"", modalBody);
+        Assert.Contains("Style=\"{StaticResource ResponsiveHorizontalViewportScrollViewerStyle}\"", modalBody);
+        Assert.Contains("AutomationProperties.AutomationId=\"ModelInventoryResponsiveContent\"", modalBody);
         Assert.Contains("<Grid.ColumnDefinitions>", modalBody);
-        Assert.Contains("<ColumnDefinition Width=\"7*\" />", modalBody);
-        Assert.Contains("<ColumnDefinition Width=\"3*\" />", modalBody);
+        Assert.Contains("<ColumnDefinition Width=\"7*\"", modalBody);
+        Assert.Contains("MinWidth=\"620\"", modalBody);
+        Assert.Contains("<ColumnDefinition Width=\"3*\"", modalBody);
+        Assert.Contains("MinWidth=\"260\"", modalBody);
         Assert.Contains("<ScrollViewer Grid.Column=\"0\"", modalBody);
-        Assert.Contains("<ScrollViewer Grid.Column=\"1\"", modalBody);
-        Assert.Contains("Margin=\"18,0,0,0\"", modalBody);
+        Assert.Contains("<ScrollViewer Grid.Column=\"2\"", modalBody);
+        Assert.DoesNotContain("Margin=\"18,0,0,0\"", modalBody);
     }
 
     [Fact]
@@ -400,7 +405,7 @@ public sealed class MainWindowModelPackImportSourceTests
         var leftColumn = ExtractSourceRange(
             modalBody,
             "<ScrollViewer Grid.Column=\"0\"",
-            "<ScrollViewer Grid.Column=\"1\"");
+            "<ScrollViewer Grid.Column=\"2\"");
 
         Assert.Contains("Text=\"{Binding ModelInventoryFolderLabelText}\"", leftColumn);
         Assert.Contains("Text=\"{Binding ModelInventoryFolderPathText}\"", leftColumn);
@@ -424,7 +429,7 @@ public sealed class MainWindowModelPackImportSourceTests
             "Visibility=\"{Binding ModelPackImportConfirmationModalContentVisibility}\"");
         var rightColumn = ExtractSourceRange(
             modalBody,
-            "<ScrollViewer Grid.Column=\"1\"",
+            "<ScrollViewer Grid.Column=\"2\"",
             "</Grid>");
 
         Assert.Contains("Text=\"{Binding ModelInventoryActionsTitleText}\"", rightColumn);

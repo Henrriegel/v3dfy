@@ -60,8 +60,10 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.Contains("Text=\"{Binding Scene}\"", modal);
         Assert.Contains("Text=\"{Binding Depth}\"", modal);
         Assert.Contains("Text=\"{Binding SizePerformance}\"", modal);
-        Assert.Contains("HorizontalScrollBarVisibility=\"Disabled\"", modal);
-        Assert.Contains("VerticalScrollBarVisibility=\"Auto\"", modal);
+        Assert.Contains("x:Name=\"ModelHelpTableViewport\"", modal);
+        Assert.Contains("Style=\"{StaticResource ResponsiveTableHorizontalScrollViewerStyle}\"", modal);
+        Assert.Contains("MinWidth=\"760\"", modal);
+        Assert.Contains("Style=\"{StaticResource ResponsiveModalBodyScrollViewerStyle}\"", modal);
         Assert.DoesNotContain("ModelHelpBodyText", modal);
         Assert.DoesNotContain("<TextBox", modal);
         Assert.DoesNotContain("Status", modal);

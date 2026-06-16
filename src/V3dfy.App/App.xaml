@@ -858,5 +858,24 @@
             <Setter Property="Template"
                     Value="{StaticResource ModernHorizontalScrollBarTemplate}" />
         </Style>
+        <Style x:Key="ResponsiveModalCardStyle"
+               BasedOn="{StaticResource V3dfyModalCardStyle}"
+               TargetType="Border">
+            <Setter Property="Margin" Value="24" />
+        </Style>
+        <Style x:Key="ResponsiveModalBodyScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+            <Style.Resources>
+                <Style BasedOn="{StaticResource ModernVerticalScrollBarStyle}"
+                       TargetType="ScrollBar" />
+            </Style.Resources>
+        </Style>
+        <Style x:Key="ResponsiveTableContainerStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource LogBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+        </Style>
     </Application.Resources>
 </Application>
