@@ -659,6 +659,32 @@ public sealed class MainWindowViewModelLocalizationSourceTests
     }
 
     [Fact]
+    public void FinalConversionSuccess_HidesPreviewStatusCardButKeepsCompletionModal()
+    {
+        var source = ReadMainWindowViewModelSource();
+        var visibilityProperties = ExtractSourceRange(
+            source,
+            "private bool ShouldShowPreviewConversionStatusCard",
+            "public string PreviewStageResetNoticeText");
+        var completionMethod = ExtractSourceRange(
+            source,
+            "private void ShowConversionCompletedModal",
+            "private void AcceptConversionCompleted");
+        var startMethod = ExtractSourceRange(
+            source,
+            "private async Task StartConversionAsync",
+            "private void BlockConversionStart");
+
+        Assert.Contains("_conversionExecutionState.Status != ConversionExecutionStatus.Completed", visibilityProperties);
+        Assert.Contains("ShouldShowPreviewConversionStatusCard ? Visibility.Visible : Visibility.Collapsed", visibilityProperties);
+        Assert.Contains("ShouldShowPreviewConversionStatusCard ? new GridLength(1, GridUnitType.Star) : new GridLength(0)", visibilityProperties);
+        Assert.Contains("ShouldShowPreviewConversionStatusCard ? new Thickness(0, 6, 0, 0) : new Thickness(0)", visibilityProperties);
+        Assert.Contains("ShowConversionCompletedModal(result, request.OutputPath);", startMethod);
+        Assert.Contains("_completedConversionResult = result;", completionMethod);
+        Assert.Contains("IsConversionCompletedModalOpen = true;", completionMethod);
+    }
+
+    [Fact]
     public void ConversionProgress_UpdatesTimingEstimatesFromNormalizedProgress()
     {
         var source = ReadMainWindowViewModelSource();

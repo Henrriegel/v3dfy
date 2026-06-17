@@ -420,7 +420,7 @@ public sealed class MainWindowViewModel : ObservableObject
             () => !IsAnalyzing && !IsConversionRunning && !IsPreviewGenerating && !IsModelPackImportRunning);
         RefreshEngineStatusCommand = new AsyncRelayCommand(
             () => RefreshEngineStatusWithGlobalBusyAsync(logRefresh: true),
-            () => CanUseSystemStatusActions);
+            () => CanUseSettingsSystemStatusActions);
         ToggleSidebarCommand = new RelayCommand(ToggleSidebar, () => CanUseShellNavigation);
         SelectHomeSectionCommand = new RelayCommand(
             () => SelectAppSection(AppSection.Home),
@@ -451,7 +451,7 @@ public sealed class MainWindowViewModel : ObservableObject
             () => CanOpenImagePreviewExportStep);
         SelectImageCommand = new RelayCommand(SelectImage, () => CanInteractWithImageWorkflow);
         AnalyzeImageCommand = new RelayCommand(AnalyzeImage, () => CanAnalyzeImage);
-        ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning);
+        ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning && !IsAnyModalOpen);
         ImageWizardBackCommand = new RelayCommand(
             MoveImageWizardBack,
             () => CanMoveImageWizardBack);
@@ -492,7 +492,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OpenModelsFolderCommand = new RelayCommand(OpenModelsFolder);
         ShowModelInventoryCommand = new RelayCommand(
             ShowModelInventory,
-            () => CanUseSystemStatusActions);
+            () => CanUseSettingsSystemStatusActions);
         CloseModelInventoryCommand = new RelayCommand(CloseModelInventory);
         ShowModelHelpCommand = new RelayCommand(
             ShowModelHelp,
@@ -523,7 +523,7 @@ public sealed class MainWindowViewModel : ObservableObject
         CloseActivityLogCommand = new RelayCommand(CloseActivityLog);
         ShowTechnicalDetailsCommand = new RelayCommand(
             ShowTechnicalDetails,
-            () => CanUseSystemStatusActions);
+            () => CanUseSettingsSystemStatusActions);
         CloseTechnicalDetailsCommand = new RelayCommand(CloseTechnicalDetails);
         ShowProfileDetailsCommand = new RelayCommand(
             ShowProfileDetails,
@@ -2490,6 +2490,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool CanShowModelHelp =>
         HasLocalModelSelectionCandidates &&
+        !IsAnyModalOpen &&
         !IsImageExportRunning &&
         !IsConversionRunning &&
         !IsPreviewGenerating &&
@@ -2497,12 +2498,17 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool CanShowImageParallaxModelHelp =>
         HasImageParallaxLocalModelCandidates &&
+        !IsAnyModalOpen &&
         !IsImageExportRunning &&
         !IsConversionRunning &&
         !IsPreviewGenerating &&
         !IsModelPackImportRunning;
 
-    public bool CanUseShellNavigation => !IsImageExportRunning;
+    public bool CanUseShellNavigation =>
+        !IsAnyModalOpen &&
+        !IsImageExportRunning;
+
+    public bool ShellToolTipsEnabled => !IsAnyModalOpen;
 
     public bool CanOpenSettings =>
         CanUseShellNavigation &&
@@ -2510,15 +2516,23 @@ public sealed class MainWindowViewModel : ObservableObject
         !IsPreviewGenerating &&
         !IsModelPackImportRunning;
 
-    public bool CanInteractWithImageWorkflow => !IsImageExportRunning;
+    public bool CanInteractWithImageWorkflow =>
+        !IsAnyModalOpen &&
+        !IsImageExportRunning;
 
     public bool IsImageWorkflowLockedByConversion => IsImageExportRunning;
 
-    public bool ImageSetupControlsEnabled => !IsImageExportRunning;
+    public bool ImageSetupControlsEnabled =>
+        !IsAnyModalOpen &&
+        !IsImageExportRunning;
 
-    public bool ImageWorkflowCardsEnabled => !IsImageExportRunning;
+    public bool ImageWorkflowCardsEnabled =>
+        !IsAnyModalOpen &&
+        !IsImageExportRunning;
 
-    public bool CanUseImageStepNavigation => !IsImageExportRunning;
+    public bool CanUseImageStepNavigation =>
+        !IsAnyModalOpen &&
+        !IsImageExportRunning;
 
     public LocalModelSelectionCandidate? SelectedLocalModelCandidate
     {
@@ -2724,23 +2738,23 @@ public sealed class MainWindowViewModel : ObservableObject
         "Explicar los modelos instalados disponibles actualmente en este selector.");
 
     public string ImageParallaxModelHelpButtonToolTipText => Text(
-        "Explain local models compatible with this 2.5D image workflow.",
-        "Explicar los modelos locales compatibles con este flujo de imagen 2.5D.");
+        "Explain local models compatible with image conversion workflows.",
+        "Explicar los modelos locales compatibles con flujos de conversion de imagen.");
 
     public string ModelHelpTitleText => Text(
         _isImageParallaxModelHelpContext
-            ? "2.5D image model help"
+            ? "Image model help"
             : "Selectable model help",
         _isImageParallaxModelHelpContext
-            ? "Ayuda de modelos para imagen 2.5D"
+            ? "Ayuda de modelos para imagen"
             : "Ayuda de modelos seleccionables");
 
     public string ModelHelpIntroText => Text(
         _isImageParallaxModelHelpContext
-            ? "Only installed local models mapped to an image-capable iw3 depth mode are shown for the 2.5D workflow. Video-only or unmapped files are not selectable for Parallax conversion."
+            ? "Only installed local models mapped to an image-capable iw3 depth mode are shown for image conversion workflows. Video-only or unmapped files are not selectable for image conversion."
             : "Only installed models that are ready for this conversion flow are shown here.",
         _isImageParallaxModelHelpContext
-            ? "Solo se muestran modelos locales instalados y mapeados a un modo de profundidad iw3 compatible con imagen. Los archivos solo-video o sin mapeo no se pueden seleccionar para conversion Parallax."
+            ? "Solo se muestran modelos locales instalados y mapeados a un modo de profundidad iw3 compatible con imagen. Los archivos solo-video o sin mapeo no se pueden seleccionar para conversion de imagen."
             : "Aqui solo se muestran modelos instalados que estan listos para este flujo de conversion.");
 
     public string ModelHelpModelHeaderText => Text("Model", "Modelo");
@@ -2971,6 +2985,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool HasEnteredPreviewConversionStage => _hasEnteredPreviewConversionStage;
 
+    private bool ShouldShowPreviewConversionStatusCard =>
+        HasEnteredPreviewConversionStage &&
+        _conversionExecutionState.Status != ConversionExecutionStatus.Completed;
+
     public bool CanEnterPreviewConversionStage =>
         SelectedWizardStepIndex == ConversionWorkflowState.ConversionPlanStepIndex &&
         CanOpenConversionPlanStep &&
@@ -2993,13 +3011,13 @@ public sealed class MainWindowViewModel : ObservableObject
         "Continuar con la conversion");
 
     public Visibility PreviewConversionStatusCardVisibility =>
-        HasEnteredPreviewConversionStage ? Visibility.Visible : Visibility.Collapsed;
+        ShouldShowPreviewConversionStatusCard ? Visibility.Visible : Visibility.Collapsed;
 
     public GridLength PreviewConversionRowHeight =>
-        HasEnteredPreviewConversionStage ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        ShouldShowPreviewConversionStatusCard ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
 
     public Thickness ActivityLogCardMargin =>
-        HasEnteredPreviewConversionStage ? new Thickness(0, 6, 0, 0) : new Thickness(0);
+        ShouldShowPreviewConversionStatusCard ? new Thickness(0, 6, 0, 0) : new Thickness(0);
 
     public string PreviewStageResetNoticeText => Text(
         "Review the conversion plan again, then press Continue with conversion.",
@@ -4297,6 +4315,13 @@ public sealed class MainWindowViewModel : ObservableObject
     };
 
     public bool CanUseSystemStatusActions =>
+        !IsAnyModalOpen &&
+        !IsImageExportRunning &&
+        !IsConversionRunning &&
+        !IsPreviewGenerating &&
+        !IsModelPackImportRunning;
+
+    public bool CanUseSettingsSystemStatusActions =>
         !IsImageExportRunning &&
         !IsConversionRunning &&
         !IsPreviewGenerating &&
@@ -10949,6 +10974,9 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseConversionExecutionPropertiesChanged()
     {
         OnPropertyChanged(nameof(ShowConversionProgressCard));
+        OnPropertyChanged(nameof(PreviewConversionStatusCardVisibility));
+        OnPropertyChanged(nameof(PreviewConversionRowHeight));
+        OnPropertyChanged(nameof(ActivityLogCardMargin));
         OnPropertyChanged(nameof(PreviewConversionStatusText));
         OnPropertyChanged(nameof(PreviewConversionStatusDetailText));
         OnPropertyChanged(nameof(ConversionProgressVisibility));
@@ -11155,6 +11183,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LgCompatibilityOptionsVisibility));
         OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
         OnPropertyChanged(nameof(CanUseSystemStatusActions));
+        OnPropertyChanged(nameof(CanUseSettingsSystemStatusActions));
         OnPropertyChanged(nameof(CanOpenSystemStatusToolsTab));
         OnPropertyChanged(nameof(CanStartOrCancelConversion));
         OnPropertyChanged(nameof(StartConversionText));
@@ -11286,6 +11315,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanOpenSystemStatusConversionTab));
         OnPropertyChanged(nameof(CanOpenSystemStatusToolsTab));
         OnPropertyChanged(nameof(CanUseSystemStatusActions));
+        OnPropertyChanged(nameof(CanUseSettingsSystemStatusActions));
         OnPropertyChanged(nameof(SelectedSystemStatusTabIndex));
         OnPropertyChanged(nameof(ConversionReadinessEmptyText));
         OnPropertyChanged(nameof(VramUsageText));
@@ -11371,6 +11401,19 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsAnyModalOpen));
         OnPropertyChanged(nameof(ModalOverlayVisibility));
+        OnPropertyChanged(nameof(ShellToolTipsEnabled));
+        OnPropertyChanged(nameof(CanUseShellNavigation));
+        OnPropertyChanged(nameof(CanOpenSettings));
+        OnPropertyChanged(nameof(CanInteractWithImageWorkflow));
+        OnPropertyChanged(nameof(CanUseSystemStatusActions));
+        OnPropertyChanged(nameof(CanUseSettingsSystemStatusActions));
+        OnPropertyChanged(nameof(CanShowModelHelp));
+        OnPropertyChanged(nameof(CanShowImageParallaxModelHelp));
+        OnPropertyChanged(nameof(ImageSetupControlsEnabled));
+        OnPropertyChanged(nameof(ImageWorkflowCardsEnabled));
+        OnPropertyChanged(nameof(CanUseImageStepNavigation));
+        OnPropertyChanged(nameof(ImageModelSelectorEnabled));
+        OnPropertyChanged(nameof(ImageParallaxModelSelectorEnabled));
         OnPropertyChanged(nameof(ActiveModalWidth));
         OnPropertyChanged(nameof(ActiveModalHeight));
         OnPropertyChanged(nameof(ActiveModalTitleText));
@@ -11388,6 +11431,29 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(PreviewReadyModalContentVisibility));
         OnPropertyChanged(nameof(CanEditPreviewTimeRange));
         OnPropertyChanged(nameof(CanGeneratePreview));
+        ToggleSidebarCommand.RaiseCanExecuteChanged();
+        SelectHomeSectionCommand.RaiseCanExecuteChanged();
+        SelectImageConversionSectionCommand.RaiseCanExecuteChanged();
+        SelectVideoConversionSectionCommand.RaiseCanExecuteChanged();
+        OpenSettingsCommand.RaiseCanExecuteChanged();
+        RefreshEngineStatusCommand.RaiseCanExecuteChanged();
+        OpenEngineFolderCommand.RaiseCanExecuteChanged();
+        ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();
+        ShowModelInventoryCommand.RaiseCanExecuteChanged();
+        ShowModelHelpCommand.RaiseCanExecuteChanged();
+        ShowImageParallaxModelHelpCommand.RaiseCanExecuteChanged();
+        SelectImageCommand.RaiseCanExecuteChanged();
+        AnalyzeImageCommand.RaiseCanExecuteChanged();
+        SelectImageModeSourceStepCommand.RaiseCanExecuteChanged();
+        SelectImageSetupStepCommand.RaiseCanExecuteChanged();
+        SelectImagePreviewExportStepCommand.RaiseCanExecuteChanged();
+        SelectImageParallaxModeCommand.RaiseCanExecuteChanged();
+        SelectImageStereoModeCommand.RaiseCanExecuteChanged();
+        ToggleImageWorkflowChooserCommand.RaiseCanExecuteChanged();
+        ImageWizardBackCommand.RaiseCanExecuteChanged();
+        ImageWizardNextCommand.RaiseCanExecuteChanged();
+        ContinueWithImageConversionCommand.RaiseCanExecuteChanged();
+        ClearImageLogCommand.RaiseCanExecuteChanged();
         GeneratePreviewCommand.RaiseCanExecuteChanged();
     }
 

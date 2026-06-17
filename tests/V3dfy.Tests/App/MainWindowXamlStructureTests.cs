@@ -252,7 +252,12 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("ToolTip=\"{Binding SettingsText}\"", sidebar);
         Assert.Contains("ShellSidebarNavButtonStyle", xaml);
         Assert.Contains("<Grid x:Name=\"ModalOverlay\"", xaml);
+        Assert.Contains("Grid.Row=\"1\"", xaml);
+        Assert.Contains("Grid.Column=\"0\"", xaml);
         Assert.Contains("Grid.ColumnSpan=\"2\"", xaml);
+        Assert.Contains("Panel.ZIndex=\"25\"", xaml);
+        Assert.Contains("IsHitTestVisible=\"True\"", xaml);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", sidebar);
         Assert.Contains("AutomationProperties.AutomationId=\"SettingsSideMenu\"", settings);
         Assert.Contains("ItemsSource=\"{Binding SettingsSectionOptions}\"", settings);
         Assert.Contains("SelectedValue=\"{Binding SelectedSettingsSection", settings);
@@ -295,6 +300,9 @@ public sealed class MainWindowXamlStructureTests
             "AutomationProperties.AutomationId=\"ModelsSettingsHeader\"",
             "Text=\"{Binding ModelsSettingsIntroText}\"");
         Assert.Contains("AutomationProperties.AutomationId=\"SettingsViewModelsButton\"", modelsHeader);
+        Assert.Contains("Command=\"{Binding ShowModelInventoryCommand}\"", modelsHeader);
+        Assert.Contains("IsEnabled=\"{Binding CanUseSettingsSystemStatusActions}\"", modelsHeader);
+        Assert.DoesNotContain("IsEnabled=\"{Binding CanUseSystemStatusActions}\"", modelsHeader);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"SettingsImportModelPackButton\"", modelsHeader);
         Assert.Equal(1, CountOccurrences(models, "AutomationProperties.AutomationId=\"SettingsViewModelsButton\""));
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"SettingsImportModelPackButton\"", models);
@@ -315,6 +323,8 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("ItemsSource=\"{Binding ToolStatuses}\"", settings);
         Assert.Contains("AutomationProperties.AutomationId=\"SettingsRefreshToolsButton\"", settings);
         Assert.Contains("Command=\"{Binding RefreshEngineStatusCommand}\"", settings);
+        Assert.Contains("IsEnabled=\"{Binding CanUseSettingsSystemStatusActions}\"", settings);
+        Assert.DoesNotContain("IsEnabled=\"{Binding CanUseSystemStatusActions}\"", settings);
         Assert.Contains("Command=\"{Binding ContextActionCommand}\"", settings);
         Assert.Contains("MinWidth=\"80\"", settings);
         Assert.Contains("TextAlignment=\"Right\"", settings);

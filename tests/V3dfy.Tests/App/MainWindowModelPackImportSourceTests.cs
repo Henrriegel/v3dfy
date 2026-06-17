@@ -226,6 +226,8 @@ public sealed class MainWindowModelPackImportSourceTests
         Assert.Contains("IsEnabled=\"{Binding CanImportModelPack}\"", xaml);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"SettingsImportModelPackButton\"", settingsModelsSection);
         Assert.Contains("Command=\"{Binding ShowModelInventoryCommand}\"", settingsModelsSection);
+        Assert.Contains("IsEnabled=\"{Binding CanUseSettingsSystemStatusActions}\"", settingsModelsSection);
+        Assert.DoesNotContain("CanUseSystemStatusActions", settingsModelsSection);
         Assert.Contains("Text=\"{Binding ModelPackImportStatusText}\"", settingsModelsSection);
         Assert.Contains("Text=\"{Binding LastModelPackImportSummary}\"", settingsModelsSection);
         Assert.Contains("Text=\"{Binding ModelPackImportInstructionText}\"", inventoryModal);

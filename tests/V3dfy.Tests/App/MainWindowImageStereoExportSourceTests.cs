@@ -384,6 +384,10 @@ public sealed class MainWindowImageStereoExportSourceTests
             xaml,
             "AutomationProperties.AutomationId=\"ImageStereoScaffold\"",
             "AutomationProperties.AutomationId=\"ImageParallaxResultScaffold\"");
+        var stereoResult = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"ImageStereoResultScaffold\"",
+            "Grid.Column=\"2\"");
         var selectableFormatMethod = ExtractSourceRange(
             source,
             "private bool IsImageStereoOutputFormatSelectable",
@@ -403,7 +407,9 @@ public sealed class MainWindowImageStereoExportSourceTests
 
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoReadinessSummaryCard\"", stereoSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoReadinessSummaryCardNarrow\"", stereoSetup);
-        Assert.Contains("Source=\"{Binding SelectedImagePath}\"", stereoSetup);
+        Assert.DoesNotContain("Source=\"{Binding SelectedImagePath}\"", stereoSetup);
+        Assert.Contains("Text=\"{Binding ImageStereoControlsTitleText}\"", stereoSetup);
+        Assert.Contains("Source=\"{Binding ImageStereoPreviewImagePath}\"", stereoResult);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelector\"", stereoSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelectorNarrow\"", stereoSetup);
         Assert.Contains("ItemsSource=\"{Binding LocalModelCandidates}\"", stereoSetup);

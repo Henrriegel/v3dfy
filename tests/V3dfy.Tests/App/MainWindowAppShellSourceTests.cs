@@ -129,7 +129,10 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", sidebar);
 
         Assert.Contains("Grid.Row=\"1\"", modalOverlay);
+        Assert.Contains("Grid.Column=\"0\"", modalOverlay);
         Assert.Contains("Grid.ColumnSpan=\"2\"", modalOverlay);
+        Assert.Contains("Panel.ZIndex=\"25\"", modalOverlay);
+        Assert.Contains("IsHitTestVisible=\"True\"", modalOverlay);
         Assert.Contains("Style=\"{StaticResource V3dfyModalOverlayStyle}\"", modalOverlay);
         Assert.Contains("ElementName=ModalOverlay", modalOverlay);
         Assert.Contains("AutomationProperties.AutomationId=\"SettingsModal\"", modalOverlay);
@@ -161,6 +164,7 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("MinWidth=\"64\"", xaml);
         Assert.Contains("MouseEnter=\"OnSidebarMouseEnter\"", sidebar);
         Assert.Contains("MouseLeave=\"OnSidebarMouseLeave\"", sidebar);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", sidebar);
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarBrand\"", sidebar);
         Assert.Contains("v3dfy-icon-left-square-transparent.png", sidebar);
         Assert.Contains("HorizontalAlignment=\"{Binding SidebarNavContentHorizontalAlignment}\"", brand);
@@ -187,20 +191,33 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("Command=\"{Binding SelectHomeSectionCommand}\"", sidebar);
         Assert.Contains("Tag=\"{Binding IsHomeSectionSelected}\"", sidebar);
         Assert.Contains("ToolTip=\"{Binding HomeNavigationText}\"", sidebar);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", ExtractSourceRange(
+            sidebar,
+            "AutomationProperties.AutomationId=\"SidebarHomeButton\"",
+            "AutomationProperties.AutomationId=\"SidebarImageConversionButton\""));
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarImageConversionButton\"", sidebar);
         Assert.Contains("Text=\"{Binding ImageConversionNavigationText}\"", sidebar);
         Assert.Contains("Command=\"{Binding SelectImageConversionSectionCommand}\"", sidebar);
         Assert.Contains("Tag=\"{Binding IsImageConversionSectionSelected}\"", sidebar);
         Assert.Contains("ToolTip=\"{Binding ImageConversionNavigationText}\"", sidebar);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", ExtractSourceRange(
+            sidebar,
+            "AutomationProperties.AutomationId=\"SidebarImageConversionButton\"",
+            "AutomationProperties.AutomationId=\"SidebarVideoConversionButton\""));
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarVideoConversionButton\"", sidebar);
         Assert.Contains("Text=\"{Binding VideoConversionNavigationText}\"", sidebar);
         Assert.Contains("Command=\"{Binding SelectVideoConversionSectionCommand}\"", sidebar);
         Assert.Contains("Tag=\"{Binding IsVideoConversionSectionSelected}\"", sidebar);
         Assert.Contains("ToolTip=\"{Binding VideoConversionNavigationText}\"", sidebar);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", ExtractSourceRange(
+            sidebar,
+            "AutomationProperties.AutomationId=\"SidebarVideoConversionButton\"",
+            "AutomationProperties.AutomationId=\"SidebarBottomActions\""));
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarBottomActions\"", sidebar);
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", sidebar);
         Assert.Contains("Command=\"{Binding OpenSettingsCommand}\"", sidebar);
         Assert.Contains("Text=\"{Binding SettingsText}\"", sidebar);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", bottomActions);
         Assert.True(CountOccurrences(sidebar, "Style=\"{StaticResource ShellSidebarIconTextStyle}\"") >= 5);
         Assert.DoesNotContain("TextBlock Width=\"24\"", sidebar);
         Assert.Contains("Style=\"{StaticResource ShellSidebarNavButtonStyle}\"", sidebar);
@@ -236,6 +253,164 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("TimeSpan.FromMilliseconds(150)", codeBehind);
         Assert.DoesNotContain(">>", sidebar);
         Assert.DoesNotContain("<<", sidebar);
+    }
+
+    [Fact]
+    public void ModalState_BlocksShellNavigationTooltipsAndBackgroundCommands()
+    {
+        var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var normalizedSource = source.Replace("\r\n", "\n");
+        var sidebar = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"AppSidebar\"",
+            "AutomationProperties.AutomationId=\"HomeSection\"");
+        var modalOverlay = ExtractSourceRange(
+            xaml,
+            "<Grid x:Name=\"ModalOverlay\"",
+            "AutomationProperties.AutomationId=\"GlobalBusyOverlay\"");
+        var modalStateMethod = ExtractSourceRange(
+            source,
+            "private void RaiseModalStatePropertiesChanged()",
+            "private void RaiseModelInventoryPropertiesChanged()");
+
+        Assert.Contains("Grid.Row=\"1\"", modalOverlay);
+        Assert.Contains("Grid.Column=\"0\"", modalOverlay);
+        Assert.Contains("Grid.ColumnSpan=\"2\"", modalOverlay);
+        Assert.Contains("Panel.ZIndex=\"25\"", modalOverlay);
+        Assert.Contains("IsHitTestVisible=\"True\"", modalOverlay);
+        Assert.Contains("Visibility=\"{Binding ModalOverlayVisibility}\"", modalOverlay);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", sidebar);
+        Assert.Contains("ToolTip=\"{Binding ImageConversionNavigationText}\"", sidebar);
+        Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", ExtractSourceRange(
+            sidebar,
+            "AutomationProperties.AutomationId=\"SidebarImageConversionButton\"",
+            "AutomationProperties.AutomationId=\"SidebarVideoConversionButton\""));
+
+        Assert.Contains("public bool ShellToolTipsEnabled => !IsAnyModalOpen;", source);
+        Assert.Contains("public bool CanUseShellNavigation =>\n        !IsAnyModalOpen &&\n        !IsImageExportRunning;", normalizedSource);
+        Assert.Contains("public bool CanOpenSettings =>\n        CanUseShellNavigation &&", normalizedSource);
+        Assert.Contains("public bool CanInteractWithImageWorkflow =>\n        !IsAnyModalOpen &&\n        !IsImageExportRunning;", normalizedSource);
+        Assert.Contains("public bool CanUseSystemStatusActions =>\n        !IsAnyModalOpen &&", normalizedSource);
+        Assert.Contains("public bool CanUseSettingsSystemStatusActions =>", source);
+        Assert.Contains("public bool CanUseSettingsSystemStatusActions =>\n        !IsImageExportRunning &&\n        !IsConversionRunning &&", normalizedSource);
+        Assert.Contains("public bool CanShowModelHelp =>", source);
+        Assert.Contains("public bool CanShowImageParallaxModelHelp =>", source);
+        Assert.Contains("ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning && !IsAnyModalOpen);", source);
+
+        Assert.Contains("OnPropertyChanged(nameof(ShellToolTipsEnabled));", modalStateMethod);
+        Assert.Contains("OnPropertyChanged(nameof(CanUseShellNavigation));", modalStateMethod);
+        Assert.Contains("OnPropertyChanged(nameof(CanOpenSettings));", modalStateMethod);
+        Assert.Contains("OnPropertyChanged(nameof(CanInteractWithImageWorkflow));", modalStateMethod);
+        Assert.Contains("OnPropertyChanged(nameof(CanUseSystemStatusActions));", modalStateMethod);
+        Assert.Contains("OnPropertyChanged(nameof(CanUseSettingsSystemStatusActions));", modalStateMethod);
+        Assert.Contains("OnPropertyChanged(nameof(CanShowModelHelp));", modalStateMethod);
+        Assert.Contains("OnPropertyChanged(nameof(CanShowImageParallaxModelHelp));", modalStateMethod);
+        Assert.Contains("ToggleSidebarCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("SelectImageConversionSectionCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("SelectVideoConversionSectionCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("OpenSettingsCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("RefreshEngineStatusCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("ShowTechnicalDetailsCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("ShowModelHelpCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("ShowImageParallaxModelHelpCommand.RaiseCanExecuteChanged();", modalStateMethod);
+        Assert.Contains("ClearImageLogCommand.RaiseCanExecuteChanged();", modalStateMethod);
+    }
+
+    [Fact]
+    public void ModalContentActions_UseModalSafePredicatesInsteadOfBackgroundShellGates()
+    {
+        var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
+        var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var normalizedSource = source.Replace("\r\n", "\n");
+        var settingsModal = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"SettingsModal\"",
+            "Visibility=\"{Binding TechnicalDetailsModalContentVisibility}\"");
+        var modelsHeader = ExtractSourceRange(
+            settingsModal,
+            "AutomationProperties.AutomationId=\"SettingsViewModelsButton\"",
+            "Text=\"{Binding ModelsSettingsIntroText}\"");
+        var toolsHeader = ExtractSourceRange(
+            settingsModal,
+            "AutomationProperties.AutomationId=\"ToolsEngineSettingsSection\"",
+            "Text=\"{Binding ToolsEngineSettingsIntroText}\"");
+        var toolStatusAction = ExtractSourceRange(
+            settingsModal,
+            "Command=\"{Binding ContextActionCommand}\"",
+            "Visibility=\"{Binding ContextActionVisibility}\"");
+        var modalFooter = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"ResponsiveModalFooter\"",
+            "</WrapPanel>");
+        var closeSettingsButton = ExtractSourceRange(
+            modalFooter,
+            "AutomationProperties.AutomationId=\"CloseSettingsButton\"",
+            "Visibility=\"{Binding SettingsModalContentVisibility}\"");
+        var closeModelHelpButton = ExtractSourceRange(
+            modalFooter,
+            "AutomationProperties.AutomationId=\"CloseModelHelpButton\"",
+            "Visibility=\"{Binding ModelHelpModalContentVisibility}\"");
+        var copyFullLogButton = ExtractSourceRange(
+            modalFooter,
+            "AutomationProperties.AutomationId=\"CopyFullLogButton\"",
+            "Visibility=\"{Binding ActivityLogModalContentVisibility}\"");
+        var settingsActionsProperty = ExtractSourceRange(
+            source,
+            "public bool CanUseSettingsSystemStatusActions =>",
+            "public string ToolStatusTitle");
+        var createToolStatusMethod = ExtractSourceRange(
+            source,
+            "private ToolStatusItemViewModel CreateToolStatus",
+            "private string ToolStatusReasonText");
+        var showModelInventoryMethod = ExtractSourceRange(
+            source,
+            "private void ShowModelInventory()",
+            "private void CloseModelInventory()");
+        var showTechnicalDetailsMethod = ExtractSourceRange(
+            source,
+            "private void ShowTechnicalDetails()",
+            "private void CloseTechnicalDetails()");
+
+        Assert.Contains("Command=\"{Binding ShowModelInventoryCommand}\"", modelsHeader);
+        Assert.Contains("IsEnabled=\"{Binding CanUseSettingsSystemStatusActions}\"", modelsHeader);
+        Assert.DoesNotContain("CanUseSystemStatusActions", modelsHeader);
+        Assert.DoesNotContain("CanUseShellNavigation", modelsHeader);
+
+        Assert.Contains("Command=\"{Binding RefreshEngineStatusCommand}\"", toolsHeader);
+        Assert.Contains("IsEnabled=\"{Binding CanUseSettingsSystemStatusActions}\"", toolsHeader);
+        Assert.DoesNotContain("CanUseSystemStatusActions", toolsHeader);
+        Assert.DoesNotContain("CanUseShellNavigation", toolsHeader);
+        Assert.Contains("Command=\"{Binding ContextActionCommand}\"", toolStatusAction);
+
+        Assert.Contains("RefreshEngineStatusCommand = new AsyncRelayCommand(\n            () => RefreshEngineStatusWithGlobalBusyAsync(logRefresh: true),\n            () => CanUseSettingsSystemStatusActions);", normalizedSource);
+        Assert.Contains("ShowModelInventoryCommand = new RelayCommand(\n            ShowModelInventory,\n            () => CanUseSettingsSystemStatusActions);", normalizedSource);
+        Assert.Contains("ShowTechnicalDetailsCommand = new RelayCommand(\n            ShowTechnicalDetails,\n            () => CanUseSettingsSystemStatusActions);", normalizedSource);
+        Assert.Contains("!IsImageExportRunning", settingsActionsProperty);
+        Assert.Contains("!IsConversionRunning", settingsActionsProperty);
+        Assert.Contains("!IsPreviewGenerating", settingsActionsProperty);
+        Assert.Contains("!IsModelPackImportRunning", settingsActionsProperty);
+        Assert.DoesNotContain("IsAnyModalOpen", settingsActionsProperty);
+        Assert.Contains("public bool CanUseSystemStatusActions =>\n        !IsAnyModalOpen &&", normalizedSource);
+        Assert.Contains("OpenEngineFolderCommand = new RelayCommand(OpenEngineFolder);", source);
+        Assert.Contains("? OpenEngineFolderCommand", createToolStatusMethod);
+        Assert.Contains("? ShowModelInventoryCommand", createToolStatusMethod);
+        Assert.Contains("CaptureSettingsReturnContext();", showModelInventoryMethod);
+        Assert.Contains("IsSettingsModalOpen = false;", showModelInventoryMethod);
+        Assert.Contains("IsModelInventoryModalOpen = true;", showModelInventoryMethod);
+        Assert.Contains("IsSettingsModalOpen = false;", showTechnicalDetailsMethod);
+        Assert.Contains("IsTechnicalDetailsModalOpen = true;", showTechnicalDetailsMethod);
+
+        Assert.Contains("Command=\"{Binding CloseSettingsCommand}\"", closeSettingsButton);
+        Assert.DoesNotContain("IsEnabled=", closeSettingsButton);
+        Assert.Contains("Command=\"{Binding CloseModelHelpCommand}\"", closeModelHelpButton);
+        Assert.DoesNotContain("IsEnabled=", closeModelHelpButton);
+        Assert.Contains("Command=\"{Binding CopyFullLogCommand}\"", copyFullLogButton);
+        Assert.DoesNotContain("IsEnabled=\"{Binding CanUseShellNavigation}\"", copyFullLogButton);
+        Assert.DoesNotContain("IsEnabled=\"{Binding CanUseSystemStatusActions}\"", copyFullLogButton);
+
+        Assert.DoesNotContain("CanUseShellNavigation", settingsModal);
+        Assert.DoesNotContain("CanOpenSettings", settingsModal);
     }
 
     [Fact]
@@ -502,12 +677,13 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("HorizontalAlignment=\"Right\"", imageFooter);
         Assert.DoesNotContain("Padding=", imageFooter);
         Assert.DoesNotContain("MinHeight=", imageFooter);
-        Assert.Contains("Text=\"{Binding ImageSourcePanelTitleText}\"", imageSection);
-        Assert.Contains("Text=\"{Binding ImageDepthPanelTitleText}\"", imageSection);
-        Assert.Contains("Text=\"{Binding ImageParallaxPreviewTitleText}\"", imageSection);
+        Assert.DoesNotContain("Text=\"{Binding ImageSourcePanelTitleText}\"", setupStep);
+        Assert.DoesNotContain("Text=\"{Binding ImageDepthPanelTitleText}\"", setupStep);
+        Assert.DoesNotContain("Text=\"{Binding ImageParallaxPreviewTitleText}\"", setupStep);
+        Assert.DoesNotContain("Text=\"{Binding ImageStereoPreviewTitleText}\"", setupStep);
         Assert.Contains("Text=\"{Binding ImageParameterPanelTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageParallaxSummaryText}\"", imageSection);
-        Assert.Contains("Text=\"{Binding ImageStereoPreviewTitleText}\"", imageSection);
+        Assert.Contains("Source=\"{Binding ImageStereoPreviewImagePath}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageStereoControlsTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageGeneratedFilesTitleText}\"", imageSection);
         Assert.Contains("Text=\"{Binding ImageOutputPanelTitleText}\"", imageSection);
@@ -551,7 +727,7 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("public ObservableCollection<LogEntryViewModel> ImageLogs", source);
         Assert.Contains("private void AddImageLog", source);
         Assert.Contains("private void ClearImageLog()", source);
-        Assert.Contains("ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning);", source);
+        Assert.Contains("ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning && !IsAnyModalOpen);", source);
         Assert.Contains("ViewImageActivityLogCommand = new RelayCommand(ViewImageActivityLog);", constructor);
         Assert.Contains("private void ViewImageActivityLog()", source);
         Assert.Contains("private string CreateFullImageActivityLogText()", source);

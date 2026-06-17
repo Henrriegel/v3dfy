@@ -742,7 +742,8 @@
                 BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="0,0,1,0"
                 MouseEnter="OnSidebarMouseEnter"
-                MouseLeave="OnSidebarMouseLeave">
+                MouseLeave="OnSidebarMouseLeave"
+                ToolTipService.IsEnabled="{Binding ShellToolTipsEnabled}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -777,7 +778,8 @@
                             IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
                             Tag="{Binding IsHomeSectionSelected}"
-                            ToolTip="{Binding HomeNavigationText}">
+                            ToolTip="{Binding HomeNavigationText}"
+                            ToolTipService.IsEnabled="{Binding ShellToolTipsEnabled}">
                         <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
                                     Orientation="Horizontal">
                             <TextBlock Style="{StaticResource ShellSidebarIconTextStyle}"
@@ -794,7 +796,8 @@
                             IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
                             Tag="{Binding IsImageConversionSectionSelected}"
-                            ToolTip="{Binding ImageConversionNavigationText}">
+                            ToolTip="{Binding ImageConversionNavigationText}"
+                            ToolTipService.IsEnabled="{Binding ShellToolTipsEnabled}">
                         <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
                                     Orientation="Horizontal">
                             <TextBlock Style="{StaticResource ShellSidebarIconTextStyle}"
@@ -811,7 +814,8 @@
                             IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
                             Tag="{Binding IsVideoConversionSectionSelected}"
-                            ToolTip="{Binding VideoConversionNavigationText}">
+                            ToolTip="{Binding VideoConversionNavigationText}"
+                            ToolTipService.IsEnabled="{Binding ShellToolTipsEnabled}">
                         <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
                                     Orientation="Horizontal">
                             <TextBlock Style="{StaticResource ShellSidebarIconTextStyle}"
@@ -831,7 +835,8 @@
                             Command="{Binding ToggleSidebarCommand}"
                             IsEnabled="{Binding CanUseShellNavigation}"
                             Style="{StaticResource SidebarToggleStripButtonStyle}"
-                            ToolTip="{Binding SidebarToggleToolTipText}">
+                            ToolTip="{Binding SidebarToggleToolTipText}"
+                            ToolTipService.IsEnabled="{Binding ShellToolTipsEnabled}">
                         <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
                                     Orientation="Horizontal">
                             <TextBlock Style="{StaticResource ShellSidebarIconTextStyle}"
@@ -848,7 +853,8 @@
                             Command="{Binding OpenSettingsCommand}"
                             IsEnabled="{Binding CanOpenSettings}"
                             Style="{StaticResource ShellSidebarNavButtonStyle}"
-                            ToolTip="{Binding SettingsText}">
+                            ToolTip="{Binding SettingsText}"
+                            ToolTipService.IsEnabled="{Binding ShellToolTipsEnabled}">
                         <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
                                     Orientation="Horizontal">
                             <TextBlock Style="{StaticResource ShellSidebarIconTextStyle}"
@@ -1355,108 +1361,16 @@
                                           AutomationProperties.AutomationId="ImageParallaxScaffold"
                                           Margin="0,14,0,0"
                                           Visibility="{Binding ImageParallaxSetupStepVisibility}">
-                                        <Grid AutomationProperties.AutomationId="ImageParallaxSetupWideLayout"
-                                              Visibility="{Binding ActualWidth,
-                                                                   ElementName=ImageParallaxScaffold,
-                                                                   Converter={StaticResource ViewportThresholdVisibilityConverter},
-                                                                   ConverterParameter=GreaterOrEqual:620}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="2*" />
-                                                <ColumnDefinition Width="14" />
-                                                <ColumnDefinition Width="1*" />
-                                            </Grid.ColumnDefinitions>
+                                        <StackPanel AutomationProperties.AutomationId="ImageParallaxSetupWideLayout"
+                                                    Visibility="{Binding ActualWidth,
+                                                                         ElementName=ImageParallaxScaffold,
+                                                                         Converter={StaticResource ViewportThresholdVisibilityConverter},
+                                                                         ConverterParameter=GreaterOrEqual:620}">
                                             <StackPanel>
                                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                            Text="{Binding ImageParallaxModeTitleText}" />
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="12" />
-                                                        <ColumnDefinition Width="*" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Border MinHeight="148"
-                                                            Style="{StaticResource CardStyle}">
-                                                        <StackPanel>
-                                                            <TextBlock FontWeight="SemiBold"
-                                                                       Text="{Binding ImageSourcePanelTitleText}"
-                                                                       TextWrapping="Wrap" />
-                                                            <Border Height="88"
-                                                                    Margin="0,10,0,0"
-                                                                    Background="{DynamicResource InputBackgroundBrush}"
-                                                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="6">
-                                                                <Image Margin="8"
-                                                                       Source="{Binding SelectedImagePath}"
-                                                                       Stretch="Uniform" />
-                                                            </Border>
-                                                        </StackPanel>
-                                                    </Border>
-                                                    <Border Grid.Column="2"
-                                                            MinHeight="148"
-                                                            Style="{StaticResource CardStyle}">
-                                                        <StackPanel>
-                                                            <TextBlock FontWeight="SemiBold"
-                                                                       Text="{Binding ImageDepthPanelTitleText}"
-                                                                       TextWrapping="Wrap" />
-                                                            <Border Height="88"
-                                                                    Margin="0,10,0,0"
-                                                                    Background="{DynamicResource LogBackgroundBrush}"
-                                                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="6">
-                                                                <TextBlock Margin="10"
-                                                                           HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"
-                                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                                           Text="{Binding ImageDepthMapGenerationText}"
-                                                                           TextAlignment="Center"
-                                                                           TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </StackPanel>
-                                                    </Border>
-                                                </Grid>
-                                                <Border MinHeight="220"
-                                                        Margin="0,12,0,0"
+                                                <Border Margin="0,10,0,0"
                                                         Style="{StaticResource CardStyle}">
-                                                    <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto" />
-                                                            <RowDefinition Height="*" />
-                                                        </Grid.RowDefinitions>
-                                                        <TextBlock FontWeight="SemiBold"
-                                                                   Text="{Binding ImageParallaxPreviewTitleText}"
-                                                                   TextWrapping="Wrap" />
-                                                        <Border Grid.Row="1"
-                                                                Margin="0,10,0,0"
-                                                                Background="{DynamicResource LogBackgroundBrush}"
-                                                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                                                BorderThickness="1"
-                                                                CornerRadius="6">
-                                                            <Grid>
-                                                                <Image Margin="8"
-                                                                       Source="{Binding ImageParallaxPreviewImagePath}"
-                                                                       Stretch="Uniform" />
-                                                                <Border Margin="10"
-                                                                        Padding="8,5"
-                                                                        HorizontalAlignment="Left"
-                                                                        VerticalAlignment="Top"
-                                                                        Background="{DynamicResource TabSelectedBackgroundBrush}"
-                                                                        BorderBrush="{DynamicResource AccentBrush}"
-                                                                        BorderThickness="1"
-                                                                        CornerRadius="6">
-                                                                    <TextBlock FontWeight="SemiBold"
-                                                                               Foreground="{DynamicResource AccentBrush}"
-                                                                               Text="{Binding ImageParallaxModeTitleText}"
-                                                                               TextWrapping="Wrap" />
-                                                                </Border>
-                                                            </Grid>
-                                                        </Border>
-                                                    </Grid>
-                                                </Border>
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="2">
-                                                <Border Style="{StaticResource CardStyle}">
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold"
                                                                    Text="{Binding ImageParameterPanelTitleText}"
@@ -1499,8 +1413,9 @@
                                                                   SelectedItem="{Binding SelectedParallaxLayerBehavior}" />
                                                     </StackPanel>
                                                 </Border>
-                                                <Border Margin="0,12,0,0"
-                                                        Style="{StaticResource CardStyle}">
+                                            </StackPanel>
+                                            <StackPanel Margin="0,12,0,0">
+                                                <Border Style="{StaticResource CardStyle}">
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold"
                                                                    Text="{Binding ImageQuickSummaryTitleText}"
@@ -1513,17 +1428,26 @@
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageParallaxQualityGuidanceText}"
                                                                    TextWrapping="Wrap" />
-                                                        <Grid Margin="0,10,0,3">
+                                                        <TextBlock Margin="0,10,0,3"
+                                                                   Style="{StaticResource MutedTextStyle}"
+                                                                   Text="{Binding ImageModelSelectionLabelText}"
+                                                                   TextWrapping="Wrap" />
+                                                        <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="*" />
                                                                 <ColumnDefinition Width="Auto" />
                                                             </Grid.ColumnDefinitions>
-                                                            <TextBlock Style="{StaticResource MutedTextStyle}"
-                                                                       Text="{Binding ImageModelSelectionLabelText}"
-                                                                       TextWrapping="Wrap" />
+                                                            <ComboBox AutomationProperties.AutomationId="ImageParallaxModelSelector"
+                                                                      DisplayMemberPath="DisplayName"
+                                                                      IsEnabled="{Binding ImageParallaxModelSelectorEnabled}"
+                                                                      ItemsSource="{Binding ImageParallaxLocalModelCandidates}"
+                                                                      SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                             Mode=TwoWay}" />
                                                             <Button Grid.Column="1"
+                                                                    Margin="8,0,0,0"
                                                                     MinWidth="30"
                                                                     Padding="8,5"
+                                                                    VerticalAlignment="Center"
                                                                     AutomationProperties.AutomationId="ImageParallaxModelHelpButton"
                                                                     AutomationProperties.Name="{Binding ImageParallaxModelHelpButtonToolTipText}"
                                                                     Command="{Binding ShowImageParallaxModelHelpCommand}"
@@ -1532,12 +1456,6 @@
                                                                     Style="{StaticResource SecondaryButtonStyle}"
                                                                     ToolTip="{Binding ImageParallaxModelHelpButtonToolTipText}" />
                                                         </Grid>
-                                                        <ComboBox AutomationProperties.AutomationId="ImageParallaxModelSelector"
-                                                                  DisplayMemberPath="DisplayName"
-                                                                  IsEnabled="{Binding ImageParallaxModelSelectorEnabled}"
-                                                                  ItemsSource="{Binding ImageParallaxLocalModelCandidates}"
-                                                                  SelectedItem="{Binding SelectedLocalModelCandidate,
-                                                                                         Mode=TwoWay}" />
                                                         <TextBlock Margin="0,8,0,0"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageSelectedModelSummaryText}"
@@ -1565,7 +1483,7 @@
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
-                                        </Grid>
+                                        </StackPanel>
                                         <StackPanel AutomationProperties.AutomationId="ImageParallaxSetupNarrowLayout"
                                                     Visibility="{Binding ActualWidth,
                                                                          ElementName=ImageParallaxScaffold,
@@ -1573,84 +1491,7 @@
                                                                          ConverterParameter=LessThan:620}">
                                             <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                        Text="{Binding ImageParallaxModeTitleText}" />
-                                            <Border Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageSourcePanelTitleText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Border Height="88"
-                                                            Margin="0,10,0,0"
-                                                            Background="{DynamicResource InputBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <Image Margin="8"
-                                                               Source="{Binding SelectedImagePath}"
-                                                               Stretch="Uniform" />
-                                                    </Border>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border Margin="0,12,0,0"
-                                                    Style="{StaticResource CardStyle}">
-                                                <StackPanel>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageDepthPanelTitleText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Border Height="88"
-                                                            Margin="0,10,0,0"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <TextBlock Margin="10"
-                                                                   HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"
-                                                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                                                   Text="{Binding ImageDepthMapGenerationText}"
-                                                                   TextAlignment="Center"
-                                                                   TextWrapping="Wrap" />
-                                                    </Border>
-                                                </StackPanel>
-                                            </Border>
-                                            <Border MinHeight="180"
-                                                    Margin="0,12,0,0"
-                                                    Style="{StaticResource CardStyle}">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="*" />
-                                                    </Grid.RowDefinitions>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageParallaxPreviewTitleText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Border Grid.Row="1"
-                                                            Margin="0,10,0,0"
-                                                            Background="{DynamicResource LogBackgroundBrush}"
-                                                            BorderBrush="{DynamicResource CardBorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="6">
-                                                        <Grid>
-                                                            <Image Margin="8"
-                                                                   Source="{Binding ImageParallaxPreviewImagePath}"
-                                                                   Stretch="Uniform" />
-                                                            <Border Margin="10"
-                                                                    Padding="8,5"
-                                                                    HorizontalAlignment="Left"
-                                                                    VerticalAlignment="Top"
-                                                                    Background="{DynamicResource TabSelectedBackgroundBrush}"
-                                                                    BorderBrush="{DynamicResource AccentBrush}"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="6">
-                                                                <TextBlock FontWeight="SemiBold"
-                                                                           Foreground="{DynamicResource AccentBrush}"
-                                                                           Text="{Binding ImageParallaxModeTitleText}"
-                                                                           TextWrapping="Wrap" />
-                                                            </Border>
-                                                        </Grid>
-                                                    </Border>
-                                                </Grid>
-                                            </Border>
-                                            <Border Margin="0,12,0,0"
+                                            <Border Margin="0,10,0,0"
                                                     Style="{StaticResource CardStyle}">
                                                 <StackPanel>
                                                     <TextBlock FontWeight="SemiBold"
@@ -1708,17 +1549,26 @@
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageParallaxQualityGuidanceText}"
                                                                TextWrapping="Wrap" />
-                                                    <Grid Margin="0,10,0,3">
+                                                    <TextBlock Margin="0,10,0,3"
+                                                               Style="{StaticResource MutedTextStyle}"
+                                                               Text="{Binding ImageModelSelectionLabelText}"
+                                                               TextWrapping="Wrap" />
+                                                    <Grid>
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*" />
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
-                                                        <TextBlock Style="{StaticResource MutedTextStyle}"
-                                                                   Text="{Binding ImageModelSelectionLabelText}"
-                                                                   TextWrapping="Wrap" />
+                                                        <ComboBox AutomationProperties.AutomationId="ImageParallaxModelSelectorNarrow"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  IsEnabled="{Binding ImageParallaxModelSelectorEnabled}"
+                                                                  ItemsSource="{Binding ImageParallaxLocalModelCandidates}"
+                                                                  SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                         Mode=TwoWay}" />
                                                         <Button Grid.Column="1"
+                                                                Margin="8,0,0,0"
                                                                 MinWidth="30"
                                                                 Padding="8,5"
+                                                                VerticalAlignment="Center"
                                                                 AutomationProperties.AutomationId="ImageParallaxModelHelpButtonNarrow"
                                                                 AutomationProperties.Name="{Binding ImageParallaxModelHelpButtonToolTipText}"
                                                                 Command="{Binding ShowImageParallaxModelHelpCommand}"
@@ -1727,12 +1577,6 @@
                                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                                 ToolTip="{Binding ImageParallaxModelHelpButtonToolTipText}" />
                                                     </Grid>
-                                                    <ComboBox AutomationProperties.AutomationId="ImageParallaxModelSelectorNarrow"
-                                                              DisplayMemberPath="DisplayName"
-                                                              IsEnabled="{Binding ImageParallaxModelSelectorEnabled}"
-                                                              ItemsSource="{Binding ImageParallaxLocalModelCandidates}"
-                                                              SelectedItem="{Binding SelectedLocalModelCandidate,
-                                                                                     Mode=TwoWay}" />
                                                     <TextBlock Margin="0,8,0,0"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageSelectedModelSummaryText}"
@@ -1765,60 +1609,16 @@
                                     <Grid x:Name="ImageStereoScaffold"
                                           AutomationProperties.AutomationId="ImageStereoScaffold"
                                           Visibility="{Binding ImageStereoSetupStepVisibility}">
-                                        <Grid AutomationProperties.AutomationId="ImageStereoSetupWideLayout"
-                                              Visibility="{Binding ActualWidth,
-                                                                   ElementName=ImageStereoScaffold,
-                                                                   Converter={StaticResource ViewportThresholdVisibilityConverter},
-                                                                   ConverterParameter=GreaterOrEqual:620}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="2*" />
-                                                <ColumnDefinition Width="14" />
-                                                <ColumnDefinition Width="1*" />
-                                            </Grid.ColumnDefinitions>
+                                        <StackPanel AutomationProperties.AutomationId="ImageStereoSetupWideLayout"
+                                                    Visibility="{Binding ActualWidth,
+                                                                         ElementName=ImageStereoScaffold,
+                                                                         Converter={StaticResource ViewportThresholdVisibilityConverter},
+                                                                         ConverterParameter=GreaterOrEqual:620}">
                                             <StackPanel>
                                                 <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                            Text="{Binding Image3DOutputModeTitleText}" />
-                                                <Border MinHeight="230"
+                                                <Border Margin="0,10,0,0"
                                                         Style="{StaticResource CardStyle}">
-                                                    <Grid>
-                                                        <Grid.RowDefinitions>
-                                                            <RowDefinition Height="Auto" />
-                                                            <RowDefinition Height="*" />
-                                                        </Grid.RowDefinitions>
-                                                        <TextBlock FontWeight="SemiBold"
-                                                                   Text="{Binding ImageStereoPreviewTitleText}"
-                                                                   TextWrapping="Wrap" />
-                                                        <Grid Grid.Row="1"
-                                                              Margin="0,10,0,0">
-                                                            <Border Background="{DynamicResource LogBackgroundBrush}"
-                                                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="6">
-                                                                <Grid>
-                                                                    <Image Margin="8"
-                                                                           Source="{Binding SelectedImagePath}"
-                                                                           Stretch="Uniform" />
-                                                                    <Border Margin="10"
-                                                                            Padding="8,5"
-                                                                            HorizontalAlignment="Left"
-                                                                            VerticalAlignment="Top"
-                                                                            Background="{DynamicResource TabSelectedBackgroundBrush}"
-                                                                            BorderBrush="{DynamicResource AccentBrush}"
-                                                                            BorderThickness="1"
-                                                                            CornerRadius="6">
-                                                                        <TextBlock FontWeight="SemiBold"
-                                                                                   Foreground="{DynamicResource AccentBrush}"
-                                                                                   Text="{Binding SelectedStereoOutputFormatDisplayText}"
-                                                                                   TextWrapping="Wrap" />
-                                                                    </Border>
-                                                                </Grid>
-                                                            </Border>
-                                                        </Grid>
-                                                    </Grid>
-                                                </Border>
-                                            </StackPanel>
-                                            <StackPanel Grid.Column="2">
-                                                <Border Style="{StaticResource CardStyle}">
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold"
                                                                    Text="{Binding ImageStereoControlsTitleText}"
@@ -1860,8 +1660,9 @@
                                                                    Text="{Binding ImageStereoSummaryText}" />
                                                     </StackPanel>
                                                 </Border>
-                                                <Border Margin="0,12,0,0"
-                                                        AutomationProperties.AutomationId="ImageStereoReadinessSummaryCard"
+                                            </StackPanel>
+                                            <StackPanel Margin="0,12,0,0">
+                                                <Border AutomationProperties.AutomationId="ImageStereoReadinessSummaryCard"
                                                         Style="{StaticResource CardStyle}">
                                                     <StackPanel>
                                                         <TextBlock FontWeight="SemiBold"
@@ -1871,12 +1672,30 @@
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageModelSelectionLabelText}"
                                                                    TextWrapping="Wrap" />
-                                                        <ComboBox AutomationProperties.AutomationId="ImageModelSelector"
-                                                                  DisplayMemberPath="DisplayName"
-                                                                  IsEnabled="{Binding ImageModelSelectorEnabled}"
-                                                                  ItemsSource="{Binding LocalModelCandidates}"
-                                                                  SelectedItem="{Binding SelectedLocalModelCandidate,
-                                                                                         Mode=TwoWay}" />
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <ComboBox AutomationProperties.AutomationId="ImageModelSelector"
+                                                                      DisplayMemberPath="DisplayName"
+                                                                      IsEnabled="{Binding ImageModelSelectorEnabled}"
+                                                                      ItemsSource="{Binding LocalModelCandidates}"
+                                                                      SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                             Mode=TwoWay}" />
+                                                            <Button Grid.Column="1"
+                                                                    Margin="8,0,0,0"
+                                                                    MinWidth="30"
+                                                                    Padding="8,5"
+                                                                    VerticalAlignment="Center"
+                                                                    AutomationProperties.AutomationId="ImageModelHelpButton"
+                                                                    AutomationProperties.Name="{Binding ImageParallaxModelHelpButtonToolTipText}"
+                                                                    Command="{Binding ShowImageParallaxModelHelpCommand}"
+                                                                    Content="?"
+                                                                    IsEnabled="{Binding CanShowImageParallaxModelHelp}"
+                                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                                    ToolTip="{Binding ImageParallaxModelHelpButtonToolTipText}" />
+                                                        </Grid>
                                                         <TextBlock Margin="0,6,0,0"
                                                                    Style="{StaticResource MutedTextStyle}"
                                                                    Text="{Binding ImageModelSelectionSharedNoteText}"
@@ -1908,7 +1727,7 @@
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
-                                        </Grid>
+                                        </StackPanel>
                                         <StackPanel AutomationProperties.AutomationId="ImageStereoSetupNarrowLayout"
                                                     Visibility="{Binding ActualWidth,
                                                                          ElementName=ImageStereoScaffold,
@@ -1916,45 +1735,7 @@
                                                                          ConverterParameter=LessThan:620}">
                                             <TextBlock Style="{StaticResource SectionTitleStyle}"
                                                        Text="{Binding Image3DOutputModeTitleText}" />
-                                            <Border MinHeight="180"
-                                                    Style="{StaticResource CardStyle}">
-                                                <Grid>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="*" />
-                                                    </Grid.RowDefinitions>
-                                                    <TextBlock FontWeight="SemiBold"
-                                                               Text="{Binding ImageStereoPreviewTitleText}"
-                                                               TextWrapping="Wrap" />
-                                                    <Grid Grid.Row="1"
-                                                          Margin="0,10,0,0">
-                                                        <Border Background="{DynamicResource LogBackgroundBrush}"
-                                                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                                                BorderThickness="1"
-                                                                CornerRadius="6">
-                                                            <Grid>
-                                                                <Image Margin="8"
-                                                                       Source="{Binding SelectedImagePath}"
-                                                                       Stretch="Uniform" />
-                                                                <Border Margin="10"
-                                                                        Padding="8,5"
-                                                                        HorizontalAlignment="Left"
-                                                                        VerticalAlignment="Top"
-                                                                        Background="{DynamicResource TabSelectedBackgroundBrush}"
-                                                                        BorderBrush="{DynamicResource AccentBrush}"
-                                                                        BorderThickness="1"
-                                                                        CornerRadius="6">
-                                                                    <TextBlock FontWeight="SemiBold"
-                                                                               Foreground="{DynamicResource AccentBrush}"
-                                                                               Text="{Binding SelectedStereoOutputFormatDisplayText}"
-                                                                               TextWrapping="Wrap" />
-                                                                </Border>
-                                                            </Grid>
-                                                        </Border>
-                                                    </Grid>
-                                                </Grid>
-                                            </Border>
-                                            <Border Margin="0,12,0,0"
+                                            <Border Margin="0,10,0,0"
                                                     Style="{StaticResource CardStyle}">
                                                 <StackPanel>
                                                     <TextBlock FontWeight="SemiBold"
@@ -2008,12 +1789,30 @@
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageModelSelectionLabelText}"
                                                                TextWrapping="Wrap" />
-                                                    <ComboBox AutomationProperties.AutomationId="ImageModelSelectorNarrow"
-                                                              DisplayMemberPath="DisplayName"
-                                                              IsEnabled="{Binding ImageModelSelectorEnabled}"
-                                                              ItemsSource="{Binding LocalModelCandidates}"
-                                                              SelectedItem="{Binding SelectedLocalModelCandidate,
-                                                                                     Mode=TwoWay}" />
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <ComboBox AutomationProperties.AutomationId="ImageModelSelectorNarrow"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  IsEnabled="{Binding ImageModelSelectorEnabled}"
+                                                                  ItemsSource="{Binding LocalModelCandidates}"
+                                                                  SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                                         Mode=TwoWay}" />
+                                                        <Button Grid.Column="1"
+                                                                Margin="8,0,0,0"
+                                                                MinWidth="30"
+                                                                Padding="8,5"
+                                                                VerticalAlignment="Center"
+                                                                AutomationProperties.AutomationId="ImageModelHelpButtonNarrow"
+                                                                AutomationProperties.Name="{Binding ImageParallaxModelHelpButtonToolTipText}"
+                                                                Command="{Binding ShowImageParallaxModelHelpCommand}"
+                                                                Content="?"
+                                                                IsEnabled="{Binding CanShowImageParallaxModelHelp}"
+                                                                Style="{StaticResource SecondaryButtonStyle}"
+                                                                ToolTip="{Binding ImageParallaxModelHelpButtonToolTipText}" />
+                                                    </Grid>
                                                     <TextBlock Margin="0,6,0,0"
                                                                Style="{StaticResource MutedTextStyle}"
                                                                Text="{Binding ImageModelSelectionSharedNoteText}"
@@ -3324,17 +3123,25 @@
                                     </StackPanel>
                                 </Grid>
                                 <StackPanel Margin="0,12,0,0">
-                                    <Grid Margin="0,0,0,4">
+                                    <TextBlock Margin="0,0,0,4"
+                                               Style="{StaticResource MutedTextStyle}"
+                                               Text="{Binding LocalModelSelectionLabel}" />
+                                    <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock VerticalAlignment="Center"
-                                                   Style="{StaticResource MutedTextStyle}"
-                                                   Text="{Binding LocalModelSelectionLabel}" />
+                                        <ComboBox AutomationProperties.AutomationId="VideoModelSelector"
+                                                  DisplayMemberPath="DisplayName"
+                                                  IsEnabled="{Binding HasLocalModelSelectionCandidates}"
+                                                  ItemsSource="{Binding LocalModelCandidates}"
+                                                  SelectedItem="{Binding SelectedLocalModelCandidate,
+                                                                         Mode=TwoWay}" />
                                         <Button Grid.Column="1"
+                                                Margin="8,0,0,0"
                                                 MinWidth="30"
                                                 Padding="8,5"
+                                                VerticalAlignment="Center"
                                                 AutomationProperties.AutomationId="ModelHelpButton"
                                                 AutomationProperties.Name="{Binding ModelHelpButtonToolTipText}"
                                                 Command="{Binding ShowModelHelpCommand}"
@@ -3343,11 +3150,6 @@
                                                 Style="{StaticResource SecondaryButtonStyle}"
                                                 ToolTip="{Binding ModelHelpButtonToolTipText}" />
                                     </Grid>
-                                    <ComboBox DisplayMemberPath="DisplayName"
-                                              IsEnabled="{Binding HasLocalModelSelectionCandidates}"
-                                              ItemsSource="{Binding LocalModelCandidates}"
-                                              SelectedItem="{Binding SelectedLocalModelCandidate,
-                                                                     Mode=TwoWay}" />
                                     <TextBlock Margin="0,4,0,0"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                Text="{Binding LocalModelSelectionStatusText}"
@@ -4073,9 +3875,11 @@
 
         <Grid x:Name="ModalOverlay"
               Grid.Row="1"
+              Grid.Column="0"
               Grid.ColumnSpan="2"
-              Panel.ZIndex="10"
+              Panel.ZIndex="25"
               ClipToBounds="True"
+              IsHitTestVisible="True"
               Style="{StaticResource V3dfyModalOverlayStyle}"
               Visibility="{Binding ModalOverlayVisibility}">
             <Border Width="{Binding ActiveModalWidth}"
@@ -4200,7 +4004,7 @@
                                             <Button AutomationProperties.AutomationId="SettingsViewModelsButton"
                                                     Command="{Binding ShowModelInventoryCommand}"
                                                     Content="{Binding ViewModelsText}"
-                                                    IsEnabled="{Binding CanUseSystemStatusActions}"
+                                                    IsEnabled="{Binding CanUseSettingsSystemStatusActions}"
                                                     Style="{StaticResource SecondaryButtonStyle}" />
                                         </StackPanel>
                                     </Grid>
@@ -4331,7 +4135,7 @@
                                                 AutomationProperties.AutomationId="SettingsRefreshToolsButton"
                                                 Command="{Binding RefreshEngineStatusCommand}"
                                                 Content="{Binding RefreshText}"
-                                                IsEnabled="{Binding CanUseSystemStatusActions}"
+                                                IsEnabled="{Binding CanUseSettingsSystemStatusActions}"
                                                 Style="{StaticResource SecondaryButtonStyle}" />
                                     </Grid>
                                     <TextBlock Margin="0,0,0,12"

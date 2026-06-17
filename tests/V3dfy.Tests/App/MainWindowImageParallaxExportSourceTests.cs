@@ -54,8 +54,15 @@ public sealed class MainWindowImageParallaxExportSourceTests
             "AutomationProperties.AutomationId=\"ImageParallaxScaffold\"",
             "AutomationProperties.AutomationId=\"ImageStereoScaffold\"");
 
-        Assert.Contains("Source=\"{Binding SelectedImagePath}\"", parallaxSetup);
-        Assert.Contains("Text=\"{Binding ImageDepthMapGenerationText}\"", parallaxSetup);
+        Assert.DoesNotContain("Source=\"{Binding SelectedImagePath}\"", parallaxSetup);
+        Assert.DoesNotContain("Text=\"{Binding ImageDepthMapGenerationText}\"", parallaxSetup);
+        Assert.DoesNotContain("Text=\"{Binding ImageSourcePanelTitleText}\"", parallaxSetup);
+        Assert.DoesNotContain("Text=\"{Binding ImageDepthPanelTitleText}\"", parallaxSetup);
+        Assert.DoesNotContain("Text=\"{Binding ImageParallaxPreviewTitleText}\"", parallaxSetup);
+        Assert.DoesNotContain("Source=\"{Binding ImageParallaxPreviewImagePath}\"", parallaxSetup);
+        Assert.Contains("Text=\"{Binding ImageParameterPanelTitleText}\"", parallaxSetup);
+        Assert.Contains("ItemsSource=\"{Binding ParallaxDepthIntensityOptions}\"", parallaxSetup);
+        Assert.Contains("ItemsSource=\"{Binding ParallaxMotionDirectionOptions}\"", parallaxSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelSelector\"", parallaxSetup);
         Assert.Contains("ItemsSource=\"{Binding ImageParallaxLocalModelCandidates}\"", parallaxSetup);
         Assert.Contains("IsEnabled=\"{Binding ImageParallaxModelSelectorEnabled}\"", parallaxSetup);
@@ -167,17 +174,19 @@ public sealed class MainWindowImageParallaxExportSourceTests
     public void ImageParallaxRunningState_LocksShellWorkflowAndSetupControls()
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var normalizedSource = source.Replace("\r\n", "\n");
         var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
         var imageSection = ExtractSourceRange(
             xaml,
             "AutomationProperties.AutomationId=\"ImageConversionSection\"",
             "AutomationProperties.AutomationId=\"VideoConversionSection\"");
 
-        Assert.Contains("public bool CanUseShellNavigation => !IsImageExportRunning;", source);
-        Assert.Contains("public bool CanInteractWithImageWorkflow => !IsImageExportRunning;", source);
-        Assert.Contains("public bool ImageSetupControlsEnabled => !IsImageExportRunning;", source);
-        Assert.Contains("public bool ImageWorkflowCardsEnabled => !IsImageExportRunning;", source);
-        Assert.Contains("public bool CanUseImageStepNavigation => !IsImageExportRunning;", source);
+        Assert.Contains("public bool CanUseShellNavigation =>\n        !IsAnyModalOpen &&\n        !IsImageExportRunning;", normalizedSource);
+        Assert.Contains("public bool ShellToolTipsEnabled => !IsAnyModalOpen;", source);
+        Assert.Contains("public bool CanInteractWithImageWorkflow =>\n        !IsAnyModalOpen &&\n        !IsImageExportRunning;", normalizedSource);
+        Assert.Contains("public bool ImageSetupControlsEnabled =>\n        !IsAnyModalOpen &&\n        !IsImageExportRunning;", normalizedSource);
+        Assert.Contains("public bool ImageWorkflowCardsEnabled =>\n        !IsAnyModalOpen &&\n        !IsImageExportRunning;", normalizedSource);
+        Assert.Contains("public bool CanUseImageStepNavigation =>\n        !IsAnyModalOpen &&\n        !IsImageExportRunning;", normalizedSource);
         Assert.Contains("ToggleSidebarCommand = new RelayCommand(ToggleSidebar, () => CanUseShellNavigation);", source);
         Assert.Contains("OpenSettingsCommand = new RelayCommand(OpenSettings, () => CanOpenSettings);", source);
         Assert.Contains("SelectImageCommand = new RelayCommand(SelectImage, () => CanInteractWithImageWorkflow);", source);
@@ -192,7 +201,7 @@ public sealed class MainWindowImageParallaxExportSourceTests
         Assert.Contains("IsEnabled=\"{Binding ImageParallaxModelSelectorEnabled}\"", imageSection);
         Assert.Contains("IsEnabled=\"{Binding ImageModelSelectorEnabled}\"", imageSection);
         Assert.Contains("IsImageExportRunning ? Visibility.Collapsed : Visibility.Visible", source);
-        Assert.Contains("ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning);", source);
+        Assert.Contains("ClearImageLogCommand = new RelayCommand(ClearImageLog, () => ImageLogs.Count > 0 && !IsImageExportRunning && !IsAnyModalOpen);", source);
         Assert.Contains("if (IsImageExportRunning)", source);
     }
 

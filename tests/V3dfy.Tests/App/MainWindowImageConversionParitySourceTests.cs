@@ -338,7 +338,7 @@ public sealed class MainWindowImageConversionParitySourceTests
     }
 
     [Fact]
-    public void ImageSetupScaffolds_HaveNarrowStackedLayoutsWithPreviewBeforeControls()
+    public void ImageSetupScaffolds_KeepParallaxAndStereoSetupOnlyLayouts()
     {
         var xaml = ReadRepoFile("src", "V3dfy.App", "MainWindow.xaml");
         var parallaxSetup = ExtractSourceRange(
@@ -353,31 +353,63 @@ public sealed class MainWindowImageConversionParitySourceTests
             xaml,
             "AutomationProperties.AutomationId=\"ImageParallaxSetupNarrowLayout\"",
             "AutomationProperties.AutomationId=\"ImageStereoScaffold\"");
+        var parallaxWide = ExtractSourceRange(
+            parallaxSetup,
+            "AutomationProperties.AutomationId=\"ImageParallaxSetupWideLayout\"",
+            "AutomationProperties.AutomationId=\"ImageParallaxSetupNarrowLayout\"");
         var stereoNarrow = ExtractSourceRange(
             xaml,
             "AutomationProperties.AutomationId=\"ImageStereoSetupNarrowLayout\"",
             "AutomationProperties.AutomationId=\"ImageParallaxResultScaffold\"");
+        var stereoWide = ExtractSourceRange(
+            stereoSetup,
+            "AutomationProperties.AutomationId=\"ImageStereoSetupWideLayout\"",
+            "AutomationProperties.AutomationId=\"ImageStereoSetupNarrowLayout\"");
 
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxSetupWideLayout\"", parallaxSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxSetupNarrowLayout\"", parallaxSetup);
         Assert.Contains("ConverterParameter=GreaterOrEqual:620", parallaxSetup);
         Assert.Contains("ConverterParameter=LessThan:620", parallaxSetup);
-        Assert.True(IndexOf(parallaxNarrow, "Text=\"{Binding ImageSourcePanelTitleText}\"") <
-            IndexOf(parallaxNarrow, "Text=\"{Binding ImageParameterPanelTitleText}\""));
-        Assert.True(IndexOf(parallaxNarrow, "Text=\"{Binding ImageParallaxPreviewTitleText}\"") <
-            IndexOf(parallaxNarrow, "Text=\"{Binding ImageParameterPanelTitleText}\""));
+        Assert.Contains("<StackPanel AutomationProperties.AutomationId=\"ImageParallaxSetupWideLayout\"", parallaxSetup);
+        Assert.DoesNotContain("Grid.Column=\"2\"", parallaxWide);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"14\"", parallaxWide);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"1*\"", parallaxWide);
+        Assert.True(IndexOf(parallaxWide, "Text=\"{Binding ImageParameterPanelTitleText}\"") <
+            IndexOf(parallaxWide, "Text=\"{Binding ImageQuickSummaryTitleText}\""));
         Assert.True(IndexOf(parallaxNarrow, "Text=\"{Binding ImageParameterPanelTitleText}\"") <
             IndexOf(parallaxNarrow, "Text=\"{Binding ImageQuickSummaryTitleText}\""));
+        Assert.DoesNotContain("Text=\"{Binding ImageSourcePanelTitleText}\"", parallaxSetup);
+        Assert.DoesNotContain("Text=\"{Binding ImageDepthPanelTitleText}\"", parallaxSetup);
+        Assert.DoesNotContain("Text=\"{Binding ImageDepthMapGenerationText}\"", parallaxSetup);
+        Assert.DoesNotContain("Text=\"{Binding ImageParallaxPreviewTitleText}\"", parallaxSetup);
+        Assert.DoesNotContain("Source=\"{Binding SelectedImagePath}\"", parallaxSetup);
+        Assert.DoesNotContain("Source=\"{Binding ImageParallaxPreviewImagePath}\"", parallaxSetup);
+        Assert.Contains("ItemsSource=\"{Binding ParallaxDepthIntensityOptions}\"", parallaxSetup);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelSelector\"", parallaxSetup);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelSelectorNarrow\"", parallaxSetup);
+        Assert.Contains("Text=\"{Binding ImageParallaxQualityGuidanceText}\"", parallaxSetup);
+        Assert.Contains("Text=\"{Binding ImageParallaxModelGuidanceText}\"", parallaxSetup);
+        Assert.Contains("Text=\"{Binding ImageExpectedOutputFileText}\"", parallaxSetup);
+        Assert.Contains("Text=\"{Binding ImageSaveLocationText}\"", parallaxSetup);
 
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoSetupWideLayout\"", stereoSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoSetupNarrowLayout\"", stereoSetup);
         Assert.Contains("ConverterParameter=GreaterOrEqual:620", stereoSetup);
         Assert.Contains("ConverterParameter=LessThan:620", stereoSetup);
-        Assert.True(IndexOf(stereoNarrow, "Text=\"{Binding ImageStereoPreviewTitleText}\"") <
-            IndexOf(stereoNarrow, "Text=\"{Binding ImageStereoControlsTitleText}\""));
+        Assert.Contains("<StackPanel AutomationProperties.AutomationId=\"ImageStereoSetupWideLayout\"", stereoSetup);
+        Assert.DoesNotContain("Grid.Column=\"2\"", stereoWide);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"14\"", stereoWide);
+        Assert.DoesNotContain("<ColumnDefinition Width=\"1*\"", stereoWide);
+        Assert.True(IndexOf(stereoWide, "Text=\"{Binding ImageStereoControlsTitleText}\"") <
+            IndexOf(stereoWide, "Text=\"{Binding ImageStereoReadinessSummaryTitleText}\""));
+        Assert.True(IndexOf(stereoNarrow, "Text=\"{Binding ImageStereoControlsTitleText}\"") <
+            IndexOf(stereoNarrow, "Text=\"{Binding ImageStereoReadinessSummaryTitleText}\""));
+        Assert.DoesNotContain("Text=\"{Binding ImageStereoPreviewTitleText}\"", stereoSetup);
+        Assert.DoesNotContain("Source=\"{Binding SelectedImagePath}\"", stereoSetup);
         Assert.DoesNotContain("Text=\"{Binding ImageComparisonTitleText}\"", stereoSetup);
-        Assert.Contains("Source=\"{Binding SelectedImagePath}\"", stereoSetup);
+        Assert.Contains("Text=\"{Binding ImageStereoControlsTitleText}\"", stereoSetup);
         Assert.Contains("SelectedItem=\"{Binding SelectedStereoOutputFormatOption,", stereoSetup);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageStereoReadinessSummaryCard\"", stereoSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelector\"", stereoSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageModelSelectorNarrow\"", stereoSetup);
         Assert.DoesNotContain("Canvas.", parallaxSetup);

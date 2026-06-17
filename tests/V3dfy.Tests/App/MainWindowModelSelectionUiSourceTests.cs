@@ -10,7 +10,11 @@ public sealed class MainWindowModelSelectionUiSourceTests
             xaml,
             "Text=\"{Binding LocalModelSelectionLabel}\"",
             "Text=\"{Binding LocalModelSelectionStatusText}\"");
+        var selectorRow = selectorBlock;
 
+        Assert.True(selectorBlock.IndexOf("Text=\"{Binding LocalModelSelectionLabel}\"", StringComparison.Ordinal) <
+            selectorBlock.IndexOf("AutomationProperties.AutomationId=\"VideoModelSelector\"", StringComparison.Ordinal));
+        Assert.Contains("AutomationProperties.AutomationId=\"VideoModelSelector\"", selectorBlock);
         Assert.Contains("ItemsSource=\"{Binding LocalModelCandidates}\"", selectorBlock);
         Assert.Contains("SelectedItem=\"{Binding SelectedLocalModelCandidate", selectorBlock);
         Assert.Contains("AutomationProperties.AutomationId=\"ModelHelpButton\"", selectorBlock);
@@ -21,6 +25,12 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.Contains("MinWidth=\"30\"", selectorBlock);
         Assert.Contains("Padding=\"8,5\"", selectorBlock);
         Assert.Contains("Style=\"{StaticResource SecondaryButtonStyle}\"", selectorBlock);
+        Assert.Contains("<ColumnDefinition Width=\"*\" />", selectorRow);
+        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", selectorRow);
+        Assert.Contains("Grid.Column=\"1\"", selectorRow);
+        Assert.Contains("VerticalAlignment=\"Center\"", selectorRow);
+        Assert.True(selectorRow.IndexOf("AutomationProperties.AutomationId=\"VideoModelSelector\"", StringComparison.Ordinal) <
+            selectorRow.IndexOf("AutomationProperties.AutomationId=\"ModelHelpButton\"", StringComparison.Ordinal));
         Assert.DoesNotContain("Content=\"{Binding ModelHelpButtonText}\"", selectorBlock);
         Assert.DoesNotContain("Style=\"{StaticResource IconButtonStyle}\"", selectorBlock);
         Assert.DoesNotContain("RegistryEntries", selectorBlock);
@@ -163,11 +173,33 @@ public sealed class MainWindowModelSelectionUiSourceTests
             xaml,
             "AutomationProperties.AutomationId=\"ImageParallaxScaffold\"",
             "AutomationProperties.AutomationId=\"ImageStereoScaffold\"");
+        var stereoSetup = ExtractSourceRange(
+            xaml,
+            "AutomationProperties.AutomationId=\"ImageStereoScaffold\"",
+            "AutomationProperties.AutomationId=\"ImageParallaxResultScaffold\"");
+        var parallaxSelectorRow = ExtractSourceRange(
+            parallaxSetup,
+            "Text=\"{Binding ImageModelSelectionLabelText}\"",
+            "Text=\"{Binding ImageSelectedModelSummaryText}\"");
+        var parallaxNarrowSelectorRow = ExtractSourceRange(
+            parallaxSetup,
+            "AutomationProperties.AutomationId=\"ImageParallaxModelSelectorNarrow\"",
+            "Text=\"{Binding ImageSelectedModelSummaryText}\"");
+        var stereoSelectorRow = ExtractSourceRange(
+            stereoSetup,
+            "AutomationProperties.AutomationId=\"ImageStereoReadinessSummaryCard\"",
+            "Text=\"{Binding ImageModelSelectionSharedNoteText}\"");
+        var stereoNarrowSelectorRow = ExtractSourceRange(
+            stereoSetup,
+            "AutomationProperties.AutomationId=\"ImageStereoReadinessSummaryCardNarrow\"",
+            "Text=\"{Binding ImageModelSelectionSharedNoteText}\"");
         var parallaxHelpRows = ExtractSourceRange(
             source,
             "private IReadOnlyList<ModelHelpRow> CreateImageParallaxModelHelpRows()",
             "private string GetModelSizePerformanceText");
 
+        Assert.True(parallaxSetup.IndexOf("Text=\"{Binding ImageModelSelectionLabelText}\"", StringComparison.Ordinal) <
+            parallaxSetup.IndexOf("AutomationProperties.AutomationId=\"ImageParallaxModelSelector\"", StringComparison.Ordinal));
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelHelpButton\"", parallaxSetup);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelHelpButtonNarrow\"", parallaxSetup);
         Assert.Contains("Command=\"{Binding ShowImageParallaxModelHelpCommand}\"", parallaxSetup);
@@ -177,6 +209,26 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.Contains("MinWidth=\"30\"", parallaxSetup);
         Assert.Contains("Padding=\"8,5\"", parallaxSetup);
         Assert.Contains("Style=\"{StaticResource SecondaryButtonStyle}\"", parallaxSetup);
+        Assert.Contains("<ColumnDefinition Width=\"*\" />", parallaxSelectorRow);
+        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", parallaxSelectorRow);
+        Assert.Contains("Grid.Column=\"1\"", parallaxSelectorRow);
+        Assert.Contains("VerticalAlignment=\"Center\"", parallaxSelectorRow);
+        Assert.True(parallaxSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageParallaxModelSelector\"", StringComparison.Ordinal) <
+            parallaxSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageParallaxModelHelpButton\"", StringComparison.Ordinal));
+        Assert.True(parallaxNarrowSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageParallaxModelSelectorNarrow\"", StringComparison.Ordinal) <
+            parallaxNarrowSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageParallaxModelHelpButtonNarrow\"", StringComparison.Ordinal));
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageModelHelpButton\"", stereoSetup);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImageModelHelpButtonNarrow\"", stereoSetup);
+        Assert.Contains("Command=\"{Binding ShowImageParallaxModelHelpCommand}\"", stereoSetup);
+        Assert.Contains("ToolTip=\"{Binding ImageParallaxModelHelpButtonToolTipText}\"", stereoSetup);
+        Assert.True(stereoSetup.IndexOf("Text=\"{Binding ImageModelSelectionLabelText}\"", StringComparison.Ordinal) <
+            stereoSetup.IndexOf("AutomationProperties.AutomationId=\"ImageModelSelector\"", StringComparison.Ordinal));
+        Assert.True(stereoSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageModelSelector\"", StringComparison.Ordinal) <
+            stereoSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageModelHelpButton\"", StringComparison.Ordinal));
+        Assert.True(stereoNarrowSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageModelSelectorNarrow\"", StringComparison.Ordinal) <
+            stereoNarrowSelectorRow.IndexOf("AutomationProperties.AutomationId=\"ImageModelHelpButtonNarrow\"", StringComparison.Ordinal));
+        Assert.Contains("<ColumnDefinition Width=\"*\" />", stereoSelectorRow);
+        Assert.Contains("<ColumnDefinition Width=\"Auto\" />", stereoSelectorRow);
         Assert.Contains("ItemsSource=\"{Binding ImageParallaxLocalModelCandidates}\"", parallaxSetup);
         Assert.Contains("public IReadOnlyList<LocalModelSelectionCandidate> ImageParallaxLocalModelCandidates", source);
         Assert.Contains(".Where(IsImageParallaxCompatibleCandidate)", source);
