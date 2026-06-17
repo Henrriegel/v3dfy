@@ -168,10 +168,9 @@ public sealed class MainWindowPreviewInvalidationSourceTests
         Assert.Contains("!ShouldConfirmPreviewInvalidatingChange()", resetMethod);
         Assert.Contains("ShowPreviewStageResetNotice();", resetMethod);
         Assert.Contains("ClearPreviewStageResetNotice();", resetMethod);
-        Assert.Contains("public string PreviewStageResetNoticeText => Text(", source);
+        Assert.Contains("public string PreviewStageResetNoticeText => T(LocalizationKeys.VideoConversionStageResetNotice);", source);
         Assert.Contains("TimeSpan.FromSeconds(4)", source);
-        Assert.Contains("Review the conversion plan again, then press Continue with conversion.", source);
-        Assert.Contains("Revisa de nuevo el plan de conversion y presiona Continuar con la conversion.", source);
+        Assert.Contains("LocalizationKeys.VideoConversionStageResetNotice", source);
         Assert.Contains("ShowLogCopyNotification(", showNoticeMethod);
         Assert.Contains("PreviewStageResetNoticeDuration", showNoticeMethod);
         Assert.Contains("TopToastKind.PreviewStageReset", showNoticeMethod);
@@ -201,7 +200,7 @@ public sealed class MainWindowPreviewInvalidationSourceTests
         Assert.Contains("SelectedSettingsSection", source);
         Assert.Contains("SettingsModalContentVisibility", source);
         Assert.Contains("AutomationProperties.AutomationId=\"VisualSettingsSection\"", xaml);
-        Assert.Contains("SelectedItem=\"{Binding SelectedLanguage}\"", xaml);
+        Assert.Contains("SelectedValue=\"{Binding SelectedLanguage}\"", xaml);
         Assert.Contains("SelectedItem=\"{Binding SelectedTheme}\"", xaml);
         Assert.DoesNotContain("SelectedLanguage", resetMethod);
         Assert.DoesNotContain("SelectedTheme", resetMethod);

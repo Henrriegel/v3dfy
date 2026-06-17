@@ -94,6 +94,79 @@ public sealed class MainWindowXamlStructureTests
     }
 
     [Fact]
+    public void SharedButtonStyles_UseLightThemeContrastBrushesWithoutChangingDestructiveRed()
+    {
+        var appXaml = ReadSourceFile("src", "V3dfy.App", "App.xaml");
+        var themeService = ReadSourceFile("src", "V3dfy.App", "Services", "AppThemeService.cs");
+        var defaultButtonStyle = ExtractSourceRange(
+            appXaml,
+            "<Style TargetType=\"Button\">",
+            "<Style x:Key=\"SecondaryButtonStyle\"");
+        var secondaryButtonStyle = ExtractSourceRange(
+            appXaml,
+            "x:Key=\"SecondaryButtonStyle\"",
+            "x:Key=\"DestructiveButtonStyle\"");
+        var destructiveButtonStyle = ExtractSourceRange(
+            appXaml,
+            "x:Key=\"DestructiveButtonStyle\"",
+            "x:Key=\"PrimaryCtaButtonStyle\"");
+        var primaryCtaButtonStyle = ExtractSourceRange(
+            appXaml,
+            "x:Key=\"PrimaryCtaButtonStyle\"",
+            "x:Key=\"IconButtonStyle\"");
+        var iconButtonStyle = ExtractSourceRange(
+            appXaml,
+            "x:Key=\"IconButtonStyle\"",
+            "x:Key=\"IconToggleButtonStyle\"");
+        var iconToggleStyle = ExtractSourceRange(
+            appXaml,
+            "x:Key=\"IconToggleButtonStyle\"",
+            "x:Key=\"PreviewSliderTrackButtonStyle\"");
+
+        Assert.Contains("x:Key=\"SecondaryButtonBackgroundBrush\"", appXaml);
+        Assert.Contains("x:Key=\"SecondaryButtonBorderBrush\"", appXaml);
+        Assert.Contains("x:Key=\"SecondaryButtonForegroundBrush\"", appXaml);
+        Assert.Contains("x:Key=\"SecondaryButtonHoverForegroundBrush\"", appXaml);
+        Assert.Contains("x:Key=\"SecondaryButtonPressedForegroundBrush\"", appXaml);
+        Assert.Contains("Value=\"{DynamicResource ButtonForegroundBrush}\"", defaultButtonStyle);
+        Assert.Contains("TextElement.Foreground=\"{TemplateBinding Foreground}\"", defaultButtonStyle);
+        Assert.Contains("RelativeSource={RelativeSource AncestorType=Button}", defaultButtonStyle);
+        Assert.Contains("Property=\"BorderBrush\"", defaultButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource DisabledBackgroundBrush}\"", defaultButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonBackgroundBrush}\"", secondaryButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonBorderBrush}\"", secondaryButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonForegroundBrush}\"", secondaryButtonStyle);
+        Assert.Contains("TextElement.Foreground=\"{TemplateBinding Foreground}\"", secondaryButtonStyle);
+        Assert.Contains("RelativeSource={RelativeSource AncestorType=Button}", secondaryButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonHoverBackgroundBrush}\"", secondaryButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonHoverForegroundBrush}\"", secondaryButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonPressedBackgroundBrush}\"", secondaryButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonPressedForegroundBrush}\"", secondaryButtonStyle);
+        Assert.Contains("TextElement.Foreground=\"{TemplateBinding Foreground}\"", destructiveButtonStyle);
+        Assert.Contains("RelativeSource={RelativeSource AncestorType=Button}", destructiveButtonStyle);
+        Assert.Contains("<Setter Property=\"Foreground\" Value=\"{DynamicResource ButtonForegroundBrush}\" />", primaryCtaButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonBackgroundBrush}\"", iconButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonBorderBrush}\"", iconButtonStyle);
+        Assert.Contains("RelativeSource={RelativeSource AncestorType=Button}", iconButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonBackgroundBrush}\"", iconToggleStyle);
+        Assert.Contains("Value=\"{DynamicResource SecondaryButtonBorderBrush}\"", iconToggleStyle);
+        Assert.Contains("RelativeSource={RelativeSource AncestorType=ToggleButton}", iconToggleStyle);
+        Assert.Contains("Value=\"{DynamicResource DestructiveBrush}\"", destructiveButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource DestructiveHoverBrush}\"", destructiveButtonStyle);
+        Assert.Contains("Value=\"{DynamicResource DestructivePressedBrush}\"", destructiveButtonStyle);
+        Assert.Contains("SetBrush(\"SecondaryButtonBackgroundBrush\", isDark ? \"#00FFFFFF\" : \"#F8FBFE\")", themeService);
+        Assert.Contains("SetBrush(\"SecondaryButtonBorderBrush\", isDark ? \"#2B3A4B\" : \"#7F94A8\")", themeService);
+        Assert.Contains("SetBrush(\"SecondaryButtonForegroundBrush\", isDark ? \"#F4F7FA\" : \"#17212B\")", themeService);
+        Assert.Contains("SetBrush(\"SecondaryButtonHoverBackgroundBrush\", isDark ? \"#3385D6\" : \"#075CBF\")", themeService);
+        Assert.Contains("SetBrush(\"SecondaryButtonPressedBackgroundBrush\", isDark ? \"#286BAE\" : \"#064B9B\")", themeService);
+        Assert.Contains("SetBrush(\"DisabledBackgroundBrush\", isDark ? \"#344150\" : \"#E2E8F0\")", themeService);
+        Assert.Contains("SetBrush(\"DisabledTextBrush\", isDark ? \"#8794A3\" : \"#64748B\")", themeService);
+        Assert.Contains("SetBrush(\"DestructiveBrush\", isDark ? \"#DC2626\" : \"#DC2626\")", themeService);
+        Assert.Contains("SetBrush(\"DestructiveHoverBrush\", isDark ? \"#B91C1C\" : \"#B91C1C\")", themeService);
+        Assert.Contains("SetBrush(\"DestructivePressedBrush\", isDark ? \"#991B1B\" : \"#991B1B\")", themeService);
+    }
+
+    [Fact]
     public void SourceAndAnalysisStep_ContainsSelectionAndAnalysisTogether()
     {
         var xaml = ReadMainWindowXaml();
@@ -361,8 +434,9 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("Command=\"{Binding CancelPreviewInvalidationCommand}\"", footer);
         Assert.Contains("Command=\"{Binding ConfirmPreviewInvalidationCommand}\"", footer);
         Assert.Contains("Content=\"{Binding PreviewInvalidationConfirmText}\"", footer);
-        Assert.Contains("\"Changing this setting requires a new preview\"", viewModel);
-        Assert.Contains("\"Este cambio requiere generar un nuevo preview\"", viewModel);
+        Assert.Contains("public string PreviewInvalidationConfirmationTitleText => T(LocalizationKeys.VideoDialogPreviewInvalidationTitle);", viewModel);
+        Assert.Contains("public string PreviewInvalidationConfirmationBodyText => T(LocalizationKeys.VideoDialogPreviewInvalidationBody);", viewModel);
+        Assert.Contains("public string PreviewInvalidationConfirmText => T(LocalizationKeys.VideoDialogPreviewInvalidationConfirm);", viewModel);
         Assert.DoesNotContain("MessageBox", xaml);
         Assert.DoesNotContain("MessageBox", viewModel);
     }

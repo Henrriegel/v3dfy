@@ -234,7 +234,7 @@ public sealed class MainWindowAppShellSourceTests
             xaml,
             "x:Key=\"ShellSidebarNavButtonStyle\"",
             "x:Key=\"SettingsMenuListBoxItemStyle\""));
-        Assert.Contains("public string ShellTaglineText => Text(", source);
+        Assert.Contains("public string ShellTaglineText => T(LocalizationKeys.ShellTagline);", source);
         Assert.Contains("private bool _isSidebarPinnedExpanded = true;", source);
         Assert.Contains("private bool _isSidebarHoverExpanded;", source);
         Assert.Contains("public bool IsSidebarPinnedExpanded", source);
@@ -456,11 +456,12 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("Text=\"{Binding HomeVideoCardTitleText}\"", home);
         Assert.Contains("Text=\"{Binding HomeImageCardTitleText}\"", home);
         Assert.Contains("Text=\"{Binding HomeSettingsCardTitleText}\"", home);
-        Assert.Contains("Text=\"{Binding ReadyNowText}\"", home);
-        Assert.Contains("Text=\"{Binding ComingNextText}\"", home);
-        Assert.Contains("public string HomeVideoCardBodyText => Text(", source);
-        Assert.Contains("Ready now", source);
-        Assert.Contains("Coming next", source);
+        Assert.DoesNotContain("Text=\"{Binding ReadyNowText}\"", home);
+        Assert.DoesNotContain("Text=\"{Binding ComingNextText}\"", home);
+        Assert.DoesNotContain("Text=\"{Binding OpenSectionText}\"", home);
+        Assert.DoesNotContain("Text=\"{Binding HomeModelsStatusText}\"", home);
+        Assert.DoesNotContain("Text=\"{Binding SettingsText}\"", home);
+        Assert.Contains("public string HomeVideoCardBodyText => T(LocalizationKeys.VideoHomeCardBody);", source);
     }
 
     [Fact]
@@ -499,7 +500,7 @@ public sealed class MainWindowAppShellSourceTests
         var constructor = ExtractSourceRange(
             source,
             "public MainWindowViewModel()",
-            "public string AppTitle => \"v3dfy\";");
+            "public string AppTitle =>");
         var selectImageMethod = ExtractSourceRange(
             source,
             "private void TrySelectImage(string path)",
@@ -609,7 +610,8 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxScaffold\"", imageSection);
         Assert.Contains("Visibility=\"{Binding ImageParallaxSetupStepVisibility}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding ParallaxDepthIntensityOptions}\"", imageSection);
-        Assert.Contains("SelectedItem=\"{Binding SelectedParallaxDepthIntensity}\"", imageSection);
+        Assert.Contains("SelectedValuePath=\"Value\"", imageSection);
+        Assert.Contains("SelectedValue=\"{Binding SelectedParallaxDepthIntensity}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding ParallaxMotionDirectionOptions}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding ParallaxZoomAmplitudeOptions}\"", imageSection);
         Assert.Contains("ItemsSource=\"{Binding ParallaxDurationOptions}\"", imageSection);
@@ -733,7 +735,8 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("private string CreateFullImageActivityLogText()", source);
         Assert.Contains("ActivityLogModalKind.Image", source);
         Assert.Contains("CreateFullImageActivityLogText()", copyFullLogMethod);
-        Assert.Contains("image activity log", copyFullLogMethod);
+        Assert.Contains("LocalizationKeys.ActivityLogImageName", copyFullLogMethod);
+        AssertLocalizationKeyPairExists("ActivityLog.ImageName");
         Assert.Contains("public string ImageActivityLogText", source);
         Assert.Contains("public RelayCommand SelectImageParallaxModeCommand", source);
         Assert.Contains("public RelayCommand SelectImageStereoModeCommand", source);
@@ -774,7 +777,7 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("_hasEnteredImagePreviewExportStage = false;", source);
         Assert.Contains("SelectedImageConversionStep = ImageConversionStep.ModeAndSource;", selectImageMethod);
         Assert.Contains("_hasEnteredImagePreviewExportStage = false;", selectImageMethod);
-        Assert.Contains("Image workflow mode changed:", selectModeMethod);
+        Assert.Contains("LocalizationKeys.ImageLogWorkflowChangedFormat", selectModeMethod);
         Assert.Contains("ApplyImageSetupChanged(", selectModeMethod);
         Assert.Contains("SelectedImageConversionStep == ImageConversionStep.ModeAndSource", selectModeMethod);
         Assert.Contains("if (step == ImageConversionStep.Setup && !CanOpenImageSetupStep)", selectStepMethod);
@@ -782,9 +785,9 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("if (!CanMoveImageWizardNext)", moveNextMethod);
         Assert.Contains("_hasEnteredImagePreviewExportStage = false;", setupChangedMethod);
         Assert.Contains("ShowLogCopyNotification(", setupChangedMethod);
-        Assert.Contains("2.5D Photo", source);
-        Assert.Contains("Stereoscopic image", source);
-        Assert.Contains("verified bundled iw3 image support", source);
+        Assert.Contains("LocalizationKeys.ImageWorkflowParallaxTitle", source);
+        Assert.Contains("LocalizationKeys.ImageWorkflowStereoTitle", source);
+        Assert.Contains("LocalizationKeys.ImageIntro", source);
         Assert.DoesNotContain("StartImageConversionCommand", source);
         Assert.DoesNotContain("RunImageConversionCommand", source);
         Assert.DoesNotContain("GenerateImagePreviewCommand", source);
@@ -820,7 +823,7 @@ public sealed class MainWindowAppShellSourceTests
         var constructor = ExtractSourceRange(
             source,
             "public MainWindowViewModel()",
-            "public string AppTitle => \"v3dfy\";");
+            "public string AppTitle =>");
         var toggleMethod = ExtractSourceRange(
             source,
             "private void ToggleSidebar()",
@@ -886,6 +889,12 @@ public sealed class MainWindowAppShellSourceTests
         }
 
         throw new FileNotFoundException($"Could not locate {Path.Combine(relativePath)}.");
+    }
+
+    private static void AssertLocalizationKeyPairExists(string key)
+    {
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "en.json"));
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "es.json"));
     }
 
     private static string ExtractSourceRange(string source, string startMarker, string endMarker)

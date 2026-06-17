@@ -7,117 +7,64 @@ public sealed class MainWindowViewModelLocalizationSourceTests
     {
         var source = ReadMainWindowViewModelSource();
 
-        Assert.Contains("\"Live conversion\"", source);
-        Assert.Contains("\"Conversion en vivo\"", source);
-        Assert.Contains("\"Conversion summary\"", source);
-        Assert.Contains("\"Resumen de conversion\"", source);
-        Assert.Contains("\"Output profile\"", source);
-        Assert.Contains("\"Perfil de salida\"", source);
-        Assert.Contains("\"Custom based on", source);
-        Assert.Contains("\"Personalizado basado en", source);
-        Assert.Contains("\"Primary output\"", source);
-        Assert.Contains("\"Salida principal\"", source);
-        Assert.Contains("\"LG-compatible copy\"", source);
-        Assert.Contains("\"Copia compatible LG\"", source);
-        Assert.Contains("\"Create LG 3D TV 2012 compatible MP4 copy\"", source);
-        Assert.Contains("\"Crear copia MP4 compatible con LG 3D TV 2012\"", source);
-        Assert.Contains("\"Open LG-compatible copy when available\"", source);
-        Assert.Contains("\"Abrir copia compatible LG cuando exista\"", source);
-        Assert.Contains("\"Primary output was generated successfully", source);
-        Assert.Contains("\"La salida principal se genero correctamente", source);
-        Assert.Contains("\"LG-compatible copy was generated successfully", source);
-        Assert.Contains("\"La copia compatible LG se genero correctamente", source);
+        Assert.Contains("public string ConversionRunningTitle => T(LocalizationKeys.VideoConversionRunningTitle);", source);
+        Assert.Contains("public string ConversionSummaryTitle => T(LocalizationKeys.VideoConversionSummaryTitle);", source);
+        Assert.Contains("LocalizationKeys.VideoOutputProfileLabel", source);
+        Assert.Contains("LocalizationKeys.VideoOutputPrimary", source);
+        Assert.Contains("LocalizationKeys.VideoOutputLgCompatibilityCopy", source);
+        Assert.Contains("public string CreateLgCompatibilityCopyText => T(LocalizationKeys.VideoLgCompatibilityCopyCreate);", source);
+        Assert.Contains("public string PreferLgCompatibilityCopyWhenOpeningText => T(LocalizationKeys.VideoLgCompatibilityCopyPrefer);", source);
+        Assert.Contains("LocalizationKeys.VideoLogConversionPrimaryOutputGeneratedFormat", source);
+        Assert.Contains("LocalizationKeys.VideoLogConversionLgCopyGeneratedFormat", source);
         Assert.DoesNotContain("\"Selected preset\"", source);
     }
 
     [Fact]
-    public void PreviewWorkflow_UsesEnglishAndSpanishLabels()
+    public void PreviewWorkflow_UsesLocalizationKeysForViewModelAuthoredLabels()
     {
         var source = ReadMainWindowViewModelSource();
+        var englishLocalization = ReadAppLocalization("en.json");
+        var spanishLocalization = ReadAppLocalization("es.json");
 
-        Assert.Contains("\"Preview\"", source);
-        Assert.Contains("\"Vista previa\"", source);
-        Assert.Contains("\"Preview required\"", source);
-        Assert.Contains("\"Vista previa requerida\"", source);
-        Assert.Contains("\"Generate preview\"", source);
-        Assert.Contains("\"Generar vista previa\"", source);
-        Assert.Contains("\"Generating preview\"", source);
-        Assert.Contains("\"Generando vista previa\"", source);
-        Assert.Contains("\"Preparing preview...\"", source);
-        Assert.Contains("\"Preparando vista previa...\"", source);
-        Assert.Contains("\"Cancel preview\"", source);
-        Assert.Contains("\"Cancelar vista previa\"", source);
-        Assert.Contains("\"Preview ready\"", source);
-        Assert.Contains("\"Vista previa lista\"", source);
-        Assert.Contains("\"Open externally\"", source);
-        Assert.Contains("\"Abrir externamente\"", source);
-        Assert.Contains("\"If embedded playback is unavailable, use Open externally.\"", source);
-        Assert.Contains("\"Si la reproduccion integrada no esta disponible, usa Abrir externamente.\"", source);
-        Assert.Contains("\"Preview engine: FFmpeg source clip + bundled Python/iw3\"", source);
-        Assert.Contains("\"Motor de vista previa: clip fuente FFmpeg + Python/iw3 incluido\"", source);
-        Assert.Contains("\"Running with: FFmpeg source clip + bundled Python/iw3\"", source);
-        Assert.Contains("\"Ejecutando con: clip fuente FFmpeg + Python/iw3 incluido\"", source);
-        Assert.Contains("\"FFmpeg source clip\"", source);
-        Assert.Contains("\"Bundled Python/iw3\"", source);
-        Assert.Contains("\"GPU metrics show global adapter activity, not guaranteed per-process attribution.\"", source);
-        Assert.Contains("\"Las metricas de GPU muestran actividad global del adaptador, no atribucion garantizada por proceso.\"", source);
-        Assert.Contains("\"Copy preview log\"", source);
-        Assert.Contains("\"Copiar log de vista previa\"", source);
+        Assert.Contains("public string PreviewTitleText => T(LocalizationKeys.VideoPreviewTitle);", source);
+        Assert.Contains("public string PreviewRequiredTitleText => T(LocalizationKeys.VideoPreviewRequiredTitle);", source);
+        Assert.Contains("public string GeneratePreviewText => T(LocalizationKeys.VideoPreviewGenerate);", source);
+        Assert.Contains("public string PreviewGeneratingTitleText => T(LocalizationKeys.VideoPreviewGeneratingTitle);", source);
+        Assert.Contains("public string CancelPreviewText => T(LocalizationKeys.VideoPreviewCancel);", source);
+        Assert.Contains("public string PreviewReadyTitleText => T(LocalizationKeys.VideoPreviewReadyTitle);", source);
+        Assert.Contains("public string OpenPreviewExternallyText => T(LocalizationKeys.VideoPreviewOpenExternally);", source);
+        Assert.Contains("public string PreviewPlaybackFallbackText => T(LocalizationKeys.VideoPlayerFallback);", source);
+        Assert.Contains("public string PreviewEngineText => T(LocalizationKeys.VideoPreviewEngine);", source);
+        Assert.Contains("public string PreviewRunningWithText => T(LocalizationKeys.VideoPreviewRunningWith);", source);
+        Assert.Contains("public string PreviewGpuMetricsNoteText => T(LocalizationKeys.VideoPreviewGpuMetricsNote);", source);
+        Assert.Contains("public string CopyPreviewLogText => T(LocalizationKeys.VideoLogCopyPreview);", source);
         Assert.Contains("\"iw3 attempted to download a runtime dependency. This bundle is not fully offline-ready.\"", ReadIw3RuntimeDownloadDetectorSource());
         Assert.Contains("\"iw3 intento descargar una dependencia en tiempo de ejecucion. Este bundle aun no esta completamente listo para uso offline.\"", ReadIw3RuntimeDownloadDetectorSource());
-        Assert.Contains("\"Missing iw3 runtime dependency\"", source);
-        Assert.Contains("\"Dependencia de runtime iw3 faltante\"", source);
         Assert.Contains("Iw3DefaultStereoRuntimeDependencyRelativePath", source);
-        Assert.Contains("\"Preview timing: modal opened.\"", source);
-        Assert.Contains("\"Preview timing: preview ready modal opened.\"", source);
+        Assert.Contains("LocalizationKeys.VideoLogPreviewTimingModalOpened", source);
+        Assert.Contains("LocalizationKeys.VideoLogPreviewTimingReadyModalOpened", source);
         Assert.Contains("\"Preview timings: source clip", ReadLocalIw3PreviewExecutorSource());
         Assert.Contains("\"Tiempos de vista previa: clip fuente", ReadLocalIw3PreviewExecutorSource());
-        Assert.Contains("\"Play\"", source);
-        Assert.Contains("\"Reproducir\"", source);
-        Assert.Contains("\"Pause\"", source);
-        Assert.Contains("\"Pausar\"", source);
-        Assert.Contains("\"Replay\"", source);
-        Assert.Contains("\"Repetir\"", source);
-        Assert.Contains("\"Volume\"", source);
-        Assert.Contains("\"Volumen\"", source);
-        Assert.Contains("\"Muted\"", source);
-        Assert.Contains("\"Silenciado\"", source);
-        Assert.Contains("\"Mute\"", source);
-        Assert.Contains("\"Silenciar\"", source);
-        Assert.Contains("\"Unmute\"", source);
-        Assert.Contains("\"Activar sonido\"", source);
-        Assert.Contains("\"Preview ended\"", source);
-        Assert.Contains("\"Vista previa finalizada\"", source);
-        Assert.Contains("\"Embedded playback unavailable\"", source);
-        Assert.Contains("\"Reproduccion integrada no disponible\"", source);
-        Assert.Contains("\"GPU global\"", source);
-        Assert.Contains("\"VRAM global\"", source);
-        Assert.Contains("\"Continue\"", source);
-        Assert.Contains("\"Continuar\"", source);
-        Assert.Contains("\"From\"", source);
-        Assert.Contains("\"Desde\"", source);
-        Assert.Contains("\"To\"", source);
-        Assert.Contains("\"Hasta\"", source);
-        Assert.Contains("\"Maximum preview duration is 1 minute 30 seconds\"", source);
-        Assert.Contains("\"La duracion maxima de la vista previa es de 1 minuto 30 segundos\"", source);
-        Assert.Contains("\"Preview accepted\"", source);
-        Assert.Contains("\"Vista previa aceptada\"", source);
-        Assert.Contains("\"Preview outdated\"", source);
-        Assert.Contains("\"Vista previa desactualizada\"", source);
-        Assert.Contains("\"Open preview\"", source);
-        Assert.Contains("\"Abrir vista previa\"", source);
-        Assert.Contains("\"Delete preview\"", source);
-        Assert.Contains("\"Eliminar vista previa\"", source);
-        Assert.Contains("\"Preview status\"", source);
-        Assert.Contains("\"Estado de vista previa\"", source);
-        Assert.Contains("\"Preview duration\"", source);
-        Assert.Contains("\"Duracion de vista previa\"", source);
-        Assert.Contains("\"Preview start time\"", source);
-        Assert.Contains("\"Tiempo de inicio de vista previa\"", source);
-        Assert.Contains("\"View log\"", source);
-        Assert.Contains("\"Ver log\"", source);
-        Assert.Contains("\"Copy full log\"", source);
-        Assert.Contains("\"Copiar todo el log\"", source);
+        Assert.Contains("public string PreviewPlayText => T(LocalizationKeys.VideoPlayerPlay);", source);
+        Assert.Contains("public string PreviewPauseText => T(LocalizationKeys.VideoPlayerPause);", source);
+        Assert.Contains("public string PreviewReplayText => T(LocalizationKeys.VideoPlayerReplay);", source);
+        Assert.Contains("public string PreviewVolumeText => T(LocalizationKeys.VideoPlayerVolume);", source);
+        Assert.Contains("public string PreviewMutedText => T(LocalizationKeys.VideoPlayerMuted);", source);
+        Assert.Contains("public string PreviewMuteText => T(LocalizationKeys.VideoPlayerMute);", source);
+        Assert.Contains("public string PreviewUnmuteText => T(LocalizationKeys.VideoPlayerUnmute);", source);
+        Assert.Contains("public string PreviewEndedText => T(LocalizationKeys.VideoPlayerEnded);", source);
+        Assert.Contains("public string EmbeddedPlaybackUnavailableText => T(LocalizationKeys.VideoPlayerEmbeddedUnavailable);", source);
+        Assert.Contains("public string PreviewMaximumDurationText => T(LocalizationKeys.VideoPreviewMaximumDuration);", source);
+        Assert.Contains("public string PreviewAcceptedTitleText => T(LocalizationKeys.VideoPreviewAcceptedTitle);", source);
+        Assert.Contains("public string PreviewOutdatedText => T(LocalizationKeys.VideoPreviewOutdated);", source);
+        Assert.Contains("public string OpenPreviewText => T(LocalizationKeys.VideoPreviewOpen);", source);
+        Assert.Contains("public string DeletePreviewText => T(LocalizationKeys.VideoPreviewDelete);", source);
+        Assert.Contains("LocalizationKeys.VideoPreviewStatusLabel", source);
+        Assert.Contains("LocalizationKeys.VideoPreviewDuration", source);
+        Assert.Contains("LocalizationKeys.VideoPreviewStartTime", source);
+        Assert.Contains("public string ViewLogText => T(LocalizationKeys.CommonViewLog);", source);
+        Assert.Contains("\"Modal.CopyFullLog\": \"Copy full log\"", englishLocalization);
+        Assert.Contains("\"Modal.CopyFullLog\": \"Copiar todo el log\"", spanishLocalization);
     }
 
     [Fact]
@@ -161,9 +108,9 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.Contains("System.Windows.Clipboard.SetText(logText);", copyHelperMethod);
         Assert.Contains("ShowLogCopySuccessNotification();", copyHelperMethod);
         Assert.Contains("ShowLogCopyFailureNotification();", copyHelperMethod);
-        Assert.Contains("Could not copy {englishLogName} to clipboard", copyHelperMethod);
-        Assert.Contains("No se pudo copiar el {spanishLogName} al portapapeles", copyHelperMethod);
-        Assert.Contains("AppendPreviewLogLine(Text(englishMessage, spanishMessage));", copyHelperMethod);
+        Assert.Contains("LocalizationKeys.CommonCouldNotCopyLog", source);
+        Assert.Contains("LocalizationKeys.ActivityLogCopyFailedFormat", copyHelperMethod);
+        Assert.Contains("AddLogResolved(message);", copyHelperMethod);
     }
 
     [Fact]
@@ -171,9 +118,8 @@ public sealed class MainWindowViewModelLocalizationSourceTests
     {
         var source = ReadMainWindowViewModelSource();
 
-        Assert.Contains("public string LogCopiedText => Text(\"Log copied\", \"Log copiado\")", source);
-        Assert.Contains("\"Could not copy log\"", source);
-        Assert.Contains("\"No se pudo copiar el log\"", source);
+        Assert.Contains("public string LogCopiedText => T(LocalizationKeys.CommonLogCopied);", source);
+        Assert.Contains("public string CouldNotCopyLogText => T(LocalizationKeys.CommonCouldNotCopyLog);", source);
         Assert.Contains("public string LogCopyNotificationText", source);
         Assert.Contains("public Visibility LogCopyNotificationVisibility", source);
         Assert.Contains("private void ShowLogCopySuccessNotification()", source);
@@ -233,7 +179,7 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         var resetMethod = ExtractSourceRange(
             source,
             "private void ResetConversionExecutionState",
-            "private static string QualityPresetText");
+            "private string QualityPresetText");
 
         Assert.Contains("ApplyUiOnlyRefresh", languageProperty);
         Assert.Contains("UpdateLocalModelSelectionCandidates(regenerateCurrentPlan: false)", languageProperty);
@@ -285,7 +231,7 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.Contains("ShouldShowConversionMissingRequirements()", missingVisibilityProperty);
         Assert.Contains("startGate.Blocker != ConversionExecutionBlocker.PreviewRequired", source);
         Assert.Contains("if (IsConversionRunning)", readinessStatusProperty);
-        Assert.Contains("Text(\"Converting\", \"Convirtiendo\")", readinessStatusProperty);
+        Assert.Contains("T(LocalizationKeys.VideoConversionStatusConverting)", readinessStatusProperty);
         Assert.Contains("if (IsPreviewGenerating)", readinessStatusProperty);
         Assert.Contains("IsConversionRunning || IsPreviewGenerating", missingComponentsProperty);
         Assert.Contains("ConversionExecutionDetailText", blockedReasonProperty);
@@ -315,10 +261,8 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.True(staleCleanupIndex >= 0);
         Assert.True(generatingStateIndex > staleCleanupIndex);
         Assert.Contains("_previewCacheCleaner.DeletePartialFiles", cleanupMethod);
-        Assert.Contains("\"Stale preview partial file was cleaned.\"", cleanupMethod);
-        Assert.Contains("\"Se limpi", cleanupMethod);
-        Assert.Contains("\"Could not delete stale partial file.\"", cleanupMethod);
-        Assert.Contains("\"No se pudo eliminar un archivo parcial anterior.\"", cleanupMethod);
+        Assert.Contains("LocalizationKeys.VideoLogPreviewStalePartialFileCleaned", cleanupMethod);
+        Assert.Contains("LocalizationKeys.VideoLogPreviewStalePartialFileDeleteFailed", cleanupMethod);
     }
 
     [Fact]
@@ -331,14 +275,10 @@ public sealed class MainWindowViewModelLocalizationSourceTests
             "private IEnumerable<ConversionExecutionLogEntry> GetConversionResultLogsForLivePanel");
 
         Assert.Contains("AddCurrentAttemptConversionPartialCleanupActivityLogs(result);", activityMethod);
-        Assert.Contains("\"Conversion partial file was cleaned.\"", activityMethod);
-        Assert.Contains("\"El archivo parcial de conversi", activityMethod);
-        Assert.Contains("\"Could not delete conversion partial file.\"", activityMethod);
-        Assert.Contains("\"No se pudo eliminar el archivo parcial de conversi", activityMethod);
-        Assert.Contains("\"Stale conversion partial file was cleaned.\"", activityMethod);
-        Assert.Contains("\"Se limpi", activityMethod);
-        Assert.Contains("\"Could not delete stale partial file.\"", activityMethod);
-        Assert.Contains("\"No se pudo eliminar un archivo parcial anterior.\"", activityMethod);
+        Assert.Contains("LocalizationKeys.VideoLogConversionPartialFileCleaned", activityMethod);
+        Assert.Contains("LocalizationKeys.VideoLogConversionPartialFileDeleteFailed", activityMethod);
+        Assert.Contains("LocalizationKeys.VideoLogConversionStalePartialFileCleaned", activityMethod);
+        Assert.Contains("LocalizationKeys.VideoLogConversionStalePartialFileDeleteFailed", activityMethod);
     }
 
     [Fact]
@@ -359,7 +299,7 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.DoesNotContain("AddLog(message, message);", progressMethod);
         Assert.Contains("AppendPreviewResultLog(log);", generateMethod);
         Assert.DoesNotContain("AddLog(log.EnglishMessage, log.SpanishMessage);", generateMethod);
-        Assert.Contains("AddLog(result.EnglishSummary, result.SpanishSummary);", generateMethod);
+        Assert.Contains("AddVideoLogResolved(LocalizePreviewGenerationSummary(result.EnglishSummary));", generateMethod);
     }
 
     [Fact]
@@ -395,7 +335,7 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         var hasCompletedAnalysisProperty = ExtractSourceRange(
             source,
             "public bool HasCompletedAnalysis",
-            "public IReadOnlyList<string> LanguageOptions");
+            "public IReadOnlyList<AppLanguageOptionViewModel> LanguageOptions");
         var editabilityProperty = ExtractSourceRange(
             source,
             "public bool CanEditPreviewTimeRange",
@@ -472,8 +412,7 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.Contains("RecordPreviewCanceled();", cancelMethod);
         Assert.Contains("Status = PreviewGenerationStatus.Canceled", recordCanceledMethod);
         Assert.Contains("OutputPath = null", recordCanceledMethod);
-        Assert.Contains("\"Preview generation was canceled.\"", recordCanceledMethod);
-        Assert.Contains("\"La generacion de vista previa fue cancelada.\"", recordCanceledMethod);
+        Assert.Contains("T(LocalizationKeys.VideoLogPreviewCanceled)", recordCanceledMethod);
         Assert.Contains("RaiseConversionRunningModePropertiesChanged();", recordCanceledMethod);
         Assert.Contains("result.WasCanceled", generateCore);
         Assert.Contains("_previewCancellationTokenSource?.IsCancellationRequested == true", generateCore);
@@ -483,8 +422,7 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.Contains("_lastPreviewCachePaths?.AllPaths", cleanupMethod);
         Assert.Contains("DeletePreviewFilesAsync(paths, logDeletion: false)", cleanupMethod);
         Assert.Contains("_previewCacheCleaner.DeletePartialFiles", cleanupMethod);
-        Assert.Contains("\"Preview partial files were cleaned.\"", cleanupMethod);
-        Assert.Contains("\"Los archivos parciales de vista previa fueron limpiados.\"", cleanupMethod);
+        Assert.Contains("LocalizationKeys.VideoLogPreviewPartialFilesCleaned", cleanupMethod);
     }
 
     [Fact]
@@ -549,7 +487,8 @@ public sealed class MainWindowViewModelLocalizationSourceTests
         Assert.Contains("AppendPreviewOfflineDependencyWarningIfNeeded(normalizedUpdate)", previewProgressMethod);
         Assert.Contains("AddConversionOfflineDependencyWarningIfNeeded(normalizedUpdate)", conversionProgressMethod);
         Assert.Contains("Iw3RuntimeDownloadDetector.EnglishWarning", source);
-        Assert.Contains("AddLog(result.EnglishSummary, result.SpanishSummary);", source);
+        Assert.Contains("LocalizationKeys.VideoLogRuntimeDownloadWarning", source);
+        Assert.Contains("LocalizePreviewGenerationSummary(result.EnglishSummary)", source);
         Assert.DoesNotContain("AddLog(log.EnglishMessage, log.SpanishMessage);", previewProgressMethod);
     }
 
@@ -801,7 +740,7 @@ public sealed class MainWindowViewModelLocalizationSourceTests
 
         Assert.Contains("UpdateForCurrentConfiguration", source);
         Assert.Contains("RestoreAcceptedIfCurrent", ReadPreviewWorkflowStateSource());
-        Assert.Contains("Accepted preview matches the current settings again.", source);
+        Assert.Contains("LocalizationKeys.VideoLogPreviewAcceptedRestored", source);
         Assert.Contains("PreviewOutputFileExists()", source);
     }
 
@@ -849,6 +788,29 @@ public sealed class MainWindowViewModelLocalizationSourceTests
 
         throw new FileNotFoundException(
             "Could not locate src/V3dfy.Core/Preview/PreviewWorkflowState.cs.");
+    }
+
+    private static string ReadAppLocalization(string fileName)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(
+                directory.FullName,
+                "src",
+                "V3dfy.App",
+                "Localization",
+                fileName);
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllText(candidate);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException(
+            $"Could not locate src/V3dfy.App/Localization/{fileName}.");
     }
 
     private static string ReadIw3RuntimeDownloadDetectorSource()

@@ -17,6 +17,7 @@ using V3dfy.Core.Diagnostics;
 using V3dfy.Core.Estimation;
 using V3dfy.Core.Execution;
 using V3dfy.Core.Image;
+using V3dfy.Core.Localization;
 using V3dfy.Core.Models;
 using V3dfy.Core.Planning;
 using V3dfy.Core.Presets;
@@ -228,6 +229,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IImageStereoExporter _imageStereoExporter;
     private readonly IImageParallaxExporter _imageParallaxExporter;
     private readonly ModelPackAppImportCoordinator _modelPackImportCoordinator;
+    private readonly ILocalizationService _localizationService;
     private readonly ConversionPlanOptionState _planOptionState = new();
     private readonly ConversionOutputPathState _outputPathState = new();
     private readonly ConversionWorkflowState _workflowState = new();
@@ -235,7 +237,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly StringBuilder _previewGenerationLogTextBuilder = new();
     private ActivityLogModalKind _activeActivityLogModalKind;
     private string? _selectedVideoPath;
-    private string _selectedLanguage = "English";
+    private string _selectedLanguage = LocalizationCatalog.EnglishLanguageCode;
     private string _selectedTheme = "Dark";
     private EngineHealthStatus? _toolHealth;
     private EngineDependencyHealth? _dependencyHealth;
@@ -257,17 +259,18 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _previewFromText = PreviewTimeRangeService.Format(TimeSpan.Zero);
     private string _previewToText = PreviewTimeRangeService.Format(PreviewTimeRangeService.DefaultDuration);
     private string _lastConversionOutputLine = string.Empty;
-    private string _cpuUsageText = "CPU: Detecting...";
-    private string _ramUsageText = "RAM: Detecting...";
-    private string _gpuUsageText = "GPU: Detecting...";
+    private string _cpuUsageText = string.Empty;
+    private string _ramUsageText = string.Empty;
+    private string _gpuUsageText = string.Empty;
     private string _vramUsageText = string.Empty;
-    private string _previewCpuUsageText = "CPU: Detecting...";
-    private string _previewRamUsageText = "RAM: Detecting...";
-    private string _previewGpuUsageText = "GPU: Detecting...";
-    private string _previewVramUsageText = "VRAM: Detecting...";
-    private string _previewGpuMetricsStatusText = "GPU metrics: Detecting...";
-    private string _previewStageEnglishText = "Preparing preview";
-    private string _previewStageSpanishText = "Preparando vista previa";
+    private string _previewCpuUsageText = string.Empty;
+    private string _previewRamUsageText = string.Empty;
+    private string _previewGpuUsageText = string.Empty;
+    private string _previewVramUsageText = string.Empty;
+    private string _previewGpuMetricsStatusText = string.Empty;
+    private string? _previewStageKey = LocalizationKeys.VideoPreviewStagePreparing;
+    private string _previewStageEnglishText = string.Empty;
+    private string _previewStageSpanishText = string.Empty;
     private AppSection _selectedAppSection = AppSection.Home;
     private SettingsSection _selectedSettingsSection = SettingsSection.VisualSettings;
     private bool _isSidebarPinnedExpanded = true;
@@ -291,8 +294,9 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool _hasEnteredImagePreviewExportStage;
     private bool _isImageExportRunning;
     private int _imageExportProgressPercent;
-    private string _imageExportProgressEnglishText = "No image conversion has run yet.";
-    private string _imageExportProgressSpanishText = "Aun no se ha ejecutado ninguna conversion de imagen.";
+    private string? _imageExportProgressKey = LocalizationKeys.ImageProgressNotStarted;
+    private string _imageExportProgressEnglishText = string.Empty;
+    private string _imageExportProgressSpanishText = string.Empty;
     private string _lastImageExportPrimaryPath = string.Empty;
     private string _lastImageExportOutputDirectory = string.Empty;
     private IReadOnlyList<string> _lastImageExportGeneratedFiles = [];
@@ -300,23 +304,32 @@ public sealed class MainWindowViewModel : ObservableObject
     private string _lastImageExportErrorSpanishText = string.Empty;
     private bool _isImageExportOutputOutdated;
     private bool _isImageParallaxModelHelpContext;
-    private readonly IReadOnlyList<LocalizedOptionViewModel<ImageStereoOutputFormat>> _allStereoOutputFormatOptions =
-    [
-        new(ImageStereoOutputFormat.SideBySide, "SBS", "SBS"),
-        new(ImageStereoOutputFormat.HalfTopBottom, "Half Top-Bottom / TAB", "Half Top-Bottom / TAB"),
-        new(ImageStereoOutputFormat.Anaglyph, "Anaglyph", "Anaglifo"),
-    ];
+    private readonly IReadOnlyList<LocalizedOptionViewModel<TargetDevicePreset>> _outputPresetOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<OutputContainer>> _outputContainerOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<AiQualityPreset>> _qualityPresetOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<ThreeDIntensity>> _threeDIntensityOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<ThreeDOutputFormat>> _threeDOutputFormatOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _parallaxDepthIntensityOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _parallaxMotionDirectionOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _parallaxZoomAmplitudeOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _parallaxDurationOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _parallaxSmoothingOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _parallaxLayerBehaviorOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _stereoEyeSeparationOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _stereoConvergenceOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<string>> _stereoAnaglyphModeOptions;
+    private readonly IReadOnlyList<LocalizedOptionViewModel<ImageStereoOutputFormat>> _allStereoOutputFormatOptions;
 
     private bool HasAnyImageConversionOutput => !string.IsNullOrWhiteSpace(_lastImageExportPrimaryPath);
 
     private bool HasCurrentImageConversionOutput => HasAnyImageConversionOutput && !IsImageExportOutputOutdated;
 
-    private string _modelPackImportStatusEnglishText = "No model pack import has run yet.";
-    private string _modelPackImportStatusSpanishText = "Aun no se ha importado ningun paquete de modelos.";
+    private string _modelPackImportStatusEnglishText = string.Empty;
+    private string _modelPackImportStatusSpanishText = string.Empty;
     private string _lastModelPackImportSummaryEnglishText = string.Empty;
     private string _lastModelPackImportSummarySpanishText = string.Empty;
-    private string _globalBusyEnglishText = "Loading...";
-    private string _globalBusySpanishText = "Cargando...";
+    private string _globalBusyEnglishText = string.Empty;
+    private string _globalBusySpanishText = string.Empty;
     private string _completedConversionOutputPath = string.Empty;
     private ConversionExecutionResult? _completedConversionResult;
     private ConversionProgressTimingEstimate? _conversionTimingEstimate;
@@ -365,6 +378,101 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel()
     {
+        _localizationService = CreateLocalizationService();
+        LanguageOptions = CreateLanguageOptions(_localizationService.AvailableLanguages);
+        _selectedLanguage = _localizationService.ActiveLanguageCode;
+        _outputPresetOptions =
+        [
+            new(TargetDevicePresets.Recommended3dTv, LocalizationKeys.VideoOptionOutputProfileRecommended, _localizationService),
+            new(TargetDevicePresets.MaximumCompatibility, LocalizationKeys.VideoOptionOutputProfileMaximumCompatibility, _localizationService),
+            new(TargetDevicePresets.HighQualityMaster, LocalizationKeys.VideoOptionOutputProfileHighQualityMaster, _localizationService),
+            new(TargetDevicePresets.Lg3dFullHd2012, LocalizationKeys.VideoOptionOutputProfileLegacyLg2012, _localizationService),
+        ];
+        _outputContainerOptions =
+        [
+            new(OutputContainer.MP4, "MP4", "MP4"),
+            new(OutputContainer.MKV, "MKV", "MKV"),
+        ];
+        _qualityPresetOptions =
+        [
+            new(AiQualityPreset.Fast, LocalizationKeys.VideoOptionQualityFast, _localizationService),
+            new(AiQualityPreset.Balanced, LocalizationKeys.VideoOptionQualityBalanced, _localizationService),
+            new(AiQualityPreset.HighQuality, LocalizationKeys.VideoOptionQualityHighQuality, _localizationService),
+        ];
+        _threeDIntensityOptions =
+        [
+            new(ThreeDIntensity.Low, LocalizationKeys.VideoOptionIntensityLow, _localizationService),
+            new(ThreeDIntensity.Medium, LocalizationKeys.VideoOptionIntensityMedium, _localizationService),
+            new(ThreeDIntensity.High, LocalizationKeys.VideoOptionIntensityHigh, _localizationService),
+        ];
+        _threeDOutputFormatOptions =
+        [
+            new(ThreeDOutputFormat.HalfTopBottom, LocalizationKeys.VideoOptionOutputFormatHalfTopBottom, _localizationService),
+            new(ThreeDOutputFormat.HalfSideBySide, LocalizationKeys.VideoOptionOutputFormatHalfSideBySide, _localizationService),
+            new(ThreeDOutputFormat.Anaglyph, LocalizationKeys.VideoOptionOutputFormatAnaglyph, _localizationService),
+        ];
+        _parallaxDepthIntensityOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("Low", LocalizationKeys.ImageParallaxDepthIntensityLow),
+            ("Medium", LocalizationKeys.ImageParallaxDepthIntensityMedium),
+            ("High", LocalizationKeys.ImageParallaxDepthIntensityHigh),
+        });
+        _parallaxMotionDirectionOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("Left to right", LocalizationKeys.ImageParallaxMotionDirectionLeftToRight),
+            ("Right to left", LocalizationKeys.ImageParallaxMotionDirectionRightToLeft),
+            ("Push in", LocalizationKeys.ImageParallaxMotionDirectionPushIn),
+            ("Pull back", LocalizationKeys.ImageParallaxMotionDirectionPullBack),
+            ("Orbit", LocalizationKeys.ImageParallaxMotionDirectionOrbit),
+        });
+        _parallaxZoomAmplitudeOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("Subtle", LocalizationKeys.ImageParallaxZoomAmplitudeSubtle),
+            ("Medium", LocalizationKeys.ImageParallaxZoomAmplitudeMedium),
+            ("Strong", LocalizationKeys.ImageParallaxZoomAmplitudeStrong),
+        });
+        _parallaxDurationOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("4 seconds", LocalizationKeys.ImageParallaxDuration4Seconds),
+            ("6 seconds", LocalizationKeys.ImageParallaxDuration6Seconds),
+            ("8 seconds", LocalizationKeys.ImageParallaxDuration8Seconds),
+            ("12 seconds", LocalizationKeys.ImageParallaxDuration12Seconds),
+        });
+        _parallaxSmoothingOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("Enabled", LocalizationKeys.ImageParallaxSmoothingEnabled),
+            ("Balanced", LocalizationKeys.ImageParallaxSmoothingBalanced),
+            ("Strong", LocalizationKeys.ImageParallaxSmoothingStrong),
+        });
+        _parallaxLayerBehaviorOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("Foreground / mid / background", LocalizationKeys.ImageParallaxLayerForegroundMidBackground),
+            ("Depth slices", LocalizationKeys.ImageParallaxLayerDepthSlices),
+            ("Soft depth ramp", LocalizationKeys.ImageParallaxLayerSoftDepthRamp),
+        });
+        _stereoEyeSeparationOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("2.0%", LocalizationKeys.ImageStereoEyeSeparation2Percent),
+            ("4.0%", LocalizationKeys.ImageStereoEyeSeparation4Percent),
+            ("6.0%", LocalizationKeys.ImageStereoEyeSeparation6Percent),
+            ("8.0%", LocalizationKeys.ImageStereoEyeSeparation8Percent),
+        });
+        _stereoConvergenceOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            ("Near", LocalizationKeys.ImageStereoConvergenceNear),
+            ("Neutral", LocalizationKeys.ImageStereoConvergenceNeutral),
+            ("Far", LocalizationKeys.ImageStereoConvergenceFar),
+        });
+        _stereoAnaglyphModeOptions = CreateLocalizedStringOptions(new (string Value, string Key)[]
+        {
+            (SupportedStereoAnaglyphMode, LocalizationKeys.ImageStereoAnaglyphModeRedCyan),
+        });
+        _allStereoOutputFormatOptions =
+        [
+            new(ImageStereoOutputFormat.SideBySide, LocalizationKeys.ImageStereoOutputFormatSbs, _localizationService),
+            new(ImageStereoOutputFormat.HalfTopBottom, LocalizationKeys.ImageStereoOutputFormatHalfTopBottom, _localizationService),
+            new(ImageStereoOutputFormat.Anaglyph, LocalizationKeys.ImageStereoOutputFormatAnaglyph, _localizationService),
+        ];
         _toolPaths = new InternalToolPathResolver(AppContext.BaseDirectory).Resolve();
         _healthChecker = new InternalToolsHealthChecker();
         _themeService = new AppThemeService();
@@ -540,20 +648,18 @@ public sealed class MainWindowViewModel : ObservableObject
         CancelPreviewInvalidationCommand = new RelayCommand(CancelPreviewInvalidation);
         AcceptConversionCompletedCommand = new RelayCommand(AcceptConversionCompleted);
 
+        ResetMetricText();
+        ResetPreviewMetricText();
         _themeService.Apply(_selectedTheme);
         _ = CleanStalePreviewFilesAsync();
         _ = RefreshEngineStatusAsync(logRefresh: true);
-        AddLog(
-            "Application shell ready. Select a video to begin.",
-            "La aplicación está lista. Selecciona un video para comenzar.");
-        AddImageLog(
-            "Image workflow ready. Select an image to begin.",
-            "Flujo de imagen listo. Selecciona una imagen para comenzar.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoLogShellReady));
+        AddImageLogResolved(T(LocalizationKeys.ImageLogWorkflowReady));
     }
 
-    public string AppTitle => "v3dfy";
+    public string AppTitle => T(LocalizationKeys.AppTitle);
 
-    public string ShellTaglineText => Text("local 2D to 3D", "2D a 3D local");
+    public string ShellTaglineText => T(LocalizationKeys.ShellTagline);
 
     public bool IsSidebarExpanded
     {
@@ -603,9 +709,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string SidebarToggleGlyphText => IsSidebarExpanded ? "\uE72B" : "\uE72A";
 
-    public string SidebarToggleText => Text(
-        IsSidebarExpanded ? "Collapse sidebar" : "Expand sidebar",
-        IsSidebarExpanded ? "Contraer barra lateral" : "Expandir barra lateral");
+    public string SidebarToggleText => T(
+        IsSidebarExpanded ? LocalizationKeys.SidebarToggleCollapse : LocalizationKeys.SidebarToggleExpand);
 
     public string SidebarToggleToolTipText => SidebarToggleText;
 
@@ -636,125 +741,103 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility VideoConversionSectionVisibility =>
         IsVideoConversionSectionSelected ? Visibility.Visible : Visibility.Collapsed;
 
-    public string HomeNavigationText => Text("Home", "Inicio");
+    public string HomeNavigationText => T(LocalizationKeys.SidebarHome);
 
-    public string ImageConversionNavigationText => Text("Image conversion", "Conversion de imagen");
+    public string ImageConversionNavigationText => T(LocalizationKeys.SidebarImageConversion);
 
-    public string VideoConversionNavigationText => Text("Video conversion", "Conversion de video");
+    public string VideoConversionNavigationText => T(LocalizationKeys.SidebarVideoConversion);
 
-    public string HomeTitleText => Text("Welcome to v3dfy", "Bienvenido a v3dfy");
+    public string HomeTitleText => T(LocalizationKeys.HomeTitle);
 
-    public string HomeDescriptionText => Text(
-        "Local/offline tools for creating 3D media from existing 2D video and image sources.",
-        "Herramientas locales/offline para crear medios 3D desde fuentes 2D de video e imagen.");
+    public string HomeDescriptionText => T(LocalizationKeys.HomeDescription);
 
-    public string HomeVideoCardTitleText => Text("Convert videos to 3D", "Convertir videos a 3D");
+    public string HomeVideoCardTitleText => T(LocalizationKeys.VideoHomeCardTitle);
 
-    public string HomeVideoCardBodyText => Text(
-        "Ready now: analyze a video, choose the LG 3D preset, generate a preview, then convert locally.",
-        "Listo ahora: analiza un video, elige el perfil LG 3D, genera una vista previa y convierte localmente.");
+    public string HomeVideoCardBodyText => T(LocalizationKeys.VideoHomeCardBody);
 
-    public string HomeImageCardTitleText => Text("Convert images to 3D", "Convertir imagenes a 3D");
+    public string HomeImageCardTitleText => T(LocalizationKeys.ImageHomeCardTitle);
 
-    public string HomeImageCardBodyText => Text(
-        "Next: verified bundled iw3 image-depth export, then parallax/2.5D workflow.",
-        "Siguiente: exportacion de imagen/profundidad iw3 incluida y verificada, luego flujo parallax/2.5D.");
+    public string HomeImageCardBodyText => T(LocalizationKeys.ImageHomeCardBody);
 
-    public string HomeSettingsCardTitleText => Text("Manage models/settings", "Administrar modelos/ajustes");
+    public string HomeSettingsCardTitleText => T(LocalizationKeys.HomeSettingsCardTitle);
 
-    public string HomeSettingsCardBodyText => Text(
-        "Check local tools, models, diagnostics, language, theme, and licenses.",
-        "Revisa herramientas locales, modelos, diagnostico, idioma, tema y licencias.");
+    public string HomeSettingsCardBodyText => T(LocalizationKeys.HomeSettingsCardBody);
 
-    public string HomeStatusSummaryText => Text(
-        "Video conversion is ready. Image conversion is gated on verified bundled iw3 image capability.",
-        "La conversion de video esta lista. La conversion de imagen depende de capacidad de imagen iw3 incluida verificada.");
+    public string HomeStatusSummaryText => T(LocalizationKeys.VideoHomeStatusSummary);
 
-    public string HomeLocalOnlyBadgeText => Text("Local/offline", "Local/offline");
+    public string HomeLocalOnlyBadgeText => T(LocalizationKeys.HomeLocalOnlyBadge);
 
-    public string HomeVideoStatusText => Text("Video workflow ready", "Flujo de video listo");
+    public string HomeVideoStatusText => T(LocalizationKeys.VideoHomeStatus);
 
-    public string HomeImageStatusText => Text("Image engine-gated", "Imagen validada por motor");
+    public string HomeImageStatusText => T(LocalizationKeys.ImageHomeStatus);
 
-    public string HomeModelsStatusText => Text("Models and tools", "Modelos y herramientas");
+    public string HomeModelsStatusText => T(LocalizationKeys.HomeModelsStatus);
 
-    public string OpenSectionText => Text("Open", "Abrir");
+    public string OpenSectionText => T(LocalizationKeys.CommonOpen);
 
-    public string ReadyNowText => Text("Ready now", "Listo ahora");
+    public string ReadyNowText => T(LocalizationKeys.HomeReadyNow);
 
-    public string ComingNextText => Text("Coming next", "Proximamente");
+    public string ComingNextText => T(LocalizationKeys.HomeComingNext);
 
-    public string ImageConversionTitleText => Text("Image conversion", "Conversion de imagen");
+    public string ImageConversionTitleText => T(LocalizationKeys.ImageTitle);
 
-    public string ImageConversionIntroText => Text(
-        "Select an image, inspect local metadata, choose a 3D image workflow, and prepare image conversion. Stereoscopic conversion requires verified bundled iw3 image support.",
-        "Selecciona una imagen, revisa metadata local, elige un flujo de imagen 3D y prepara conversion de imagen. La conversion estereoscopica requiere soporte de imagen iw3 incluido verificado.");
+    public string ImageConversionIntroText => T(LocalizationKeys.ImageIntro);
 
-    public string ImageParallaxModeTitleText => Text("2.5D Photo", "Foto 2.5D");
+    public string ImageParallaxModeTitleText => T(LocalizationKeys.ImageWorkflowParallaxTitle);
 
-    public string ImageParallaxModeBodyText => Text(
-        "Uses bundled iw3 to generate a real depth map, then creates a short depth-based 2.5D parallax MP4 with local FFmpeg.",
-        "Usa iw3 incluido para generar un mapa de profundidad real y crea un MP4 parallax 2.5D corto basado en profundidad con FFmpeg local.");
+    public string ImageParallaxModeBodyText => T(LocalizationKeys.ImageWorkflowParallaxDescription);
 
-    public string Image3DOutputModeTitleText => Text("Stereoscopic image", "Imagen estereoscopica");
+    public string Image3DOutputModeTitleText => T(LocalizationKeys.ImageWorkflowStereoTitle);
 
-    public string Image3DOutputModeBodyText => Text(
-        "Uses verified bundled iw3/depth support to create the selected stereoscopic still output when the bundle provides that image capability.",
-        "Usa soporte iw3/profundidad incluido y verificado para crear la salida estereoscopica fija seleccionada cuando el bundle ofrece esa capacidad de imagen.");
+    public string Image3DOutputModeBodyText => T(LocalizationKeys.ImageWorkflowStereoDescription);
 
-    public string DisabledPlaceholderText => Text("Disabled until implemented", "Deshabilitado hasta implementarse");
+    public string DisabledPlaceholderText => T(LocalizationKeys.ImageDisabledPlaceholder);
 
-    public string ImageSourcePanelTitleText => Text("Source image", "Imagen de origen");
+    public string ImageSourcePanelTitleText => T(LocalizationKeys.ImageSourceTitle);
 
-    public string ImageDepthPanelTitleText => Text(
-        "Depth map generated by bundled iw3",
-        "Mapa de profundidad generado por iw3 incluido");
+    public string ImageDepthPanelTitleText => T(LocalizationKeys.ImageParallaxDepthPanelTitle);
 
-    public string ImageParallaxPreviewTitleText => Text("Parallax preview", "Preview parallax");
+    public string ImageParallaxPreviewTitleText => T(LocalizationKeys.ImageParallaxPreviewTitle);
 
-    public string ImageDepthMapGenerationText => Text(
-        "Generated during conversion from the selected image with the bundled iw3 depth model.",
-        "Se genera durante la conversion desde la imagen seleccionada con el modelo de profundidad iw3 incluido.");
+    public string ImageDepthMapGenerationText => T(LocalizationKeys.ImageParallaxDepthMapGeneration);
 
-    public string ImageParameterPanelTitleText => Text("Motion parameters", "Parametros de movimiento");
+    public string ImageParameterPanelTitleText => T(LocalizationKeys.ImageParallaxMotionParametersTitle);
 
-    public string ImageQuickSummaryTitleText => Text("Quick summary", "Resumen rapido");
+    public string ImageQuickSummaryTitleText => T(LocalizationKeys.ImageParallaxQuickSummaryTitle);
 
-    public string ImageScaffoldLogTitleText => Text("Module log", "Log del modulo");
+    public string ImageScaffoldLogTitleText => T(LocalizationKeys.ImageLogTitle);
 
-    public string ImageScaffoldLogText => Text(
-        "Tracks image analysis, setup, bundled iw3 export readiness, and export results.",
-        "Registra analisis de imagen, configuracion, disponibilidad de exportacion iw3 incluida y resultados.");
+    public string ImageScaffoldLogText => T(LocalizationKeys.ImageLogEmpty);
 
-    public string ImageDepthParameterText => Text("Depth: low", "Profundidad: baja");
+    public string ImageDepthParameterText => T(LocalizationKeys.ImageParallaxDepthParameter);
 
-    public string ImageMotionParameterText => Text("Movement: slow push", "Movimiento: avance suave");
+    public string ImageMotionParameterText => T(LocalizationKeys.ImageParallaxMotionParameter);
 
-    public string ImageZoomParameterText => Text("Zoom: subtle", "Zoom: sutil");
+    public string ImageZoomParameterText => T(LocalizationKeys.ImageParallaxZoomParameter);
 
-    public string ImageDirectionParameterText => Text("Direction: left to right", "Direccion: izquierda a derecha");
+    public string ImageDirectionParameterText => T(LocalizationKeys.ImageParallaxDirectionParameter);
 
-    public string ImageDurationParameterText => Text("Duration: 6 seconds", "Duracion: 6 segundos");
+    public string ImageDurationParameterText => T(LocalizationKeys.ImageParallaxDurationParameter);
 
-    public string ImageSmoothingParameterText => Text("Smoothing: enabled", "Suavizado: activado");
+    public string ImageSmoothingParameterText => T(LocalizationKeys.ImageParallaxSmoothingParameter);
 
-    public string ImageLayersParameterText => Text("Layers: foreground / mid / background", "Capas: primer plano / medio / fondo");
+    public string ImageLayersParameterText => T(LocalizationKeys.ImageParallaxLayersParameter);
 
-    public string ImagePreviewActionText => Text("Depth-based parallax preview source", "Origen para parallax basado en profundidad");
+    public string ImagePreviewActionText => T(LocalizationKeys.ImageParallaxPreviewAction);
 
-    public string ImageExportActionText => Text("Convert", "Convertir");
+    public string ImageExportActionText => T(LocalizationKeys.CommonConvert);
 
     public string ImageConvertActionText => IsImageExportRunning
-        ? Text("Converting...", "Convirtiendo...")
-        : Text("Convert", "Convertir");
+        ? T(LocalizationKeys.ImageProgressConverting)
+        : T(LocalizationKeys.CommonConvert);
 
     public string ImageStereoExportActionText => ImageConvertActionText;
 
-    public string ImageOpenOutputFolderActionText => Text("Open output folder", "Abrir carpeta de salida");
+    public string ImageOpenOutputFolderActionText => T(LocalizationKeys.ModalOpenOutputFolder);
 
-    public string ImageNewConversionActionText => Text("New conversion", "Nueva conversion");
+    public string ImageNewConversionActionText => T(LocalizationKeys.ImageResultNewConversion);
 
-    public string ImageNoOutputYetText => Text("No image conversion output yet.", "Aun no hay salida de conversion de imagen.");
+    public string ImageNoOutputYetText => T(LocalizationKeys.ImageOutputNoOutputYet);
 
     public string ImageGeneratedFilesText => _lastImageExportGeneratedFiles.Count == 0
         ? ImageNoOutputYetText
@@ -764,12 +847,14 @@ public sealed class MainWindowViewModel : ObservableObject
         ? ImageNoOutputYetText
         : _lastImageExportPrimaryPath;
 
-    public string ImageExportProgressText => Text(_imageExportProgressEnglishText, _imageExportProgressSpanishText);
+    public string ImageExportProgressText => _imageExportProgressKey is not null
+        ? T(_imageExportProgressKey)
+        : _imageExportProgressEnglishText;
 
-    public string ImageExportOverlayText => Text("Converting...", "Convirtiendo...");
+    public string ImageExportOverlayText => T(LocalizationKeys.ImageProgressConverting);
 
     public string ImageExportStatusText => IsImageExportRunning
-        ? Text("Converting...", "Convirtiendo...")
+        ? T(LocalizationKeys.ImageProgressConverting)
         : ImageExportProgressText;
 
     public int ImageExportProgressPercent => _imageExportProgressPercent;
@@ -783,9 +868,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool IsImageExportOutputOutdated => _isImageExportOutputOutdated;
 
-    public string ImageExportOutdatedText => Text(
-        "Configuration changed. Convert again.",
-        "La configuracion cambio. Convierte de nuevo.");
+    public string ImageExportOutdatedText => T(LocalizationKeys.ImageOutputOutdated);
 
     public Visibility ImageExportOutdatedVisibility =>
         !IsImageExportRunning && IsImageExportOutputOutdated
@@ -843,9 +926,7 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Visibility.Collapsed
             : Visibility.Visible;
 
-    public string ImageParallaxVideoPreviewTitleText => Text(
-        "Generated 2.5D video",
-        "Video 2.5D generado");
+    public string ImageParallaxVideoPreviewTitleText => T(LocalizationKeys.ImageParallaxGeneratedVideoTitle);
 
     public string ImageParallaxPreviewBadgeText => IsImageParallaxVideoPreviewAvailable
         ? ImageParallaxVideoPreviewTitleText
@@ -854,7 +935,7 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ImageExportErrorText =>
         string.IsNullOrWhiteSpace(_lastImageExportErrorEnglishText)
             ? string.Empty
-            : Text(_lastImageExportErrorEnglishText, _lastImageExportErrorSpanishText);
+            : _lastImageExportErrorEnglishText;
 
     public string ImageConvertDisabledReasonText
     {
@@ -867,34 +948,34 @@ public sealed class MainWindowViewModel : ObservableObject
 
             if (IsImageExportRunning)
             {
-                return Text("Image conversion is already running.", "La conversion de imagen ya se esta ejecutando.");
+                return T(LocalizationKeys.ImageReadinessRunning);
             }
 
             if (!HasSelectedImage || !HasImageMetadata)
             {
-                return Text("Select and analyze an image first.", "Selecciona y analiza una imagen primero.");
+                return T(LocalizationKeys.ImageReadinessMissingImage);
             }
 
             if (!HasSelectedImageMode)
             {
-                return Text("Choose an image workflow.", "Elige un flujo de imagen.");
+                return T(LocalizationKeys.ImageReadinessMissingWorkflow);
             }
 
             if (!IsImageSetupValid)
             {
                 return IsImageParallaxModeSelected
-                    ? Text("Complete the 2.5D setup before converting.", "Completa la configuracion 2.5D antes de convertir.")
-                    : Text("Complete the stereo setup before converting.", "Completa la configuracion estereo antes de convertir.");
+                    ? T(LocalizationKeys.ImageReadinessMissingParallaxSetup)
+                    : T(LocalizationKeys.ImageReadinessMissingStereoSetup);
             }
 
             if (SelectedImageConversionStep != ImageConversionStep.PreviewAndExport)
             {
-                return Text("Continue to Preview/export before converting.", "Continua a Preview/exportacion antes de convertir.");
+                return T(LocalizationKeys.ImageReadinessWrongStep);
             }
 
             if (!_hasEnteredImagePreviewExportStage)
             {
-                return Text("Prepare image conversion before converting.", "Prepara la conversion de imagen antes de convertir.");
+                return T(LocalizationKeys.ImageReadinessNotPrepared);
             }
 
             return IsImageParallaxModeSelected
@@ -910,47 +991,52 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public Visibility ImageStereoExportDisabledReasonVisibility => ImageConvertDisabledReasonVisibility;
 
-    public string ImageResultParallaxTitleText => Text("2.5D result/export", "Resultado/exportacion 2.5D");
+    public string ImageResultParallaxTitleText => T(LocalizationKeys.ImageParallaxResultTitle);
 
-    public string ImageExportOptionsTitleText => Text("Export options", "Opciones de exportacion");
+    public string ImageExportOptionsTitleText => T(LocalizationKeys.ImageOutputOptionsTitle);
 
-    public string ImageResultSummaryTitleText => Text("Result summary", "Resumen del resultado");
+    public string ImageResultSummaryTitleText => T(LocalizationKeys.ImageOutputResultSummaryTitle);
 
-    public string ImageResultSummaryText => Text(
-        "Output target: depth-based 2.5D parallax MP4, loop-friendly motion, generated with bundled iw3 depth and FFmpeg.",
-        "Objetivo de salida: MP4 parallax 2.5D basado en profundidad, movimiento para loop, generado con profundidad iw3 incluida y FFmpeg.");
+    public string ImageResultSummaryText => T(LocalizationKeys.ImageParallaxResultSummary);
 
-    public string ImageParallaxSummaryText => Text(
-        $"2.5D output: depth-based parallax MP4. Settings: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}.",
-        $"Salida 2.5D: MP4 parallax basado en profundidad. Configuracion: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}.");
+    public string ImageParallaxSummaryText => T(
+        LocalizationKeys.ImageParallaxSummaryFormat,
+        ("depthIntensity", GetOptionDisplayName(ParallaxDepthIntensityOptions, SelectedParallaxDepthIntensity)),
+        ("motionDirection", GetOptionDisplayName(ParallaxMotionDirectionOptions, SelectedParallaxMotionDirection)),
+        ("zoomAmplitude", GetOptionDisplayName(ParallaxZoomAmplitudeOptions, SelectedParallaxZoomAmplitude)),
+        ("duration", GetOptionDisplayName(ParallaxDurationOptions, SelectedParallaxDuration)));
 
-    public string ImageStereoPreviewTitleText => Text("Source preview", "Preview de origen");
+    public string ImageStereoPreviewTitleText => T(LocalizationKeys.ImageStereoPreviewTitle);
 
-    public string ImageStereoControlsTitleText => Text("Stereo controls", "Controles estereo");
+    public string ImageStereoControlsTitleText => T(LocalizationKeys.ImageStereoControlsTitle);
 
-    public string ImageModelSelectionLabelText => Text("Image depth model", "Modelo de profundidad de imagen");
+    public string ImageModelSelectionLabelText => T(LocalizationKeys.ImageModelSelectorLabel);
 
-    public string ImageModelSelectionSharedNoteText => Text(
-        "Uses the same bundled model inventory as Video conversion.",
-        "Usa el mismo inventario de modelos incluidos que Conversion de video.");
+    public string ImageModelSelectionSharedNoteText => T(LocalizationKeys.ImageModelSelectionSharedNote);
 
-    public string ImageStereoSummaryText => Text(
-        $"Selected output: {SelectedStereoOutputFormatDisplayText}. Conversion uses bundled iw3 depth processing when readiness is complete.",
-        $"Salida seleccionada: {SelectedStereoOutputFormatDisplayText}. La conversion usa procesamiento de profundidad iw3 incluido cuando la disponibilidad esta completa.");
+    public string ImageStereoSummaryText => T(
+        LocalizationKeys.ImageStereoSummaryFormat,
+        ("outputFormat", SelectedStereoOutputFormatDisplayText));
 
-    public string ImageStereoSeparationText => Text("Eye separation: 4.0%", "Separacion ocular: 4.0%");
+    public string ImageStereoSeparationText => T(LocalizationKeys.ImageStereoSeparationSummary);
 
-    public string ImageStereoConvergenceText => Text("Convergence: neutral", "Convergencia: neutral");
+    public string ImageStereoConvergenceText => T(LocalizationKeys.ImageStereoConvergenceSummary);
 
-    public string ImageStereoAnaglyphText => Text("Anaglyph: red/cyan", "Anaglifo: rojo/cian");
+    public string ImageStereoAnaglyphText => T(LocalizationKeys.ImageStereoAnaglyphSummary);
 
-    public string ImageStereoResultTitleText => Text("Stereoscopic results", "Resultados estereoscopicos");
+    public string ImageStereoResultTitleText => T(LocalizationKeys.ImageStereoResultTitle);
 
-    public string ImageGeneratedFilesTitleText => Text("Generated files", "Archivos generados");
+    public string ImageGeneratedFilesTitleText => T(LocalizationKeys.ImageOutputGeneratedFilesTitle);
 
-    public string ImageOutputPanelTitleText => Text("Output panel", "Panel de salida");
+    public string ImageOutputPanelTitleText => T(LocalizationKeys.ImageOutputPanelTitle);
 
-    public string ImageComparisonTitleText => Text("Output format", "Formato de salida");
+    public string ImageComparisonTitleText => T(LocalizationKeys.ImageOutputComparisonTitle);
+
+    public string ImageMp41080pBadgeText => T(LocalizationKeys.ImageBadgeMp41080p);
+
+    public string ImageLoopFriendlyMotionBadgeText => T(LocalizationKeys.ImageBadgeLoopFriendlyMotion);
+
+    public string ImageProjectMetadataBadgeText => T(LocalizationKeys.ImageBadgeProjectMetadata);
 
     public ImageConversionMode? SelectedImageConversionMode
     {
@@ -1011,9 +1097,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ImageWorkflowChooserChevronText => IsImageWorkflowChooserExpanded ? "v" : ">";
 
-    public string ImageWorkflowSummaryText => Text(
-        $"Workflow: {SelectedImageModeName}",
-        $"Flujo: {SelectedImageModeName}");
+    public string ImageWorkflowSummaryText => T(
+        LocalizationKeys.ImageWorkflowSummaryFormat,
+        ("workflow", SelectedImageModeName));
 
     public string ImageModeSourceStepState => ImageStepState(ImageConversionStep.ModeAndSource);
 
@@ -1058,42 +1144,36 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-    public string ImageModeSourceStepTitleText => Text("Source & analysis", "Origen y analisis");
+    public string ImageModeSourceStepTitleText => T(LocalizationKeys.ImageStepSourceTitle);
 
-    public string ImageSetupStepTitleText => Text("Setup", "Configuracion");
+    public string ImageSetupStepTitleText => T(LocalizationKeys.ImageStepSetupTitle);
 
-    public string ImagePreviewExportStepTitleText => Text("Preview & export", "Preview y exportacion");
+    public string ImagePreviewExportStepTitleText => T(LocalizationKeys.ImageStepExportTitle);
 
-    public string ImageSourceModeStepTitleText => Text("Source & mode", "Origen y modo");
+    public string ImageSourceModeStepTitleText => T(LocalizationKeys.ImageStepSourceModeTitle);
 
-    public string ImageModeSelectionTitleText => Text("Choose an image workflow", "Elige un flujo de imagen");
+    public string ImageModeSelectionTitleText => T(LocalizationKeys.ImageWorkflowTitle);
 
-    public string ChangeImageWorkflowText => Text("Change workflow", "Cambiar flujo");
+    public string ChangeImageWorkflowText => T(LocalizationKeys.ImageWorkflowChange);
 
-    public string ImageModeSourceBodyText => Text(
-        "Select one local image. Metadata is analyzed locally as soon as the image is selected.",
-        "Selecciona una imagen local. La metadata se analiza localmente en cuanto se selecciona la imagen.");
+    public string ImageModeSourceBodyText => T(LocalizationKeys.ImageSourceBody);
 
-    public string ImageSourceAnalysisTitleText => Text("Source image", "Imagen de origen");
+    public string ImageSourceAnalysisTitleText => T(LocalizationKeys.ImageSourceTitle);
 
-    public string DropImageText => Text(
-        "Drop one image file here or browse for a file.",
-        "Arrastra un archivo de imagen aqui o selecciona uno.");
+    public string DropImageText => T(LocalizationKeys.ImageSourceDrop);
 
-    public string ImageNoModeSetupHintText => Text(
-        "Choose a workflow to configure image setup.",
-        "Elige un flujo para configurar la imagen.");
+    public string ImageNoModeSetupHintText => T(LocalizationKeys.ImageSetupNoWorkflowHint);
 
-    public string AnalyzeImageText => Text("Reanalyze image", "Reanalizar imagen");
+    public string AnalyzeImageText => T(LocalizationKeys.ImageSourceReanalyzeButton);
 
-    public string ImageAnalysisTitleText => Text("Image analysis", "Analisis de imagen");
+    public string ImageAnalysisTitleText => T(LocalizationKeys.ImageMetadataAnalysisTitle);
 
     public string SelectedImageModeName =>
         SelectedImageConversionMode switch
         {
             ImageConversionMode.ParallaxPhoto => ImageParallaxModeTitleText,
             ImageConversionMode.StereoscopicImage => Image3DOutputModeTitleText,
-            _ => Text("No mode selected", "Sin modo seleccionado"),
+            _ => T(LocalizationKeys.ImageWorkflowNone),
         };
 
     public string SelectedImageStepName => SelectedImageConversionStep switch
@@ -1104,48 +1184,42 @@ public sealed class MainWindowViewModel : ObservableObject
         _ => ImageModeSourceStepTitleText,
     };
 
-    public string ImageSummaryStatusTitleText => Text("Image summary", "Resumen de imagen");
+    public string ImageSummaryStatusTitleText => T(LocalizationKeys.ImageSummaryTitle);
 
-    public string ImageSelectedModeSummaryText => Text(
-        $"Mode: {SelectedImageModeName}",
-        $"Modo: {SelectedImageModeName}");
+    public string ImageSelectedModeSummaryText => T(
+        LocalizationKeys.ImageSummaryModeFormat,
+        ("mode", SelectedImageModeName));
 
-    public string ImageCurrentStepSummaryText => Text(
-        $"Phase: {SelectedImageStepName}",
-        $"Fase: {SelectedImageStepName}");
+    public string ImageCurrentStepSummaryText => T(
+        LocalizationKeys.ImageStepCurrentFormat,
+        ("step", SelectedImageStepName));
 
-    public string ImageSupportedInputFormatsText => Text(
-        "Supported inputs: JPG, JPEG, PNG, BMP, TIF, TIFF, WEBP",
-        "Entradas soportadas: JPG, JPEG, PNG, BMP, TIF, TIFF, WEBP");
+    public string ImageSupportedInputFormatsText => T(LocalizationKeys.ImageSummarySupportedInputs);
 
     public string ImagePlannedOutputFormatsText => IsImageParallaxModeSelected
-        ? Text("Selected output: 2.5D parallax MP4", "Salida seleccionada: MP4 parallax 2.5D")
+        ? T(LocalizationKeys.ImageOutputPlannedParallax)
         : IsImageStereoModeSelected
-            ? Text(
-                $"Selected stereo output: {SelectedStereoOutputFormatDisplayText}",
-                $"Salida estereo seleccionada: {SelectedStereoOutputFormatDisplayText}")
-            : Text("Choose a mode to see planned outputs.", "Elige un modo para ver salidas planeadas.");
+            ? T(LocalizationKeys.ImageOutputPlannedStereoFormat, ("outputFormat", SelectedStereoOutputFormatDisplayText))
+            : T(LocalizationKeys.ImageOutputPlannedChoose);
 
-    public string ImageLocalModelReadinessNoteText => Text(
-        "Image export uses only bundled iw3 runtime files and bundled mapped depth models.",
-        "La exportacion de imagen usa solo archivos de runtime iw3 incluidos y modelos de profundidad incluidos mapeados.");
+    public string ImageLocalModelReadinessNoteText => T(LocalizationKeys.ImageSetupLocalModelReadinessNote);
 
     public string ImageNotImplementedStateText => IsImageStereoModeSelected
         ? CreateImageStereoExportReadinessText()
         : CreateImageParallaxExportReadinessText();
 
-    public string ImageActivityLogTitleText => Text("Image activity log", "Log de actividad de imagen");
+    public string ImageActivityLogTitleText => T(LocalizationKeys.ImageLogTitle);
 
     public string ImageActivityLogText =>
         ImageLogs.Count == 0
             ? ImageScaffoldLogText
             : string.Join(Environment.NewLine, ImageLogs.Select(log => log.DisplayText));
 
-    public string SelectImageText => Text("Select image", "Seleccionar imagen");
+    public string SelectImageText => T(LocalizationKeys.ImageSourceSelectButton);
 
-    public string ImageSelectedTitleText => Text("Selected image", "Imagen seleccionada");
+    public string ImageSelectedTitleText => T(LocalizationKeys.ImageSourceSelectedTitle);
 
-    public string NoImageSelectedText => Text("No image selected yet.", "Aun no hay imagen seleccionada.");
+    public string NoImageSelectedText => T(LocalizationKeys.ImageSourceNoneSelected);
 
     public string SelectedImageDisplayPath => SelectedImagePath ?? NoImageSelectedText;
 
@@ -1273,12 +1347,10 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ImageWizardNextToolTipText => CanMoveImageWizardNext
         ? string.Empty
         : SelectedImageConversionStep == ImageConversionStep.ModeAndSource
-            ? Text("Select and analyze a readable image before continuing.", "Selecciona y analiza una imagen legible antes de continuar.")
-            : Text("Choose an image workflow before continuing.", "Elige un flujo de imagen antes de continuar.");
+            ? T(LocalizationKeys.ImageTooltipNextMissingImage)
+            : T(LocalizationKeys.ImageTooltipNextMissingWorkflow);
 
-    public string ContinueWithImageConversionText => Text(
-        "Prepare image conversion",
-        "Preparar conversion de imagen");
+    public string ContinueWithImageConversionText => T(LocalizationKeys.ImageActionPrepareConversion);
 
     public Visibility ImagePreviewExportStatusCardVisibility =>
         SelectedImageConversionStep != ImageConversionStep.ModeAndSource &&
@@ -1352,77 +1424,79 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ImagePreviewExportStatusText => _hasEnteredImagePreviewExportStage
         ? CreateImagePreviewExportStatusText()
-        : Text("Prepare conversion in Step 3 to see image conversion status.", "Prepara la conversion en el paso 3 para ver el estado de conversion de imagen.");
+        : T(LocalizationKeys.ImageOutputStatusPrompt);
 
-    public string ImageSupportedExtensionsText => Text(
-        ".jpg, .jpeg, .png, .bmp, .tif, .tiff, .webp",
-        ".jpg, .jpeg, .png, .bmp, .tif, .tiff, .webp");
+    public string ImageSupportedExtensionsText => T(LocalizationKeys.ImageSourceSupportedExtensions);
 
-    public string ImageMetadataTitleText => Text("Image metadata", "Metadata de imagen");
+    public string ImageMetadataTitleText => T(LocalizationKeys.ImageMetadataTitle);
 
-    public string ImageMetadataWidthText => LabelValue("Width", "Ancho", _selectedImageMetadata?.WidthText);
+    public string ImageMetadataWidthText => LabelValue(LocalizationKeys.ImageMetadataWidth, _selectedImageMetadata?.WidthText);
 
-    public string ImageMetadataHeightText => LabelValue("Height", "Alto", _selectedImageMetadata?.HeightText);
+    public string ImageMetadataHeightText => LabelValue(LocalizationKeys.ImageMetadataHeight, _selectedImageMetadata?.HeightText);
 
-    public string ImageMetadataAspectRatioText => LabelValue("Aspect ratio", "Relacion de aspecto", _selectedImageMetadata?.AspectRatio);
+    public string ImageMetadataAspectRatioText => LabelValue(LocalizationKeys.ImageMetadataAspectRatio, _selectedImageMetadata?.AspectRatio);
 
-    public string ImageMetadataFormatText => LabelValue("Format", "Formato", _selectedImageMetadata?.Format);
+    public string ImageMetadataFormatText => LabelValue(LocalizationKeys.ImageMetadataFormat, _selectedImageMetadata?.Format);
 
-    public string ImageMetadataPixelFormatText => LabelValue("Pixel format", "Formato de pixel", _selectedImageMetadata?.PixelFormat);
+    public string ImageMetadataPixelFormatText => LabelValue(LocalizationKeys.ImageMetadataPixelFormat, _selectedImageMetadata?.PixelFormat);
 
-    public string ImageMetadataFileSizeText => LabelValue("File size", "Tamano de archivo", _selectedImageMetadata?.FileSizeText);
+    public string ImageMetadataFileSizeText => LabelValue(LocalizationKeys.ImageMetadataFileSize, _selectedImageMetadata?.FileSizeText);
 
     public string ImageMetadataSummaryText => HasImageMetadata
         ? $"{_selectedImageMetadata!.WidthText} x {_selectedImageMetadata.HeightText} · {_selectedImageMetadata.AspectRatio} · {_selectedImageMetadata.Format} · {_selectedImageMetadata.FileSizeText}"
-        : Text("No image metadata yet.", "Aun no hay metadata de imagen.");
+        : T(LocalizationKeys.ImageMetadataNone);
 
     public string ImageSourceStatusText => HasImageMetadata
-        ? Text("Image metadata analyzed locally.", "Metadata de imagen analizada localmente.")
-        : Text("Select a supported image to unlock setup.", "Selecciona una imagen compatible para habilitar configuracion.");
+        ? T(LocalizationKeys.ImageSourceStatusAnalyzed)
+        : T(LocalizationKeys.ImageSourceStatusSelectSupported);
 
     public string ImageOutputPlanText => IsImageParallaxModeSelected
-        ? Text("Output: depth-based 2.5D parallax MP4 in the same folder as the source image.", "Salida: MP4 parallax 2.5D basado en profundidad en la misma carpeta que la imagen de origen.")
+        ? T(LocalizationKeys.ImageSetupOutputPlanParallax)
         : IsImageStereoModeSelected
-            ? Text("Output: stereoscopic still image in the same folder as the source image.", "Salida: imagen estereoscopica fija en la misma carpeta que la imagen de origen.")
-            : Text("Choose an image workflow to prepare an output plan.", "Elige un flujo de imagen para preparar un plan de salida.");
+            ? T(LocalizationKeys.ImageSetupOutputPlanStereo)
+            : T(LocalizationKeys.ImageSetupOutputPlanChoose);
 
     public string ImageSetupSummaryText => IsImageParallaxModeSelected
-        ? Text(
-            $"2.5D setup: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}.",
-            $"Configuracion 2.5D: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}.")
+        ? T(
+            LocalizationKeys.ImageSetupSummaryParallaxFormat,
+            ("depthIntensity", GetOptionDisplayName(ParallaxDepthIntensityOptions, SelectedParallaxDepthIntensity)),
+            ("motionDirection", GetOptionDisplayName(ParallaxMotionDirectionOptions, SelectedParallaxMotionDirection)),
+            ("zoomAmplitude", GetOptionDisplayName(ParallaxZoomAmplitudeOptions, SelectedParallaxZoomAmplitude)),
+            ("duration", GetOptionDisplayName(ParallaxDurationOptions, SelectedParallaxDuration)))
         : IsImageStereoModeSelected
-            ? Text(
-                $"Stereo setup: {SelectedStereoOutputFormatDisplayText}, separation {SelectedStereoEyeSeparation}, convergence {SelectedStereoConvergence}.",
-                $"Configuracion estereo: {SelectedStereoOutputFormatDisplayText}, separacion {SelectedStereoEyeSeparation}, convergencia {SelectedStereoConvergence}.")
-            : Text("Select a workflow mode before configuring image setup.", "Selecciona un modo de flujo antes de configurar imagen.");
+            ? T(
+                LocalizationKeys.ImageSetupSummaryStereoFormat,
+                ("outputFormat", SelectedStereoOutputFormatDisplayText),
+                ("eyeSeparation", GetOptionDisplayName(StereoEyeSeparationOptions, SelectedStereoEyeSeparation)),
+                ("convergence", GetOptionDisplayName(StereoConvergenceOptions, SelectedStereoConvergence)))
+            : T(LocalizationKeys.ImageSetupSummaryNoWorkflow);
 
-    public string ImageStereoReadinessSummaryTitleText => Text("Output readiness", "Disponibilidad de salida");
+    public string ImageStereoReadinessSummaryTitleText => T(LocalizationKeys.ImageStereoReadinessSummaryTitle);
 
     public string ImageSelectedModelSummaryText => SelectedLocalModelCandidate is null
-        ? Text(
-            "Model: no mapped bundled depth model selected.",
-            "Modelo: no hay modelo de profundidad incluido mapeado seleccionado.")
-        : Text(
-            $"Model: {SelectedLocalModelCandidate.DisplayName} ({SelectedLocalModelCandidate.Iw3DepthModelName ?? "iw3 model pending"})",
-            $"Modelo: {SelectedLocalModelCandidate.DisplayName} ({SelectedLocalModelCandidate.Iw3DepthModelName ?? "modelo iw3 pendiente"})");
+        ? T(LocalizationKeys.ImageModelSelectedNone)
+        : T(
+            LocalizationKeys.ImageModelSelectedFormat,
+            ("model", SelectedLocalModelCandidate.DisplayName),
+            ("iw3Model", SelectedLocalModelCandidate.Iw3DepthModelName ?? T(LocalizationKeys.ImageModelIw3Pending)));
 
     public string ImageExpectedOutputFileText => SelectedImagePath is null
-        ? Text("Expected file: select an image first.", "Archivo esperado: selecciona una imagen primero.")
-        : Text(
-            $"Expected file: {Path.GetFileName(CreateExpectedImageOutputPath())}",
-            $"Archivo esperado: {Path.GetFileName(CreateExpectedImageOutputPath())}");
+        ? T(LocalizationKeys.ImageOutputExpectedFileMissing)
+        : T(
+            LocalizationKeys.ImageOutputExpectedFileFormat,
+            ("fileName", Path.GetFileName(CreateExpectedImageOutputPath())));
 
     public string ImageExpectedOutputPathText => SelectedImagePath is null
-        ? Text("Output path: same folder as the selected source image.", "Ruta de salida: misma carpeta que la imagen de origen seleccionada.")
-        : Text(
-            $"Output path: {CreateExpectedImageOutputPath()}",
-            $"Ruta de salida: {CreateExpectedImageOutputPath()}");
+        ? T(LocalizationKeys.ImageOutputExpectedPathMissing)
+        : T(
+            LocalizationKeys.ImageOutputExpectedPathFormat,
+            ("path", CreateExpectedImageOutputPath()));
 
     public string ImageSaveLocationText => SelectedImagePath is null
-        ? Text("Save location: same folder as the source image.", "Ubicacion de guardado: misma carpeta que la imagen de origen.")
-        : Text(
-            $"Save location: same folder as source ({GetDefaultImageExportDirectory(SelectedImagePath)})",
-            $"Ubicacion de guardado: misma carpeta que el origen ({GetDefaultImageExportDirectory(SelectedImagePath)})");
+        ? T(LocalizationKeys.ImageOutputSaveLocationMissing)
+        : T(
+            LocalizationKeys.ImageOutputSaveLocationFormat,
+            ("path", GetDefaultImageExportDirectory(SelectedImagePath)));
 
     public string ImageSupportedStereoFormatsText
     {
@@ -1431,80 +1505,75 @@ public sealed class MainWindowViewModel : ObservableObject
             var supportedOptions = StereoOutputFormatOptions;
             if (supportedOptions.Count == 0)
             {
-                return Text(
-                    "Verified output formats: none. Refresh System status or inspect IW3_CLI_CAPABILITIES.json.",
-                    "Formatos de salida verificados: ninguno. Actualiza Estado del sistema o revisa IW3_CLI_CAPABILITIES.json.");
+                return T(LocalizationKeys.ImageStereoSupportedFormatsNone);
             }
 
             var displayNames = string.Join(", ", supportedOptions.Select(option => option.DisplayName));
-            return Text(
-                $"Verified output formats: {displayNames}",
-                $"Formatos de salida verificados: {displayNames}");
+            return T(LocalizationKeys.ImageStereoSupportedFormatsFormat, ("formats", displayNames));
         }
     }
 
-    public string ImageBundledIw3StereoNoteText => Text(
-        "Conversion uses bundled iw3/depth, a local mapped model, and app-local tools only; no system Python, PATH tools, pip, or downloads.",
-        "La conversion usa iw3/profundidad incluida, un modelo local mapeado y solo herramientas locales de la app; no usa Python del sistema, herramientas PATH, pip ni descargas.");
+    public string ImageBundledIw3StereoNoteText => T(LocalizationKeys.ImageStereoBundledIw3Note);
 
-    public string ImageParallaxQualityGuidanceText => Text(
-        "Use Low or Medium depth and Subtle motion for fewer artifacts. High intensity can distort edges, thin objects, transparent areas, smoke, shiny effects, and overlapping subjects.",
-        "Usa profundidad baja o media y movimiento sutil para reducir artefactos. La intensidad alta puede deformar bordes, objetos delgados, areas transparentes, humo, brillos y sujetos superpuestos.");
+    public string ImageParallaxQualityGuidanceText => T(LocalizationKeys.ImageParallaxQualityGuidance);
 
     public string ImageParallaxModelGuidanceText => SelectedLocalModelCandidate is null
-        ? Text(
-            "No bundled image-capable depth model is selected yet.",
-            "Aun no hay un modelo de profundidad incluido compatible con imagen seleccionado.")
-        : Text(
-            $"Using bundled image-capable depth model: {SelectedLocalModelCandidate.DisplayName}. For complex scenes, prefer conservative depth and subtle motion.",
-            $"Usando modelo de profundidad incluido compatible con imagen: {SelectedLocalModelCandidate.DisplayName}. Para escenas complejas, prefiere profundidad conservadora y movimiento sutil.");
+        ? T(LocalizationKeys.ImageParallaxModelGuidanceNone)
+        : T(LocalizationKeys.ImageParallaxModelGuidanceFormat, ("model", SelectedLocalModelCandidate.DisplayName));
 
-    public string ImageDepthIntensityLabelText => Text("Depth intensity", "Intensidad de profundidad");
+    public string ImageDepthIntensityLabelText => T(LocalizationKeys.ImageParallaxDepthIntensityLabel);
 
-    public string ImageMotionDirectionLabelText => Text("Motion direction", "Direccion de movimiento");
+    public string ImageMotionDirectionLabelText => T(LocalizationKeys.ImageParallaxMotionDirectionLabel);
 
-    public string ImageZoomAmplitudeLabelText => Text("Zoom/amplitude", "Zoom/amplitud");
+    public string ImageZoomAmplitudeLabelText => T(LocalizationKeys.ImageParallaxZoomAmplitudeLabel);
 
-    public string ImageDurationLabelText => Text("Duration", "Duracion");
+    public string ImageDurationLabelText => T(LocalizationKeys.ImageParallaxDurationLabel);
 
-    public string ImageSmoothingLabelText => Text("Smoothing", "Suavizado");
+    public string ImageSmoothingLabelText => T(LocalizationKeys.ImageParallaxSmoothingLabel);
 
-    public string ImageLayerBehaviorLabelText => Text("Layer/depth behavior", "Comportamiento de capas/profundidad");
+    public string ImageLayerBehaviorLabelText => T(LocalizationKeys.ImageParallaxLayerBehaviorLabel);
 
-    public string ImageStereoOutputFormatLabelText => Text("Output format", "Formato de salida");
+    public string ImageStereoOutputFormatLabelText => T(LocalizationKeys.ImageStereoOutputFormatLabel);
 
-    public string ImageStereoEyeSeparationLabelText => Text("Eye separation", "Separacion ocular");
+    public string ImageStereoEyeSeparationLabelText => T(LocalizationKeys.ImageStereoEyeSeparationLabel);
 
-    public string ImageStereoConvergenceLabelText => Text("Convergence", "Convergencia");
+    public string ImageStereoConvergenceLabelText => T(LocalizationKeys.ImageStereoConvergenceLabel);
 
-    public string ImageStereoSwapEyesLabelText => Text("Swap eyes", "Intercambiar ojos");
+    public string ImageStereoSwapEyesLabelText => T(LocalizationKeys.ImageStereoSwapEyesLabel);
 
-    public string ImageStereoAnaglyphModeLabelText => Text("Anaglyph mode", "Modo anaglifo");
+    public string ImageStereoAnaglyphModeLabelText => T(LocalizationKeys.ImageStereoAnaglyphModeLabel);
 
-    public IReadOnlyList<string> ParallaxDepthIntensityOptions { get; } = ["Low", "Medium", "High"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> ParallaxDepthIntensityOptions =>
+        _parallaxDepthIntensityOptions;
 
-    public IReadOnlyList<string> ParallaxMotionDirectionOptions { get; } =
-        ["Left to right", "Right to left", "Push in", "Pull back", "Orbit"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> ParallaxMotionDirectionOptions =>
+        _parallaxMotionDirectionOptions;
 
-    public IReadOnlyList<string> ParallaxZoomAmplitudeOptions { get; } = ["Subtle", "Medium", "Strong"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> ParallaxZoomAmplitudeOptions =>
+        _parallaxZoomAmplitudeOptions;
 
-    public IReadOnlyList<string> ParallaxDurationOptions { get; } = ["4 seconds", "6 seconds", "8 seconds", "12 seconds"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> ParallaxDurationOptions =>
+        _parallaxDurationOptions;
 
-    public IReadOnlyList<string> ParallaxSmoothingOptions { get; } = ["Enabled", "Balanced", "Strong"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> ParallaxSmoothingOptions =>
+        _parallaxSmoothingOptions;
 
-    public IReadOnlyList<string> ParallaxLayerBehaviorOptions { get; } =
-        ["Foreground / mid / background", "Depth slices", "Soft depth ramp"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> ParallaxLayerBehaviorOptions =>
+        _parallaxLayerBehaviorOptions;
 
     public IReadOnlyList<LocalizedOptionViewModel<ImageStereoOutputFormat>> StereoOutputFormatOptions =>
         _allStereoOutputFormatOptions
             .Where(option => IsImageStereoOutputFormatSelectable(option.Value))
             .ToArray();
 
-    public IReadOnlyList<string> StereoEyeSeparationOptions { get; } = ["2.0%", "4.0%", "6.0%", "8.0%"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> StereoEyeSeparationOptions =>
+        _stereoEyeSeparationOptions;
 
-    public IReadOnlyList<string> StereoConvergenceOptions { get; } = ["Near", "Neutral", "Far"];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> StereoConvergenceOptions =>
+        _stereoConvergenceOptions;
 
-    public IReadOnlyList<string> StereoAnaglyphModeOptions { get; } = [SupportedStereoAnaglyphMode];
+    public IReadOnlyList<LocalizedOptionViewModel<string>> StereoAnaglyphModeOptions =>
+        _stereoAnaglyphModeOptions;
 
     public string SelectedParallaxDepthIntensity
     {
@@ -1512,8 +1581,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedParallaxDepthIntensity,
             value,
-            "Depth intensity",
-            "Intensidad de profundidad");
+            LocalizationKeys.ImageParallaxDepthIntensityLabel,
+            ParallaxDepthIntensityOptions);
     }
 
     public string SelectedParallaxMotionDirection
@@ -1522,8 +1591,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedParallaxMotionDirection,
             value,
-            "Motion direction",
-            "Direccion de movimiento");
+            LocalizationKeys.ImageParallaxMotionDirectionLabel,
+            ParallaxMotionDirectionOptions);
     }
 
     public string SelectedParallaxZoomAmplitude
@@ -1532,8 +1601,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedParallaxZoomAmplitude,
             value,
-            "Zoom/amplitude",
-            "Zoom/amplitud");
+            LocalizationKeys.ImageParallaxZoomAmplitudeLabel,
+            ParallaxZoomAmplitudeOptions);
     }
 
     public string SelectedParallaxDuration
@@ -1542,8 +1611,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedParallaxDuration,
             value,
-            "Duration",
-            "Duracion");
+            LocalizationKeys.ImageParallaxDurationLabel,
+            ParallaxDurationOptions);
     }
 
     public string SelectedParallaxSmoothing
@@ -1552,8 +1621,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedParallaxSmoothing,
             value,
-            "Smoothing",
-            "Suavizado");
+            LocalizationKeys.ImageParallaxSmoothingLabel,
+            ParallaxSmoothingOptions);
     }
 
     public string SelectedParallaxLayerBehavior
@@ -1562,8 +1631,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedParallaxLayerBehavior,
             value,
-            "Layer/depth behavior",
-            "Comportamiento de capas/profundidad");
+            LocalizationKeys.ImageParallaxLayerBehaviorLabel,
+            ParallaxLayerBehaviorOptions);
     }
 
     public ImageStereoOutputFormat SelectedStereoOutputFormat
@@ -1575,9 +1644,10 @@ public sealed class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _selectedStereoOutputFormat, value))
             {
                 NormalizeSelectedStereoAnaglyphMode();
-                ApplyImageSetupChanged(
-                    $"Stereo output format changed: {GetStereoOutputFormatDisplayText(previous)} -> {SelectedStereoOutputFormatDisplayText}.",
-                    $"Formato estereo cambiado: {GetStereoOutputFormatDisplayText(previous)} -> {SelectedStereoOutputFormatDisplayText}.");
+                ApplyImageSetupChanged(T(
+                    LocalizationKeys.ImageLogStereoOutputFormatChangedFormat,
+                    ("previous", GetStereoOutputFormatDisplayText(previous)),
+                    ("next", SelectedStereoOutputFormatDisplayText)));
             }
         }
     }
@@ -1608,8 +1678,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedStereoEyeSeparation,
             value,
-            "Eye separation",
-            "Separacion ocular");
+            LocalizationKeys.ImageStereoEyeSeparationLabel,
+            StereoEyeSeparationOptions);
     }
 
     public string SelectedStereoConvergence
@@ -1618,8 +1688,8 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetImageSetupString(
             ref _selectedStereoConvergence,
             value,
-            "Convergence",
-            "Convergencia");
+            LocalizationKeys.ImageStereoConvergenceLabel,
+            StereoConvergenceOptions);
     }
 
     public bool ImageStereoSwapEyes
@@ -1630,9 +1700,10 @@ public sealed class MainWindowViewModel : ObservableObject
             var previous = _imageStereoSwapEyes;
             if (SetProperty(ref _imageStereoSwapEyes, value))
             {
-                ApplyImageSetupChanged(
-                    $"Swap eyes changed: {GetToggleText(previous, spanish: false)} -> {GetToggleText(_imageStereoSwapEyes, spanish: false)}.",
-                    $"Intercambiar ojos cambio: {GetToggleText(previous, spanish: true)} -> {GetToggleText(_imageStereoSwapEyes, spanish: true)}.");
+                ApplyImageSetupChanged(T(
+                    LocalizationKeys.ImageLogSwapEyesChangedFormat,
+                    ("previous", GetToggleText(previous)),
+                    ("next", GetToggleText(_imageStereoSwapEyes))));
             }
         }
     }
@@ -1646,9 +1717,10 @@ public sealed class MainWindowViewModel : ObservableObject
             var previous = _selectedStereoAnaglyphMode;
             if (SetProperty(ref _selectedStereoAnaglyphMode, normalized))
             {
-                ApplyImageSetupChanged(
-                    $"Anaglyph mode changed: {previous} -> {normalized}.",
-                    $"Modo anaglifo cambio: {previous} -> {normalized}.");
+                ApplyImageSetupChanged(T(
+                    LocalizationKeys.ImageLogAnaglyphModeChangedFormat,
+                    ("previous", GetOptionDisplayName(StereoAnaglyphModeOptions, previous)),
+                    ("next", GetOptionDisplayName(StereoAnaglyphModeOptions, normalized))));
             }
         }
     }
@@ -1699,14 +1771,16 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public IReadOnlyList<string> LanguageOptions { get; } = ["Español", "English"];
+    public IReadOnlyList<AppLanguageOptionViewModel> LanguageOptions { get; private set; } = [];
 
     public string SelectedLanguage
     {
         get => _selectedLanguage;
         set
         {
-            if (SetProperty(ref _selectedLanguage, value))
+            _localizationService.SetLanguage(value);
+            var activeLanguageCode = _localizationService.ActiveLanguageCode;
+            if (SetProperty(ref _selectedLanguage, activeLanguageCode))
             {
                 ApplyUiOnlyRefresh(() =>
                 {
@@ -1717,20 +1791,22 @@ public sealed class MainWindowViewModel : ObservableObject
                     UpdateLogLanguages();
                     RefreshMetricLanguage();
                 });
-                AddLog("Language selected: English.", "Idioma seleccionado: Español.");
+                AddLogResolved(T(
+                    LocalizationKeys.ActivityLogLanguageSelectedFormat,
+                    ("language", GetSelectedLanguageLogDisplayName(activeLanguageCode))));
             }
         }
     }
 
     public IReadOnlyList<string> ThemeOptions { get; } = ["Dark", "Light"];
 
-    public IReadOnlyList<LocalizedOptionViewModel<SettingsSection>> SettingsSectionOptions { get; } =
+    public IReadOnlyList<LocalizedOptionViewModel<SettingsSection>> SettingsSectionOptions =>
     [
-        new(SettingsSection.VisualSettings, "Visual settings", "Ajustes visuales"),
-        new(SettingsSection.Models, "Models", "Modelos"),
-        new(SettingsSection.ToolsEngine, "Tools & Engine", "Herramientas y motor"),
-        new(SettingsSection.LogsDiagnostics, "Logs & Diagnostics", "Logs y diagnostico"),
-        new(SettingsSection.AboutLicenses, "About / Licenses", "Acerca de / licencias"),
+        CreateSettingsSectionOption(SettingsSection.VisualSettings, LocalizationKeys.SettingsAppearanceTitle),
+        CreateSettingsSectionOption(SettingsSection.Models, LocalizationKeys.SettingsModelsTitle),
+        CreateSettingsSectionOption(SettingsSection.ToolsEngine, LocalizationKeys.SettingsToolsEngineTitle),
+        CreateSettingsSectionOption(SettingsSection.LogsDiagnostics, LocalizationKeys.SettingsLogsDiagnosticsTitle),
+        new(SettingsSection.AboutLicenses, AboutLicensesSettingsTitleText, AboutLicensesSettingsTitleText),
     ];
 
     public string SelectedTheme
@@ -1741,32 +1817,32 @@ public sealed class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _selectedTheme, value))
             {
                 ApplyUiOnlyRefresh(() => _themeService.Apply(value));
-                AddLog($"Theme selected: {value}.", $"Tema seleccionado: {value}.");
+                AddLogResolved(T(
+                    LocalizationKeys.ActivityLogThemeSelectedFormat,
+                    ("theme", GetSelectedThemeLogDisplayName(value))));
             }
         }
     }
 
-    public string SubtitleText => Text(
-        "Local offline 2D to 3D video conversion",
-        "Conversión local offline de video 2D a 3D");
+    public string SubtitleText => T(LocalizationKeys.VideoSubtitle);
 
-    public string LanguageLabel => Text("Language", "Idioma");
+    public string LanguageLabel => T(LocalizationKeys.SettingsLanguageLabel);
 
-    public string ThemeLabel => Text("Theme", "Tema");
+    public string ThemeLabel => T(LocalizationKeys.SettingsAppearanceTheme);
 
-    public string SettingsText => Text("Settings", "Ajustes");
+    public string SettingsText => T(LocalizationKeys.SidebarSettings);
 
-    public string SettingsTitleText => Text("Settings", "Ajustes");
+    public string SettingsTitleText => T(LocalizationKeys.SettingsTitle);
 
-    public string SettingsSideMenuTitleText => Text("Settings", "Ajustes");
+    public string SettingsSideMenuTitleText => T(LocalizationKeys.SettingsTitle);
 
-    public string WindowMinimizeToolTipText => Text("Minimize", "Minimizar");
+    public string WindowMinimizeToolTipText => T(LocalizationKeys.CommonMinimize);
 
-    public string WindowMaximizeToolTipText => Text("Maximize", "Maximizar");
+    public string WindowMaximizeToolTipText => T(LocalizationKeys.CommonMaximize);
 
-    public string WindowRestoreToolTipText => Text("Restore", "Restaurar");
+    public string WindowRestoreToolTipText => T(LocalizationKeys.CommonRestore);
 
-    public string WindowCloseToolTipText => Text("Close", "Cerrar");
+    public string WindowCloseToolTipText => T(LocalizationKeys.CommonClose);
 
     public SettingsSection SelectedSettingsSection
     {
@@ -1795,49 +1871,34 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility AboutLicensesSettingsSectionVisibility =>
         SelectedSettingsSection == SettingsSection.AboutLicenses ? Visibility.Visible : Visibility.Collapsed;
 
-    public string VisualSettingsTitleText => Text("Visual settings", "Ajustes visuales");
+    public string VisualSettingsTitleText => T(LocalizationKeys.SettingsAppearanceTitle);
 
-    public string ModelsSettingsTitleText => Text("Models", "Modelos");
+    public string ModelsSettingsTitleText => T(LocalizationKeys.SettingsModelsTitle);
 
-    public string ToolsEngineSettingsTitleText => Text(
-        "Tools & Engine",
-        "Herramientas y motor");
+    public string ToolsEngineSettingsTitleText => T(LocalizationKeys.SettingsToolsEngineTitle);
 
-    public string LogsDiagnosticsSettingsTitleText => Text(
-        "Logs & Diagnostics",
-        "Logs y diagnostico");
+    public string LogsDiagnosticsSettingsTitleText => T(LocalizationKeys.SettingsLogsDiagnosticsTitle);
 
-    public string AboutLicensesSettingsTitleText => Text(
-        "About / Licenses",
-        "Acerca de / licencias");
+    public string AboutLicensesSettingsTitleText =>
+        $"{T(LocalizationKeys.SettingsAboutTitle)} / {T(LocalizationKeys.SettingsLicensesTitle)}";
 
-    public string ModelsSettingsIntroText => Text(
-        "Review detected local models or import a reviewed model pack.",
-        "Revisa modelos locales detectados o importa un paquete de modelos revisado.");
+    public string ModelsSettingsIntroText => T(LocalizationKeys.SettingsModelsIntro);
 
-    public string ToolsEngineSettingsIntroText => Text(
-        "Local tool and engine status for the published runtime layout.",
-        "Estado de herramientas y motor locales para el layout publicado.");
+    public string ToolsEngineSettingsIntroText => T(LocalizationKeys.SettingsToolsEngineIntro);
 
-    public string LogsDiagnosticsSettingsIntroText => Text(
-        "Technical details for local tools, model inventory, and conversion readiness.",
-        "Detalles tecnicos de herramientas locales, inventario de modelos y estado de conversion.");
+    public string LogsDiagnosticsSettingsIntroText => T(LocalizationKeys.SettingsLogsDiagnosticsIntro);
 
-    public string AboutLicensesText => Text(
-        $"v3dfy version: {GetCurrentV3dfyVersion()}{Environment.NewLine}Licenses and notices are bundled under licenses/ when release payloads are prepared. Review docs/legal-notes.md before distributing an installer.",
-        $"Version de v3dfy: {GetCurrentV3dfyVersion()}{Environment.NewLine}Las licencias y avisos se incluyen en licenses/ cuando se preparan los paquetes de release. Revisa docs/legal-notes.md antes de distribuir un instalador.");
+    public string AboutLicensesText => T(
+        LocalizationKeys.SettingsAboutLicensesTextFormat,
+        ("version", GetCurrentV3dfyVersion()));
 
-    public string AboutModelNoticesTitleText => Text("Model notices", "Avisos de modelos");
+    public string AboutModelNoticesTitleText => T(LocalizationKeys.SettingsAboutModelNoticesTitle);
 
     public string AboutModelNoticesText => CreateModelLicenseNoticeSummaryText();
 
-    public string SourceAndAnalysisStepTitle => Text(
-        "Source & analysis",
-        "Fuente y analisis");
+    public string SourceAndAnalysisStepTitle => T(LocalizationKeys.VideoStepSourceTitle);
 
-    public string ThreeDSetupStepTitle => Text(
-        "3D setup",
-        "Configuracion 3D");
+    public string ThreeDSetupStepTitle => T(LocalizationKeys.VideoStepSetupTitle);
 
     public string WizardConversionPlanStepTitle => ConversionPlanTitle;
 
@@ -1871,20 +1932,16 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Visibility.Collapsed
             : Visibility.Visible;
 
-    public string WizardBackText => Text("Back", "Atras");
+    public string WizardBackText => T(LocalizationKeys.CommonBack);
 
-    public string WizardNextText => Text("Next", "Siguiente");
+    public string WizardNextText => T(LocalizationKeys.CommonNext);
 
     public string WizardNextToolTipText => CanMoveWizardNext
         ? string.Empty
         : SelectedWizardStepIndex switch
         {
-            ConversionWorkflowState.SourceAndAnalysisStepIndex => Text(
-                "Analyze a video before continuing.",
-                "Analiza un video antes de continuar."),
-            ConversionWorkflowState.ThreeDSetupStepIndex => Text(
-                "Complete a valid 3D setup before opening the conversion plan.",
-                "Completa una configuracion 3D valida antes de abrir el plan de conversion."),
+            ConversionWorkflowState.SourceAndAnalysisStepIndex => T(LocalizationKeys.VideoTooltipNextAnalyze),
+            ConversionWorkflowState.ThreeDSetupStepIndex => T(LocalizationKeys.VideoTooltipNextSetup),
             _ => string.Empty,
         };
 
@@ -1911,36 +1968,22 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ConversionPlanStepMarkerText => "3";
 
-    public string SelectSourceTitle => Text(
-        "Source video",
-        "Video de origen");
+    public string SelectSourceTitle => T(LocalizationKeys.VideoSourceTitle);
 
-    public string DropVideoText => Text(
-        "Drop one video file here or browse for a file.",
-        "Arrastra un archivo de video aquí o selecciona uno.");
+    public string DropVideoText => T(LocalizationKeys.VideoSourceDrop);
 
-    public string NoVideoSelectedText => Text(
-        "No video selected yet.",
-        "Aún no hay video seleccionado.");
+    public string NoVideoSelectedText => T(LocalizationKeys.VideoSourceNoneSelected);
 
-    public string SourceAnalysisEmptyHintText => Text(
-        "Select a source video to analyze its duration, resolution, streams, and HDR metadata.",
-        "Selecciona un video fuente para analizar duracion, resolucion, pistas y metadatos HDR.");
+    public string SourceAnalysisEmptyHintText => T(LocalizationKeys.VideoSourceEmptyHint);
 
     public Visibility SourceAnalysisEmptyHintVisibility =>
         HasSelectedVideo ? Visibility.Collapsed : Visibility.Visible;
 
-    public string SelectVideoText => Text("Select video", "Seleccionar video");
+    public string SelectVideoText => T(LocalizationKeys.VideoSourceSelectButton);
 
-    public string AnalyzeText => Text("Analyze", "Analizar");
+    public string AnalyzeText => T(LocalizationKeys.VideoSourceAnalyzeButton);
 
-    public IReadOnlyList<LocalizedOptionViewModel<TargetDevicePreset>> OutputPresetOptions { get; } =
-    [
-        new(TargetDevicePresets.Recommended3dTv, "Recommended 3D TV", "TV 3D recomendada"),
-        new(TargetDevicePresets.MaximumCompatibility, "Maximum Compatibility", "Maxima compatibilidad"),
-        new(TargetDevicePresets.HighQualityMaster, "High Quality Master", "Master de alta calidad"),
-        new(TargetDevicePresets.Lg3dFullHd2012, "Legacy LG 3D TV (2012)", "Legacy LG 3D TV (2012)"),
-    ];
+    public IReadOnlyList<LocalizedOptionViewModel<TargetDevicePreset>> OutputPresetOptions => _outputPresetOptions;
 
     public TargetDevicePreset SelectedOutputPreset
     {
@@ -1965,39 +2008,20 @@ public sealed class MainWindowViewModel : ObservableObject
                 RegenerateRecommendationAndPlan();
                 RaisePresetPropertiesChanged();
                 RaiseAnalysisPropertiesChanged();
-                AddLog(
-                    $"Output profile changed to {value.Name}.",
-                    $"Perfil de salida cambiado a {value.SpanishName}.");
+                AddVideoLogResolved(T(
+                    LocalizationKeys.VideoLogOutputProfileChangedFormat,
+                    ("profile", TargetPresetName(value))));
             }
         }
     }
 
-    public IReadOnlyList<LocalizedOptionViewModel<OutputContainer>> OutputContainerOptions { get; } =
-    [
-        new(OutputContainer.MP4, "MP4", "MP4"),
-        new(OutputContainer.MKV, "MKV", "MKV"),
-    ];
+    public IReadOnlyList<LocalizedOptionViewModel<OutputContainer>> OutputContainerOptions => _outputContainerOptions;
 
-    public IReadOnlyList<LocalizedOptionViewModel<AiQualityPreset>> QualityPresetOptions { get; } =
-    [
-        new(AiQualityPreset.Fast, "Fast", "Rápida"),
-        new(AiQualityPreset.Balanced, "Balanced", "Equilibrada"),
-        new(AiQualityPreset.HighQuality, "High quality", "Alta calidad"),
-    ];
+    public IReadOnlyList<LocalizedOptionViewModel<AiQualityPreset>> QualityPresetOptions => _qualityPresetOptions;
 
-    public IReadOnlyList<LocalizedOptionViewModel<ThreeDIntensity>> ThreeDIntensityOptions { get; } =
-    [
-        new(ThreeDIntensity.Low, "Low", "Baja"),
-        new(ThreeDIntensity.Medium, "Medium", "Media"),
-        new(ThreeDIntensity.High, "High", "Alta"),
-    ];
+    public IReadOnlyList<LocalizedOptionViewModel<ThreeDIntensity>> ThreeDIntensityOptions => _threeDIntensityOptions;
 
-    public IReadOnlyList<LocalizedOptionViewModel<ThreeDOutputFormat>> ThreeDOutputFormatOptions { get; } =
-    [
-        new(ThreeDOutputFormat.HalfTopBottom, "Half Top-Bottom", "Medio arriba-abajo"),
-        new(ThreeDOutputFormat.HalfSideBySide, "Half Side-by-Side", "Medio lado a lado"),
-        new(ThreeDOutputFormat.Anaglyph, "Anaglyph", "Anaglifo"),
-    ];
+    public IReadOnlyList<LocalizedOptionViewModel<ThreeDOutputFormat>> ThreeDOutputFormatOptions => _threeDOutputFormatOptions;
 
     public OutputContainer SelectedOutputContainer
     {
@@ -2018,9 +2042,9 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_planOptionState.SetOutputContainer(value))
             {
                 OnPropertyChanged();
-                PlanOptionChanged(
-                    $"Output container changed to {value}.",
-                    $"Contenedor de salida cambiado a {value}.");
+                PlanOptionChanged(T(
+                    LocalizationKeys.VideoLogOutputContainerChangedFormat,
+                    ("container", value)));
             }
         }
     }
@@ -2044,9 +2068,9 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_planOptionState.SetQualityPreset(value))
             {
                 OnPropertyChanged();
-                PlanOptionChanged(
-                    $"Quality changed to {QualityPresetText(value, useSpanish: false)}.",
-                    $"Calidad cambiada a {QualityPresetText(value, useSpanish: true)}.");
+                PlanOptionChanged(T(
+                    LocalizationKeys.VideoLogQualityChangedFormat,
+                    ("quality", QualityPresetText(value))));
             }
         }
     }
@@ -2070,9 +2094,9 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_planOptionState.SetIntensity(value))
             {
                 OnPropertyChanged();
-                PlanOptionChanged(
-                    $"3D intensity changed to {ThreeDIntensityText(value, useSpanish: false)}.",
-                    $"Intensidad 3D cambiada a {ThreeDIntensityText(value, useSpanish: true)}.");
+                PlanOptionChanged(T(
+                    LocalizationKeys.VideoLogIntensityChangedFormat,
+                    ("intensity", ThreeDIntensityText(value))));
             }
         }
     }
@@ -2096,16 +2120,14 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_planOptionState.SetThreeDOutputFormat(value))
             {
                 OnPropertyChanged();
-                PlanOptionChanged(
-                    $"3D layout changed to {ThreeDOutputFormatText(value, useSpanish: false)}.",
-                    $"Diseño 3D cambiado a {ThreeDOutputFormatText(value, useSpanish: true)}.");
+                PlanOptionChanged(T(
+                    LocalizationKeys.VideoLogLayoutChangedFormat,
+                    ("layout", ThreeDOutputFormatText(value))));
             }
         }
     }
 
-    public string CreateLgCompatibilityCopyText => Text(
-        "Create LG 3D TV 2012 compatible MP4 copy",
-        "Crear copia MP4 compatible con LG 3D TV 2012");
+    public string CreateLgCompatibilityCopyText => T(LocalizationKeys.VideoLgCompatibilityCopyCreate);
 
     public bool IsLgOutputProfileSelected =>
         ReferenceEquals(SelectedOutputPreset, TargetDevicePresets.Lg3dFullHd2012);
@@ -2135,19 +2157,14 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged(nameof(LgCompatibilityCopyPathVisibility));
                 PlanOptionChanged(
                     value
-                        ? "LG-compatible MP4 copy enabled."
-                        : "LG-compatible MP4 copy disabled.",
-                    value
-                        ? "Copia MP4 compatible con LG activada."
-                        : "Copia MP4 compatible con LG desactivada.",
+                        ? T(LocalizationKeys.VideoLogLgCopyEnabled)
+                        : T(LocalizationKeys.VideoLogLgCopyDisabled),
                     affectsPreview: false);
             }
         }
     }
 
-    public string PreferLgCompatibilityCopyWhenOpeningText => Text(
-        "Open LG-compatible copy when available",
-        "Abrir copia compatible LG cuando exista");
+    public string PreferLgCompatibilityCopyWhenOpeningText => T(LocalizationKeys.VideoLgCompatibilityCopyPrefer);
 
     public bool PreferLgCompatibilityCopyWhenOpening
     {
@@ -2165,11 +2182,8 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged();
                 PlanOptionChanged(
                     value
-                        ? "LG-compatible copy selected as preferred open target."
-                        : "Primary output selected as preferred open target.",
-                    value
-                        ? "Copia compatible con LG seleccionada como destino preferido al abrir."
-                        : "Salida principal seleccionada como destino preferido al abrir.",
+                        ? T(LocalizationKeys.VideoLogLgCopyPreferred)
+                        : T(LocalizationKeys.VideoLogPrimaryOutputPreferred),
                     affectsPreview: false);
             }
         }
@@ -2185,9 +2199,7 @@ public sealed class MainWindowViewModel : ObservableObject
         IsLgOutputProfileSelected &&
         CreateLgCompatibilityCopy;
 
-    public string LgCompatibilityCopyExplanationText => Text(
-        "When enabled, v3dfy creates the primary output first, then a separate LG-compatible MP4 copy for the TV.",
-        "Cuando esta opcion esta activada, v3dfy crea primero la salida principal y luego una copia MP4 compatible LG para la TV.");
+    public string LgCompatibilityCopyExplanationText => T(LocalizationKeys.VideoLgCompatibilityCopyExplanation);
 
     public int SelectedWorkflowTabIndex
     {
@@ -2238,7 +2250,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public string VideoAnalysisTitle => Text("Video analysis", "Análisis de video");
+    public string VideoAnalysisTitle => T(LocalizationKeys.VideoAnalysisTitle);
 
     public bool IsModelPackImportRunning
     {
@@ -2269,20 +2281,17 @@ public sealed class MainWindowViewModel : ObservableObject
         !IsModelPackImportRunning;
 
     public string ImportModelPackText => IsModelPackImportRunning
-        ? Text("Importing model pack...", "Importando paquete de modelos...")
-        : Text("Import model pack...", "Importar paquete de modelos...");
+        ? T(LocalizationKeys.ModelPackImportingAction)
+        : T(LocalizationKeys.ModelPackImportAction);
 
-    public string ModelPackImportInstructionText => Text(
-        "Valid model packs are reviewed before Windows asks for administrator permission.",
-        "Los paquetes de modelos validos se revisan antes de que Windows pida permiso de administrador.");
+    public string ModelPackImportInstructionText => T(LocalizationKeys.ModelPackInstruction);
 
-    public string ModelPackImportStatusText => Text(
-        _modelPackImportStatusEnglishText,
-        _modelPackImportStatusSpanishText);
+    public string ModelPackImportStatusText =>
+        string.IsNullOrWhiteSpace(_modelPackImportStatusEnglishText)
+            ? T(LocalizationKeys.ModelPackStatusNotRun)
+            : _modelPackImportStatusEnglishText;
 
-    public string LastModelPackImportSummary => Text(
-        _lastModelPackImportSummaryEnglishText,
-        _lastModelPackImportSummarySpanishText);
+    public string LastModelPackImportSummary => _lastModelPackImportSummaryEnglishText;
 
     public Visibility LastModelPackImportSummaryVisibility =>
         string.IsNullOrWhiteSpace(LastModelPackImportSummary)
@@ -2304,19 +2313,18 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility GlobalBusyOverlayVisibility =>
         IsGlobalBusyOverlayVisible ? Visibility.Visible : Visibility.Collapsed;
 
-    public string GlobalBusyText => Text(
-        string.IsNullOrWhiteSpace(_globalBusyEnglishText) ? "Loading..." : _globalBusyEnglishText,
-        string.IsNullOrWhiteSpace(_globalBusySpanishText) ? "Cargando..." : _globalBusySpanishText);
+    public string GlobalBusyText =>
+        string.IsNullOrWhiteSpace(_globalBusyEnglishText) ? T(LocalizationKeys.CommonLoading) : _globalBusyEnglishText;
 
     public string AnalysisStatusText => IsAnalyzing
-        ? Text("Analyzing video...", "Analizando video...")
+        ? T(LocalizationKeys.VideoAnalysisStatusAnalyzing)
         : _analysis is null
-            ? Text("No analysis yet.", "Aún no hay análisis.")
-            : Text("Analysis completed.", "Análisis completado.");
+            ? T(LocalizationKeys.VideoAnalysisStatusNone)
+            : T(LocalizationKeys.VideoAnalysisStatusCompleted);
 
     public string VideoAnalysisPendingStatusText => IsAnalyzing
-        ? Text("Analyzing the selected video...", "Analizando el video seleccionado...")
-        : Text("Video selected. Run analysis to continue.", "Video seleccionado. Ejecuta el analisis para continuar.");
+        ? T(LocalizationKeys.VideoAnalysisPendingAnalyzing)
+        : T(LocalizationKeys.VideoAnalysisPendingSelected);
 
     public Visibility VideoAnalysisSectionVisibility =>
         HasSelectedVideo ? Visibility.Visible : Visibility.Collapsed;
@@ -2328,147 +2336,128 @@ public sealed class MainWindowViewModel : ObservableObject
         _analysis is null ? Visibility.Collapsed : Visibility.Visible;
 
     public string AnalysisDurationText => LabelValue(
-        "Duration",
-        "Duración",
+        LocalizationKeys.VideoAnalysisDuration,
         _analysis?.File.Duration is { } duration
             ? duration.ToString(@"hh\:mm\:ss")
             : null);
 
     public string AnalysisResolutionText => LabelValue(
-        "Resolution",
-        "Resolución",
+        LocalizationKeys.VideoAnalysisResolution,
         _analysis?.Video is { Width: { } width, Height: { } height }
             ? $"{width}x{height}"
             : null);
 
     public string AnalysisFpsText => LabelValue(
-        "FPS",
-        "FPS",
+        LocalizationKeys.VideoAnalysisFps,
         _analysis?.Video?.FrameRate?.ToString("0.###"));
 
     public string AnalysisCodecText => LabelValue(
-        "Video codec",
-        "Códec de video",
+        LocalizationKeys.VideoAnalysisCodec,
         _analysis?.Video?.CodecName);
 
     public string AnalysisContainerText => LabelValue(
-        "Container",
-        "Contenedor",
+        LocalizationKeys.VideoAnalysisContainer,
         _analysis?.File.FormatName);
 
     public string AnalysisAudioStreamsText => LabelValue(
-        "Audio streams",
-        "Pistas de audio",
+        LocalizationKeys.VideoAnalysisAudioStreams,
         _analysis?.AudioStreams.Count.ToString());
 
     public string AnalysisSubtitleStreamsText => LabelValue(
-        "Subtitle streams",
-        "Pistas de subtítulos",
+        LocalizationKeys.VideoAnalysisSubtitleStreams,
         _analysis?.SubtitleStreams.Count.ToString());
 
     public string AnalysisHdrText => LabelValue(
-        "HDR",
-        "HDR",
+        LocalizationKeys.VideoAnalysisHdr,
         _analysis is null
             ? null
             : _analysis.Video?.IsHdr == true
-                ? Text("Detected", "Detectado")
-                : Text("Not detected", "No detectado"));
+                ? T(LocalizationKeys.VideoAnalysisHdrDetected)
+                : T(LocalizationKeys.VideoAnalysisHdrNotDetected));
 
     public string AnalysisCompatibilityText => _analysis?.Video is
         { Width: { } width, Height: { } height } &&
         (width > SelectedOutputPreset.Recommendation.Width ||
          height > SelectedOutputPreset.Recommendation.Height)
-            ? Text(
-                "Compatibility note: resolution is higher than the selected preset target.",
-                "Nota de compatibilidad: la resolución supera el objetivo del perfil seleccionado.")
+            ? T(LocalizationKeys.VideoAnalysisCompatibilityHighResolution)
             : string.Empty;
 
-    public string RecommendedSetupTitle => Text(
-        "Recommended 3D setup",
-        "Configuración 3D recomendada");
+    public string RecommendedSetupTitle => T(LocalizationKeys.VideoRecommendationTitle);
 
     public bool CanOpenRecommendedSetupTab => _workflowState.CanOpenRecommendedSetupTab;
 
     public string RecommendedSetupStatusText => _conversionRecommendation is null
-        ? Text("No recommended setup yet.", "Aún no hay configuración recomendada.")
-        : Text(
-            $"Recommended setup for {SelectedOutputPreset.Name}.",
-            $"Configuración recomendada para {SelectedOutputPreset.SpanishName}.");
+        ? T(LocalizationKeys.VideoRecommendationStatusNone)
+        : T(
+            LocalizationKeys.VideoRecommendationStatusForFormat,
+            ("profile", TargetPresetName(SelectedOutputPreset)));
 
-    public string RecommendedOutputContainerText => RecommendationLabelValue(
-        "Output container",
-        "Contenedor de salida",
+    public string RecommendedOutputContainerText => LabelValue(
+        LocalizationKeys.VideoRecommendationOutputContainer,
         _conversionRecommendation?.OutputContainer.ToString());
 
-    public string RecommendedVideoCodecText => RecommendationLabelValue(
-        "Video codec",
-        "Códec de video",
+    public string RecommendedVideoCodecText => LabelValue(
+        LocalizationKeys.VideoRecommendationVideoCodec,
         _conversionRecommendation?.VideoCodec);
 
-    public string RecommendedAudioCodecText => RecommendationLabelValue(
-        "Audio",
-        "Audio",
+    public string RecommendedAudioCodecText => LabelValue(
+        LocalizationKeys.VideoRecommendationAudio,
         _conversionRecommendation?.AudioCodec);
 
-    public string RecommendedResolutionText => RecommendationLabelValue(
-        "Resolution",
-        "Resolución",
+    public string RecommendedResolutionText => LabelValue(
+        LocalizationKeys.VideoRecommendationResolution,
         _conversionRecommendation is null
             ? null
             : $"{_conversionRecommendation.Width}x{_conversionRecommendation.Height}");
 
-    public string RecommendedThreeDLayoutText => RecommendationLabelValue(
-        "3D layout",
-        "Diseño 3D",
+    public string RecommendedThreeDLayoutText => LabelValue(
+        LocalizationKeys.VideoRecommendationThreeDLayout,
         _conversionRecommendation?.ThreeDOutputFormat == ThreeDOutputFormat.HalfTopBottom
-            ? "Half Top-Bottom"
-            : _conversionRecommendation?.ThreeDOutputFormat.ToString());
+            ? ThreeDOutputFormatText(ThreeDOutputFormat.HalfTopBottom)
+            : _conversionRecommendation?.ThreeDOutputFormat is { } outputFormat
+                ? ThreeDOutputFormatText(outputFormat)
+                : null);
 
-    public string RecommendedQualityText => RecommendationLabelValue(
-        "Quality",
-        "Calidad",
+    public string RecommendedQualityText => LabelValue(
+        LocalizationKeys.VideoRecommendationQuality,
         _conversionRecommendation is null
             ? null
-            : QualityPresetText(_conversionRecommendation.QualityPreset, IsSpanish));
+            : QualityPresetText(_conversionRecommendation.QualityPreset));
 
-    public string RecommendedIntensityText => RecommendationLabelValue(
-        "3D intensity",
-        "Intensidad 3D",
+    public string RecommendedIntensityText => LabelValue(
+        LocalizationKeys.VideoRecommendationIntensity,
         _conversionRecommendation is null
             ? null
-            : ThreeDIntensityText(_conversionRecommendation.Intensity, IsSpanish));
+            : ThreeDIntensityText(_conversionRecommendation.Intensity));
 
-    public string RecommendedNotesTitle => Text(
-        "Notes / compatibility warnings",
-        "Notas / advertencias de compatibilidad");
+    public string RecommendedNotesTitle => T(LocalizationKeys.VideoRecommendationNotesTitle);
 
     public string RecommendedNotesText => _conversionRecommendation is null
         ? "-"
         : _conversionRecommendation.CompatibilityIssues.Count == 0
-            ? Text("No compatibility warnings.", "No hay advertencias de compatibilidad.")
+            ? T(LocalizationKeys.VideoRecommendationNoWarnings)
             : string.Join(
                 Environment.NewLine,
                 _conversionRecommendation.CompatibilityIssues.Select(issue =>
-                    $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
+                    $"- {LocalizeRecommendationCompatibilityIssue(issue)}"));
 
-    public string ConversionPlanTitle => Text("Conversion plan", "Plan de conversión");
+    public string ConversionPlanTitle => T(LocalizationKeys.VideoConversionPlanTitle);
 
     public bool CanOpenConversionPlanTab => _workflowState.CanOpenConversionPlanTab;
 
-    public string PlanOptionsTitle => Text("Plan options", "Opciones del plan");
+    public string PlanOptionsTitle => T(LocalizationKeys.VideoSetupPlanOptionsTitle);
 
-    public string OutputContainerOptionLabel => Text("Output container", "Contenedor de salida");
+    public string OutputContainerOptionLabel => T(LocalizationKeys.VideoSetupOutputContainerLabel);
 
-    public string QualityOptionLabel => Text("Quality", "Calidad");
+    public string QualityOptionLabel => T(LocalizationKeys.VideoSetupQualityLabel);
 
-    public string ThreeDIntensityOptionLabel => Text("3D intensity", "Intensidad 3D");
+    public string ThreeDIntensityOptionLabel => T(LocalizationKeys.VideoSetupThreeDIntensityLabel);
 
-    public string ThreeDOutputFormatOptionLabel => Text("3D layout", "Diseño 3D");
+    public string ThreeDOutputFormatOptionLabel => T(LocalizationKeys.VideoSetupThreeDOutputFormatLabel);
 
-    public string OutputLocationTitle => Text("Output location", "Ubicación de salida");
+    public string OutputLocationTitle => T(LocalizationKeys.VideoSetupOutputLocationTitle);
 
-    public string LocalModelSelectionLabel => Text("Local 3D/depth model", "Modelo local 3D/profundidad");
+    public string LocalModelSelectionLabel => T(LocalizationKeys.VideoModelSelectorLabel);
 
     public bool HasLocalModelSelectionCandidates => LocalModelCandidates.Count > 0;
 
@@ -2563,21 +2552,18 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string LocalModelSelectionStatusText => SelectedLocalModelCandidate is null
         ? HasUnmappedLocalModelCandidates
-            ? Text(
-                "Unmapped model files were found. Add a model catalog entry or mapping before using them.",
-                "Se encontraron modelos no mapeados. Agrega una entrada de catalogo o mapeo antes de usarlos.")
-            : Text(
-                "No mapped local depth models are available yet.",
-                "Aun no hay modelos locales de profundidad mapeados disponibles.")
-        : Text(
-            $"Selected local model: {SelectedLocalModelCandidate.DisplayName}. iw3 depth model: {SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"}",
-            $"Modelo local seleccionado: {SelectedLocalModelCandidate.DisplayName}. Modelo de profundidad iw3: {SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"}");
+            ? T(LocalizationKeys.VideoModelStatusUnmapped)
+            : T(LocalizationKeys.VideoModelStatusNone)
+        : T(
+            LocalizationKeys.VideoModelStatusSelectedFormat,
+            ("model", SelectedLocalModelCandidate.DisplayName),
+            ("iw3Model", SelectedLocalModelCandidate.Iw3DepthModelName ?? "-"));
 
     public string SelectedModelGuidanceText => CreateSelectedModelGuidanceText();
 
-    public string PresetGuidanceText => Text(
-        $"Preset guidance: {SelectedOutputPreset.BestFor}",
-        $"Guia del perfil: {SelectedOutputPreset.SpanishBestFor}");
+    public string PresetGuidanceText => T(
+        LocalizationKeys.VideoEstimatePresetGuidanceFormat,
+        ("bestFor", TargetPresetBestFor(SelectedOutputPreset)));
 
     public string EstimatedConversionTimeText
     {
@@ -2586,14 +2572,12 @@ public sealed class MainWindowViewModel : ObservableObject
             var estimate = CreateCurrentConversionTimeEstimate();
             if (!estimate.IsAvailable)
             {
-                return Text(
-                    "Estimated conversion time: Not enough information yet",
-                    "Tiempo estimado de conversion: aun no hay suficiente informacion");
+                return T(LocalizationKeys.VideoEstimateTimeUnavailable);
             }
 
-            return Text(
-                $"Estimated conversion time: {FormatEstimateRange(estimate.Low, estimate.High)}",
-                $"Tiempo estimado de conversion: {FormatEstimateRange(estimate.Low, estimate.High)}");
+            return T(
+                LocalizationKeys.VideoEstimateTimeFormat,
+                ("range", FormatEstimateRange(estimate.Low, estimate.High)));
         }
     }
 
@@ -2602,9 +2586,9 @@ public sealed class MainWindowViewModel : ObservableObject
         get
         {
             var estimate = CreateCurrentConversionTimeEstimate();
-            return Text(
-                $"Confidence: {ConfidenceText(estimate.Confidence, useSpanish: false)}",
-                $"Confianza: {ConfidenceText(estimate.Confidence, useSpanish: true)}");
+            return T(
+                LocalizationKeys.VideoEstimateConfidenceFormat,
+                ("confidence", ConfidenceText(estimate.Confidence)));
         }
     }
 
@@ -2616,7 +2600,7 @@ public sealed class MainWindowViewModel : ObservableObject
             var basis = IsSpanish
                 ? estimate.SpanishBasisItems
                 : estimate.EnglishBasisItems;
-            return Text("Based on: ", "Basado en: ") + string.Join(", ", basis);
+            return T(LocalizationKeys.VideoEstimateBasisPrefix) + string.Join(", ", basis);
         }
     }
 
@@ -2627,14 +2611,12 @@ public sealed class MainWindowViewModel : ObservableObject
             var estimate = CreateCurrentOutputSizeEstimate();
             if (!estimate.IsAvailable)
             {
-                return Text(
-                    "Estimated output size: Output size depends on final encoding settings.",
-                    "Tamano estimado de salida: el tamano depende de la configuracion final de codificacion.");
+                return T(LocalizationKeys.VideoEstimateOutputSizeUnavailable);
             }
 
-            return Text(
-                $"Estimated output size: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)}",
-                $"Tamano estimado de salida: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)}");
+            return T(
+                LocalizationKeys.VideoEstimateOutputSizeFormat,
+                ("range", FormatByteRange(estimate.LowBytes, estimate.HighBytes)));
         }
     }
 
@@ -2645,20 +2627,16 @@ public sealed class MainWindowViewModel : ObservableObject
             var estimate = CreateCurrentOutputSizeEstimate();
             if (!estimate.IsAvailable)
             {
-                return Text(
-                    "Recommended free space: check the destination drive before converting.",
-                    "Espacio libre recomendado: revisa la unidad de destino antes de convertir.");
+                return T(LocalizationKeys.VideoEstimateFreeSpaceUnavailable);
             }
 
-            return Text(
-                $"Recommended free space: at least {FormatBytes(estimate.RecommendedFreeBytes)}",
-                $"Espacio libre recomendado: al menos {FormatBytes(estimate.RecommendedFreeBytes)}");
+            return T(
+                LocalizationKeys.VideoEstimateFreeSpaceFormat,
+                ("space", FormatBytes(estimate.RecommendedFreeBytes)));
         }
     }
 
-    public string PerformanceHistoryPrivacyText => Text(
-        "Performance history is stored locally on this device to improve future time estimates. No telemetry or file paths are stored.",
-        "El historial de rendimiento se guarda localmente en este equipo para mejorar futuros tiempos estimados. No se guarda telemetria ni rutas de archivos.");
+    public string PerformanceHistoryPrivacyText => T(LocalizationKeys.VideoEstimatePrivacy);
 
     public string CompactEstimateTimeConfidenceText
     {
@@ -2667,10 +2645,11 @@ public sealed class MainWindowViewModel : ObservableObject
             var estimate = CreateCurrentConversionTimeEstimate();
             var estimateText = estimate.IsAvailable
                 ? FormatEstimateRange(estimate.Low, estimate.High)
-                : Text("not enough information yet", "aun sin informacion suficiente");
-            return Text(
-                $"Estimated time: {estimateText} \u00b7 Confidence: {ConfidenceText(estimate.Confidence, useSpanish: false)}",
-                $"Tiempo estimado: {estimateText} \u00b7 Confianza: {ConfidenceText(estimate.Confidence, useSpanish: true)}");
+                : T(LocalizationKeys.VideoEstimateNotEnoughInfo);
+            return T(
+                LocalizationKeys.VideoEstimateCompactTimeConfidenceFormat,
+                ("time", estimateText),
+                ("confidence", ConfidenceText(estimate.Confidence)));
         }
     }
 
@@ -2681,14 +2660,13 @@ public sealed class MainWindowViewModel : ObservableObject
             var estimate = CreateCurrentOutputSizeEstimate();
             if (!estimate.IsAvailable)
             {
-                return Text(
-                    "Output size: depends on final encoding settings \u00b7 Free space: check destination drive",
-                    "Tamano de salida: depende de la codificacion final \u00b7 Espacio libre: revisa la unidad destino");
+                return T(LocalizationKeys.VideoEstimateCompactOutputUnavailable);
             }
 
-            return Text(
-                $"Output size: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)} \u00b7 Free space: at least {FormatBytes(estimate.RecommendedFreeBytes)}",
-                $"Tamano de salida: {FormatByteRange(estimate.LowBytes, estimate.HighBytes)} \u00b7 Espacio libre: al menos {FormatBytes(estimate.RecommendedFreeBytes)}");
+            return T(
+                LocalizationKeys.VideoEstimateCompactOutputFormat,
+                ("range", FormatByteRange(estimate.LowBytes, estimate.HighBytes)),
+                ("space", FormatBytes(estimate.RecommendedFreeBytes)));
         }
     }
 
@@ -2698,9 +2676,7 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (SelectedLocalModelCandidate is null)
             {
-                return Text(
-                    "Model: included base model when available \u00b7 Speed: Medium \u00b7 Quality: Usable",
-                    "Modelo: modelo base incluido cuando este disponible \u00b7 Velocidad: Media \u00b7 Calidad: Utilizable");
+                return T(LocalizationKeys.VideoEstimateCompactModelDefault);
             }
 
             var entry = FindRegistryEntry(SelectedLocalModelCandidate);
@@ -2709,23 +2685,21 @@ public sealed class MainWindowViewModel : ObservableObject
                 SelectedLocalModelCandidate.Iw3DepthModelName,
                 SelectedLocalModelCandidate.DisplayName,
                 entry?.IsEmbeddedBase == true);
-            return Text(
-                $"Model: {guidance.EnglishHeadline} \u00b7 Speed: {guidance.EnglishSpeed} \u00b7 Quality: {guidance.EnglishQuality}",
-                $"Modelo: {guidance.SpanishHeadline} \u00b7 Velocidad: {guidance.SpanishSpeed} \u00b7 Calidad: {guidance.SpanishQuality}");
+            return T(
+                LocalizationKeys.VideoEstimateCompactModelFormat,
+                ("headline", LocalizeModelGuidanceHeadline(SelectedLocalModelCandidate, entry, guidance)),
+                ("speed", LocalizeModelGuidanceSpeed(guidance.EnglishSpeed)),
+                ("quality", LocalizeModelGuidanceQuality(guidance.EnglishQuality)));
         }
     }
 
-    public string CompactPresetGuidanceText => Text(
-        $"Preset: {SelectedOutputPreset.BestFor}",
-        $"Perfil: {SelectedOutputPreset.SpanishBestFor}");
+    public string CompactPresetGuidanceText => T(
+        LocalizationKeys.VideoEstimateCompactPresetFormat,
+        ("bestFor", TargetPresetBestFor(SelectedOutputPreset)));
 
-    public string EstimateDetailsTitleText => Text(
-        "Estimate details",
-        "Detalles de estimacion");
+    public string EstimateDetailsTitleText => T(LocalizationKeys.VideoEstimateDetailsTitle);
 
-    public string GuidanceDetailsTitleText => Text(
-        "Model and preset details",
-        "Detalles de modelo y perfil");
+    public string GuidanceDetailsTitleText => T(LocalizationKeys.VideoGuidanceDetailsTitle);
 
     public bool HasUnmappedLocalModelCandidates =>
         Iw3DepthModelMapper.GetUnmappedCandidates(
@@ -2733,79 +2707,59 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ModelHelpButtonText => "?";
 
-    public string ModelHelpButtonToolTipText => Text(
-        "Explain the installed models currently available in this selector.",
-        "Explicar los modelos instalados disponibles actualmente en este selector.");
+    public string ModelHelpButtonToolTipText => T(LocalizationKeys.VideoModelHelpTooltip);
 
-    public string ImageParallaxModelHelpButtonToolTipText => Text(
-        "Explain local models compatible with image conversion workflows.",
-        "Explicar los modelos locales compatibles con flujos de conversion de imagen.");
+    public string ImageParallaxModelHelpButtonToolTipText => T(LocalizationKeys.ImageModelHelpTooltip);
 
-    public string ModelHelpTitleText => Text(
-        _isImageParallaxModelHelpContext
-            ? "Image model help"
-            : "Selectable model help",
-        _isImageParallaxModelHelpContext
-            ? "Ayuda de modelos para imagen"
-            : "Ayuda de modelos seleccionables");
+    public string ModelHelpTitleText => _isImageParallaxModelHelpContext
+        ? T(LocalizationKeys.ImageModelHelpTitle)
+        : T(LocalizationKeys.VideoModelHelpTitle);
 
-    public string ModelHelpIntroText => Text(
-        _isImageParallaxModelHelpContext
-            ? "Only installed local models mapped to an image-capable iw3 depth mode are shown for image conversion workflows. Video-only or unmapped files are not selectable for image conversion."
-            : "Only installed models that are ready for this conversion flow are shown here.",
-        _isImageParallaxModelHelpContext
-            ? "Solo se muestran modelos locales instalados y mapeados a un modo de profundidad iw3 compatible con imagen. Los archivos solo-video o sin mapeo no se pueden seleccionar para conversion de imagen."
-            : "Aqui solo se muestran modelos instalados que estan listos para este flujo de conversion.");
+    public string ModelHelpIntroText => _isImageParallaxModelHelpContext
+        ? T(LocalizationKeys.ImageModelHelpDescription)
+        : T(LocalizationKeys.VideoModelHelpDescription);
 
-    public string ModelHelpModelHeaderText => Text("Model", "Modelo");
+    public string ModelHelpModelHeaderText => T(LocalizationKeys.VideoModelHelpModel);
 
-    public string ModelHelpPurposeHeaderText => Text("Purpose", "Propósito");
+    public string ModelHelpPurposeHeaderText => T(LocalizationKeys.VideoModelHelpPurpose);
 
-    public string ModelHelpUseHeaderText => Text("Use", "Uso");
+    public string ModelHelpUseHeaderText => T(LocalizationKeys.VideoModelHelpUse);
 
-    public string ModelHelpSceneHeaderText => Text("Scene", "Escena");
+    public string ModelHelpSceneHeaderText => T(LocalizationKeys.VideoModelHelpScene);
 
-    public string ModelHelpDepthHeaderText => Text("Depth", "Profundidad");
+    public string ModelHelpDepthHeaderText => T(LocalizationKeys.VideoModelHelpDepth);
 
-    public string ModelHelpSizePerformanceHeaderText => Text(
-        "Size/performance",
-        "Tamaño/rendimiento");
+    public string ModelHelpSizePerformanceHeaderText => T(LocalizationKeys.VideoModelHelpSizePerformance);
 
     public IReadOnlyList<ModelHelpRow> ModelHelpRows => _isImageParallaxModelHelpContext
         ? CreateImageParallaxModelHelpRows()
         : CreateModelHelpRows();
 
-    public string ViewModelsText => Text("View models", "Ver modelos");
+    public string ViewModelsText => T(LocalizationKeys.ModalViewModels);
 
-    public string ViewModelsToolTipText => Text(
-        "View local 3D models and import model packs.",
-        "Ver modelos 3D locales e importar paquetes de modelos.");
+    public string ViewModelsToolTipText => T(LocalizationKeys.VideoModelViewModelsTooltip);
 
-    public string ModelInventoryTitleText => Text("3D models", "Modelos 3D");
+    public string ModelInventoryTitleText => T(LocalizationKeys.ModelInventoryTitle);
 
-    public string ModelInventoryIntroText => Text(
-        "Review local models detected by v3dfy. Only mapped and verified models are selectable for conversion.",
-        "Revisa los modelos locales detectados por v3dfy. Solo los modelos mapeados y verificados son seleccionables para convertir.");
+    public string ModelInventoryIntroText => T(LocalizationKeys.ModelInventoryIntro);
 
-    public string ModelInventoryFolderLabelText => Text("Model folder", "Carpeta de modelos");
+    public string ModelInventoryFolderLabelText => T(LocalizationKeys.ModelInventoryFolderLabel);
 
     public string ModelInventoryFolderPathText => GetCurrentModelInventory().ModelsDirectory;
 
-    public string SelectableModelsSectionTitleText => Text(
-        "Selectable models",
-        "Modelos seleccionables");
+    public string SelectableModelsSectionTitleText => T(LocalizationKeys.ModelInventorySelectableSectionTitle);
 
     public string SelectableModelsInventoryText => CreateSelectableModelsInventoryText();
 
-    public string SelectableModelNameHeaderText => Text("Model", "Modelo");
+    public string SelectableModelNameHeaderText => T(LocalizationKeys.ModelInventoryHeaderModel);
 
-    public string SelectableModelIw3HeaderText => Text("iw3 depth model", "Modelo iw3");
+    public string SelectableModelIw3HeaderText => T(LocalizationKeys.ModelInventoryHeaderIw3DepthModel);
 
-    public string SelectableModelCheckpointHeaderText => Text("Checkpoint", "Checkpoint");
+    public string SelectableModelCheckpointHeaderText => T(LocalizationKeys.ModelInventoryHeaderCheckpoint);
 
-    public string SelectableModelTypeHeaderText => Text("Type", "Tipo");
+    public string SelectableModelTypeHeaderText => T(LocalizationKeys.ModelInventoryHeaderType);
 
-    public string SelectableModelSourceHeaderText => Text("Source", "Origen");
+    public string SelectableModelSourceHeaderText => T(LocalizationKeys.ModelInventoryHeaderSource);
 
     public IReadOnlyList<SelectableModelInventoryRow> SelectableModelInventoryRows =>
         CreateSelectableModelInventoryRows();
@@ -2816,37 +2770,27 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility SettingsSelectableModelsEmptyVisibility =>
         SelectableModelInventoryRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    public string SettingsSelectableModelsEmptyText => Text(
-        "No selectable models are available yet.",
-        "Aun no hay modelos seleccionables disponibles.");
+    public string SettingsSelectableModelsEmptyText => T(LocalizationKeys.ModelInventorySelectableEmpty);
 
-    public string DiagnosticModelsSectionTitleText => Text(
-        "Detected but not selectable",
-        "Detectados no seleccionables");
+    public string DiagnosticModelsSectionTitleText => T(LocalizationKeys.ModelInventoryDiagnosticSectionTitle);
 
     public string DiagnosticModelsInventoryText => CreateDiagnosticModelsInventoryText();
 
-    public string RuntimeDependenciesSectionTitleText => Text(
-        "Runtime dependencies",
-        "Dependencias de runtime");
+    public string RuntimeDependenciesSectionTitleText => T(LocalizationKeys.ModelInventoryRuntimeDependenciesTitle);
 
     public string RuntimeDependenciesInventoryText => CreateRuntimeDependenciesInventoryText();
 
-    public string ModelInventoryActionsTitleText => Text("Actions", "Acciones");
+    public string ModelInventoryActionsTitleText => T(LocalizationKeys.ModelInventoryActionsTitle);
 
-    public string OpenModelsFolderText => Text(
-        "Open models folder",
-        "Abrir carpeta de modelos");
+    public string OpenModelsFolderText => T(LocalizationKeys.ModelInventoryOpenModelsFolder);
 
-    public string OutputPathLabel => Text("Output path", "Ruta de salida");
+    public string OutputPathLabel => T(LocalizationKeys.VideoOutputPathLabel);
 
-    public string BrowseOutputFolderText => Text("Browse...", "Examinar...");
+    public string BrowseOutputFolderText => T(LocalizationKeys.CommonBrowse);
 
-    public string ResetOutputPathText => Text("Reset", "Restablecer");
+    public string ResetOutputPathText => T(LocalizationKeys.VideoOutputResetPath);
 
-    public string OpenOutputWhenFinishedText => Text(
-        "Open video when finished",
-        "Abrir video al finalizar");
+    public string OpenOutputWhenFinishedText => T(LocalizationKeys.VideoOutputOpenWhenFinished);
 
     public bool OpenOutputWhenFinished
     {
@@ -2880,108 +2824,92 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     public string ConversionPlanStatusText => _conversionPlan is null
-        ? Text("No conversion plan yet.", "Aún no hay plan de conversión.")
+        ? T(LocalizationKeys.VideoConversionPlanStatusNone)
         : _conversionPlan.IsDryRun
-            ? Text("Dry-run preview. Conversion is not started.", "Vista previa en seco. La conversión no se ha iniciado.")
-            : Text("Ready for conversion.", "Listo para convertir.");
+            ? T(LocalizationKeys.VideoConversionPlanStatusDryRun)
+            : T(LocalizationKeys.VideoConversionPlanStatusReady);
 
     public string OutputProfileDisplayText => _planOptionState.HasCustomizedOptions
-        ? Text(
-            $"Custom based on {SelectedOutputPreset.Name}",
-            $"Personalizado basado en {SelectedOutputPreset.SpanishName}")
-        : Text(SelectedOutputPreset.Name, SelectedOutputPreset.SpanishName);
+        ? T(
+            LocalizationKeys.VideoConversionPlanOutputProfileCustomFormat,
+            ("profile", TargetPresetName(SelectedOutputPreset)))
+        : TargetPresetName(SelectedOutputPreset);
 
-    public string ConversionPlanPresetText => Text(
-        $"Output profile: {OutputProfileDisplayText}",
-        $"Perfil de salida: {OutputProfileDisplayText}");
+    public string ConversionPlanPresetText => T(
+        LocalizationKeys.VideoConversionPlanPresetFormat,
+        ("profile", OutputProfileDisplayText));
 
     public string ConversionPlanLocalModelText => _conversionPlan?.SelectedLocalModel is null
-        ? Text(
-            "Local model: Not selected / not available yet.",
-            "Modelo local: No seleccionado / a\u00fan no disponible.")
-        : Text(
-            $"Local model: {_conversionPlan.SelectedLocalModel.DisplayName} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.EnglishSourceText}). iw3 depth model: {_conversionPlan.SelectedLocalModel.Iw3DepthModelName ?? "-"}",
-            $"Modelo local: {GetSpanishModelDisplayName(_conversionPlan.SelectedLocalModel)} ({_conversionPlan.SelectedLocalModel.RelativePath}, {_conversionPlan.SelectedLocalModel.SpanishSourceText}). Modelo de profundidad iw3: {_conversionPlan.SelectedLocalModel.Iw3DepthModelName ?? "-"}");
+        ? T(LocalizationKeys.VideoConversionPlanLocalModelNone)
+        : T(
+            LocalizationKeys.VideoConversionPlanLocalModelFormat,
+            ("model", IsSpanish ? GetSpanishModelDisplayName(_conversionPlan.SelectedLocalModel) : _conversionPlan.SelectedLocalModel.DisplayName),
+            ("relativePath", _conversionPlan.SelectedLocalModel.RelativePath),
+            ("source", IsSpanish ? _conversionPlan.SelectedLocalModel.SpanishSourceText : _conversionPlan.SelectedLocalModel.EnglishSourceText),
+            ("iw3Model", _conversionPlan.SelectedLocalModel.Iw3DepthModelName ?? "-"));
 
-    public string ConversionPlanOutputPathText => ConversionPlanLabelValue(
-        "Primary output",
-        "Salida principal",
+    public string ConversionPlanOutputPathText => LabelValue(
+        LocalizationKeys.VideoOutputPrimary,
         _conversionPlan?.SuggestedOutputPath);
 
     public string ConversionPlanLgCompatibilityCopyPathText =>
-        ConversionPlanLabelValue(
-            "LG-compatible copy",
-            "Copia compatible LG",
+        LabelValue(
+            LocalizationKeys.VideoOutputLgCompatibilityCopy,
             GetLgCompatibilityCopyPath());
 
-    public string ConversionPlanOutputFormatText => ConversionPlanLabelValue(
-        "Output format",
-        "Formato de salida",
+    public string ConversionPlanOutputFormatText => LabelValue(
+        LocalizationKeys.VideoOutputFormat,
         _conversionPlan is null
             ? null
             : $"{_conversionPlan.OutputContainer} / {_conversionPlan.VideoCodec} / {_conversionPlan.AudioCodec}");
 
-    public string ConversionPlanResolutionText => ConversionPlanLabelValue(
-        "Target resolution",
-        "Resolución objetivo",
+    public string ConversionPlanResolutionText => LabelValue(
+        LocalizationKeys.VideoOutputTargetResolution,
         _conversionPlan is null
             ? null
             : $"{_conversionPlan.Width}x{_conversionPlan.Height}");
 
-    public string ConversionPlanThreeDLayoutText => ConversionPlanLabelValue(
-        "3D layout",
-        "Diseño 3D",
+    public string ConversionPlanThreeDLayoutText => LabelValue(
+        LocalizationKeys.VideoSetupThreeDOutputFormatLabel,
         _conversionPlan is null
             ? null
-            : ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat, IsSpanish));
+            : ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat));
 
-    public string ConversionPlanQualityText => ConversionPlanLabelValue(
-        "Quality",
-        "Calidad",
+    public string ConversionPlanQualityText => LabelValue(
+        LocalizationKeys.VideoSetupQualityLabel,
         _conversionPlan is null
             ? null
-            : QualityPresetText(_conversionPlan.QualityPreset, IsSpanish));
+            : QualityPresetText(_conversionPlan.QualityPreset));
 
-    public string ConversionPlanIntensityText => ConversionPlanLabelValue(
-        "3D intensity",
-        "Intensidad 3D",
+    public string ConversionPlanIntensityText => LabelValue(
+        LocalizationKeys.VideoSetupThreeDIntensityLabel,
         _conversionPlan is null
             ? null
-            : ThreeDIntensityText(_conversionPlan.Intensity, IsSpanish));
+            : ThreeDIntensityText(_conversionPlan.Intensity));
 
     public string ConversionPlanDryRunReasonText => _conversionPlan?.DryRunReason switch
     {
-        ConversionDryRunReason.MissingLocalAiBundle => Text(
-            "Conversion is not available yet because the local AI engine, embedded Python runtime, or models are not bundled.",
-            "La conversión aún no está disponible porque todavía no están incluidos el motor local de IA, el runtime de Python embebido o los modelos."),
-        ConversionDryRunReason.MissingRequiredTools => Text(
-            "Conversion is not available because required bundled tools are missing.",
-            "La conversión no está disponible porque faltan herramientas incluidas requeridas."),
+        ConversionDryRunReason.MissingLocalAiBundle => T(LocalizationKeys.VideoConversionPlanDryRunMissingLocalAiBundle),
+        ConversionDryRunReason.MissingRequiredTools => T(LocalizationKeys.VideoConversionPlanDryRunMissingRequiredTools),
         _ => string.Empty,
     };
 
-    public string ConversionPlanStepsTitle => Text("Planned steps", "Pasos previstos");
+    public string ConversionPlanStepsTitle => T(LocalizationKeys.VideoConversionPlanStepsTitle);
 
     public string ConversionPlanStepsText => _conversionPlan is null
         ? "-"
         : string.Join(
             Environment.NewLine,
             _conversionPlan.Steps.Select((step, index) =>
-                $"{index + 1}. {Text(step.EnglishText, step.SpanishText)}"));
+                $"{index + 1}. {LocalizeConversionPlanStep(step)}"));
 
-    public string ConversionPlanCommandPreviewTitle => Text(
-        "Future iw3 command preview",
-        "Vista previa del futuro comando iw3");
+    public string ConversionPlanCommandPreviewTitle => T(LocalizationKeys.VideoConversionPlanCommandPreviewTitle);
 
     public string ConversionPlanCommandPreviewText => _conversionPlan?.CommandPreview ?? "-";
 
-    public string ConversionPlanTechnicalDetailsTitleText => Text(
-        "Technical details",
-        "Detalles tecnicos");
+    public string ConversionPlanTechnicalDetailsTitleText => T(LocalizationKeys.VideoConversionPlanTechnicalDetailsTitle);
 
-    public string ReadyForConversionSummaryText => Text(
-        "Ready for conversion",
-        "Listo para convertir");
+    public string ReadyForConversionSummaryText => T(LocalizationKeys.VideoConversionReadySummary);
 
     public bool HasEnteredPreviewConversionStage => _hasEnteredPreviewConversionStage;
 
@@ -3006,9 +2934,7 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-    public string ContinueWithConversionText => Text(
-        "Continue with conversion",
-        "Continuar con la conversion");
+    public string ContinueWithConversionText => T(LocalizationKeys.VideoConversionContinue);
 
     public Visibility PreviewConversionStatusCardVisibility =>
         ShouldShowPreviewConversionStatusCard ? Visibility.Visible : Visibility.Collapsed;
@@ -3019,13 +2945,9 @@ public sealed class MainWindowViewModel : ObservableObject
     public Thickness ActivityLogCardMargin =>
         ShouldShowPreviewConversionStatusCard ? new Thickness(0, 6, 0, 0) : new Thickness(0);
 
-    public string PreviewStageResetNoticeText => Text(
-        "Review the conversion plan again, then press Continue with conversion.",
-        "Revisa de nuevo el plan de conversion y presiona Continuar con la conversion.");
+    public string PreviewStageResetNoticeText => T(LocalizationKeys.VideoConversionStageResetNotice);
 
-    public string PreviewConversionStatusTitleText => Text(
-        "Preview & conversion",
-        "Preview y conversion");
+    public string PreviewConversionStatusTitleText => T(LocalizationKeys.VideoConversionPreviewStatusTitle);
 
     public string PreviewConversionStatusText
     {
@@ -3043,9 +2965,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
             return _conversionExecutionState.Status switch
             {
-                ConversionExecutionStatus.Completed => Text("Conversion completed", "Conversion finalizada"),
-                ConversionExecutionStatus.Canceled => Text("Conversion canceled", "Conversion cancelada"),
-                ConversionExecutionStatus.Failed => Text("Conversion failed", "Conversion fallida"),
+                ConversionExecutionStatus.Completed => T(LocalizationKeys.VideoConversionStatusCompleted),
+                ConversionExecutionStatus.Canceled => T(LocalizationKeys.VideoConversionStatusCanceled),
+                ConversionExecutionStatus.Failed => T(LocalizationKeys.VideoConversionStatusFailed),
                 _ when IsCurrentPreviewAccepted => ConversionReadyTitleText,
                 _ => PreviewStatusValueText,
             };
@@ -3058,9 +2980,7 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (!HasCompletedAnalysis)
             {
-                return Text(
-                    "Select and analyze a source video to prepare preview and conversion.",
-                    "Selecciona y analiza un video fuente para preparar preview y conversion.");
+                return T(LocalizationKeys.VideoSourceEmptyHint);
             }
 
             if (IsConversionRunning)
@@ -3082,26 +3002,22 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public string PreviewTitleText => Text("Preview", "Vista previa");
+    public string PreviewTitleText => T(LocalizationKeys.VideoPreviewTitle);
 
-    public string PreviewRequiredTitleText => Text("Preview required", "Vista previa requerida");
+    public string PreviewRequiredTitleText => T(LocalizationKeys.VideoPreviewRequiredTitle);
 
-    public string PreviewAcceptedTitleText => Text("Preview accepted", "Vista previa aceptada");
+    public string PreviewAcceptedTitleText => T(LocalizationKeys.VideoPreviewAcceptedTitle);
 
     public string PreviewStepTitleText =>
         PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration()).CanStart
             ? PreviewAcceptedTitleText
             : PreviewRequiredTitleText;
 
-    public string GeneratePreviewText => Text("Generate preview", "Generar vista previa");
+    public string GeneratePreviewText => T(LocalizationKeys.VideoPreviewGenerate);
 
     public string PreviewRequiredInstructionText => _previewState.Status == PreviewGenerationStatus.Outdated
-        ? Text(
-            "Settings changed. Generate a new preview for the current settings.",
-            "La configuracion cambio. Genera una nueva vista previa para la configuracion actual.")
-        : Text(
-            "Generate and review a short preview before final conversion.",
-            "Genera y revisa una vista previa corta antes de la conversion final.");
+        ? T(LocalizationKeys.VideoPreviewOutdatedInstruction)
+        : T(LocalizationKeys.VideoPreviewRequiredInstruction);
 
     public Visibility PreviewRequirementVisibility =>
         !HasEnteredPreviewConversionStage || IsConversionRunning || IsPreviewGenerating || IsCurrentPreviewAccepted
@@ -3121,25 +3037,20 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility ConversionReadySummaryVisibility =>
         CanStartConversion ? Visibility.Visible : Visibility.Collapsed;
 
-    public string ConversionReadyTitleText => Text("Conversion ready", "Conversi\u00f3n lista");
+    public string ConversionReadyTitleText => T(LocalizationKeys.VideoConversionReadyTitle);
 
-    public string ConversionReadyBodyText => Text(
-        "Preview accepted. The final video is ready to be generated.",
-        "Vista previa aceptada. El video final est\u00e1 listo para generarse.");
+    public string ConversionReadyBodyText => T(LocalizationKeys.VideoConversionReadyBody);
 
-    public string ConversionReadySelectedModelText => ConversionPlanLabelValue(
-        "Selected model",
-        "Modelo seleccionado",
+    public string ConversionReadySelectedModelText => LabelValue(
+        LocalizationKeys.VideoConversionReadySelectedModel,
         FormatConversionReadySelectedModel());
 
-    public string ConversionReadyOutputText => ConversionPlanLabelValue(
-        "Output",
-        "Salida",
+    public string ConversionReadyOutputText => LabelValue(
+        LocalizationKeys.VideoConversionReadyOutput,
         FormatConversionReadyOutput());
 
-    public string ConversionReadyDestinationText => ConversionPlanLabelValue(
-        "Destination",
-        "Destino",
+    public string ConversionReadyDestinationText => LabelValue(
+        LocalizationKeys.VideoOutputDestination,
         _conversionPlan?.SuggestedOutputPath);
 
     public Visibility CancelConversionPrimaryActionVisibility =>
@@ -3147,61 +3058,53 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-    public string CancelPreviewText => Text("Cancel preview", "Cancelar vista previa");
+    public string CancelPreviewText => T(LocalizationKeys.VideoPreviewCancel);
 
-    public string OpenPreviewText => Text("Open preview", "Abrir vista previa");
+    public string OpenPreviewText => T(LocalizationKeys.VideoPreviewOpen);
 
-    public string OpenPreviewExternallyText => Text("Open externally", "Abrir externamente");
+    public string OpenPreviewExternallyText => T(LocalizationKeys.VideoPreviewOpenExternally);
 
-    public string DeletePreviewText => Text("Delete preview", "Eliminar vista previa");
+    public string DeletePreviewText => T(LocalizationKeys.VideoPreviewDelete);
 
-    public string ContinuePreviewText => Text("Continue", "Continuar");
+    public string ContinuePreviewText => T(LocalizationKeys.VideoPreviewContinue);
 
-    public string PreviewGeneratingTitleText => Text("Generating preview", "Generando vista previa");
+    public string PreviewGeneratingTitleText => T(LocalizationKeys.VideoPreviewGeneratingTitle);
 
-    public string PreviewGeneratingMessageText => Text(
-        "Please wait while v3dfy creates a short 3D preview.",
-        "Espera mientras v3dfy crea una vista previa 3D corta.");
+    public string PreviewGeneratingMessageText => T(LocalizationKeys.VideoPreviewGeneratingMessage);
 
     public int PreviewProgressPercent => Math.Clamp(_previewProgressPercent, 0, 100);
 
     public string PreviewProgressText =>
         PreviewProgressPercent > 0
             ? $"{PreviewProgressPercent}%"
-            : Text("Estimating...", "Calculando...");
+            : T(LocalizationKeys.VideoPreviewProgressEstimating);
 
     public bool PreviewProgressIsIndeterminate =>
         IsPreviewGenerating && PreviewProgressPercent <= 0;
 
-    public string PreviewReadyTitleText => Text("Preview ready", "Vista previa lista");
+    public string PreviewReadyTitleText => T(LocalizationKeys.VideoPreviewReadyTitle);
 
-    public string PreviewReadyMessageText => Text(
-        "Review the preview before continuing to final conversion.",
-        "Revisa la vista previa antes de continuar con la conversion final.");
+    public string PreviewReadyMessageText => T(LocalizationKeys.VideoPreviewReadyMessage);
 
-    public string PreviewPlaybackFallbackText => Text(
-        "If embedded playback is unavailable, use Open externally.",
-        "Si la reproduccion integrada no esta disponible, usa Abrir externamente.");
+    public string PreviewPlaybackFallbackText => T(LocalizationKeys.VideoPlayerFallback);
 
-    public string PreviewPlayText => Text("Play", "Reproducir");
+    public string PreviewPlayText => T(LocalizationKeys.VideoPlayerPlay);
 
-    public string PreviewPauseText => Text("Pause", "Pausar");
+    public string PreviewPauseText => T(LocalizationKeys.VideoPlayerPause);
 
-    public string PreviewReplayText => Text("Replay", "Repetir");
+    public string PreviewReplayText => T(LocalizationKeys.VideoPlayerReplay);
 
-    public string PreviewVolumeText => Text("Volume", "Volumen");
+    public string PreviewVolumeText => T(LocalizationKeys.VideoPlayerVolume);
 
-    public string PreviewMutedText => Text("Muted", "Silenciado");
+    public string PreviewMutedText => T(LocalizationKeys.VideoPlayerMuted);
 
-    public string PreviewMuteText => Text("Mute", "Silenciar");
+    public string PreviewMuteText => T(LocalizationKeys.VideoPlayerMute);
 
-    public string PreviewUnmuteText => Text("Unmute", "Activar sonido");
+    public string PreviewUnmuteText => T(LocalizationKeys.VideoPlayerUnmute);
 
-    public string PreviewEndedText => Text("Preview ended", "Vista previa finalizada");
+    public string PreviewEndedText => T(LocalizationKeys.VideoPlayerEnded);
 
-    public string EmbeddedPlaybackUnavailableText => Text(
-        "Embedded playback unavailable",
-        "Reproduccion integrada no disponible");
+    public string EmbeddedPlaybackUnavailableText => T(LocalizationKeys.VideoPlayerEmbeddedUnavailable);
 
     public Uri? PreviewMediaSource
     {
@@ -3224,22 +3127,15 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility PreviewMetricsHeaderVisibility =>
         IsPreviewGenerating ? Visibility.Visible : Visibility.Collapsed;
 
-    public string PreviewEngineText => Text(
-        "Preview engine: FFmpeg source clip + bundled Python/iw3",
-        "Motor de vista previa: clip fuente FFmpeg + Python/iw3 incluido");
+    public string PreviewEngineText => T(LocalizationKeys.VideoPreviewEngine);
 
-    public string PreviewRunningWithText => Text(
-        "Running with: FFmpeg source clip + bundled Python/iw3",
-        "Ejecutando con: clip fuente FFmpeg + Python/iw3 incluido");
+    public string PreviewRunningWithText => T(LocalizationKeys.VideoPreviewRunningWith);
 
-    public string PreviewGpuMetricsNoteText => Text(
-        "GPU metrics show global adapter activity, not guaranteed per-process attribution.",
-        "Las metricas de GPU muestran actividad global del adaptador, no atribucion garantizada por proceso.");
+    public string PreviewGpuMetricsNoteText => T(LocalizationKeys.VideoPreviewGpuMetricsNote);
 
-    public string PreviewStageText => ConversionPlanLabelValue(
-        "Stage",
-        "Etapa",
-        Text(_previewStageEnglishText, _previewStageSpanishText));
+    public string PreviewStageText => LabelValue(
+        LocalizationKeys.VideoPreviewStage,
+        _previewStageKey is null ? _previewStageEnglishText : T(_previewStageKey));
 
     public string PreviewCpuUsageText => _previewCpuUsageText;
 
@@ -3251,9 +3147,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string PreviewGpuMetricsStatusText => _previewGpuMetricsStatusText;
 
-    public string PreviewStatusText => ConversionPlanLabelValue(
-        "Preview status",
-        "Estado de vista previa",
+    public string PreviewStatusText => LabelValue(
+        LocalizationKeys.VideoPreviewStatusLabel,
         PreviewStatusValueText);
 
     public string PreviewGateStatusText
@@ -3261,10 +3156,9 @@ public sealed class MainWindowViewModel : ObservableObject
         get
         {
             var gate = PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration());
-            return ConversionPlanLabelValue(
-                "Preview status",
-                "Estado de vista previa",
-                Text(gate.EnglishStatus, gate.SpanishStatus));
+            return LabelValue(
+                LocalizationKeys.VideoPreviewStatusLabel,
+                LocalizePreviewGateStatus(gate));
         }
     }
 
@@ -3273,23 +3167,21 @@ public sealed class MainWindowViewModel : ObservableObject
         get
         {
             var gate = PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration());
-            return Text(gate.EnglishDetail, gate.SpanishDetail);
+            return LocalizePreviewGateDetail(gate);
         }
     }
 
-    public string PreviewDurationText => ConversionPlanLabelValue(
-        "Preview duration",
-        "Duracion de vista previa",
+    public string PreviewDurationText => LabelValue(
+        LocalizationKeys.VideoPreviewDuration,
         CurrentPreviewDuration.ToString(@"hh\:mm\:ss"));
 
-    public string PreviewStartTimeText => ConversionPlanLabelValue(
-        "Preview start time",
-        "Tiempo de inicio de vista previa",
+    public string PreviewStartTimeText => LabelValue(
+        LocalizationKeys.VideoPreviewStartTime,
         CurrentPreviewStartTime.ToString(@"hh\:mm\:ss"));
 
-    public string PreviewFromLabel => Text("From", "Desde");
+    public string PreviewFromLabel => T(LocalizationKeys.VideoPreviewFrom);
 
-    public string PreviewToLabel => Text("To", "Hasta");
+    public string PreviewToLabel => T(LocalizationKeys.VideoPreviewTo);
 
     public string PreviewFromText
     {
@@ -3337,16 +3229,13 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public string PreviewTimeRangeText => ConversionPlanLabelValue(
-        "Preview duration",
-        "Duracion de vista previa",
+    public string PreviewTimeRangeText => LabelValue(
+        LocalizationKeys.VideoPreviewDuration,
         CurrentPreviewTimeRangeValidation.Range is { } range
             ? range.Duration.ToString(@"hh\:mm\:ss")
             : "-");
 
-    public string PreviewMaximumDurationText => Text(
-        "Maximum preview duration is 1 minute 30 seconds",
-        "La duracion maxima de la vista previa es de 1 minuto 30 segundos");
+    public string PreviewMaximumDurationText => T(LocalizationKeys.VideoPreviewMaximumDuration);
 
     public string PreviewTimeRangeValidationText =>
         PreviewTimeRangeValidationMessage(CurrentPreviewTimeRangeValidation.Issue);
@@ -3362,9 +3251,7 @@ public sealed class MainWindowViewModel : ObservableObject
         !IsModelPackImportRunning &&
         !IsPreviewRangeEditingBlockedByModal;
 
-    public string PreviewOutdatedText => Text(
-        "Preview outdated",
-        "La vista previa esta desactualizada");
+    public string PreviewOutdatedText => T(LocalizationKeys.VideoPreviewOutdated);
 
     public Visibility PreviewOutdatedVisibility =>
         _previewState.Status == PreviewGenerationStatus.Outdated
@@ -3373,9 +3260,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string PreviewOutputPathText => string.IsNullOrWhiteSpace(_previewState.OutputPath)
         ? string.Empty
-        : ConversionPlanLabelValue(
-            "Preview output",
-            "Salida de vista previa",
+        : LabelValue(
+            LocalizationKeys.VideoPreviewOutput,
             _previewState.OutputPath);
 
     public Visibility PreviewOutputPathVisibility =>
@@ -3416,9 +3302,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _previewState.Status == PreviewGenerationStatus.Ready &&
         IsPreviewFingerprintCurrent();
 
-    public string PreviewModalDetailText => Text(
-        _previewState.EnglishDetail,
-        _previewState.SpanishDetail);
+    public string PreviewModalDetailText => LocalizePreviewStateDetail(_previewState);
 
     public string PreviewGenerationLogText => _previewGenerationLogTextBuilder.ToString();
 
@@ -3454,42 +3338,38 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private string PreviewStatusValueText => _previewState.Status switch
     {
-        PreviewGenerationStatus.NotGenerated => Text("Preview required", "Vista previa requerida"),
-        PreviewGenerationStatus.Generating => Text("Preview generation is running.", "La generacion de vista previa esta en ejecucion."),
-        PreviewGenerationStatus.Ready => Text("Preview ready. Review it before continuing.", "Vista previa lista. Revisala antes de continuar."),
-        PreviewGenerationStatus.Accepted => Text("Preview accepted", "Vista previa aceptada"),
-        PreviewGenerationStatus.Failed => Text("Preview failed.", "Vista previa fallida."),
-        PreviewGenerationStatus.Canceled => Text("Preview canceled.", "Vista previa cancelada."),
-        PreviewGenerationStatus.Outdated => Text("Preview outdated", "Vista previa desactualizada"),
+        PreviewGenerationStatus.NotGenerated => T(LocalizationKeys.VideoPreviewStatusRequired),
+        PreviewGenerationStatus.Generating => T(LocalizationKeys.VideoPreviewStatusGenerating),
+        PreviewGenerationStatus.Ready => T(LocalizationKeys.VideoPreviewStatusReady),
+        PreviewGenerationStatus.Accepted => T(LocalizationKeys.VideoPreviewStatusAccepted),
+        PreviewGenerationStatus.Failed => T(LocalizationKeys.VideoPreviewStatusFailed),
+        PreviewGenerationStatus.Canceled => T(LocalizationKeys.VideoPreviewStatusCanceled),
+        PreviewGenerationStatus.Outdated => T(LocalizationKeys.VideoPreviewStatusOutdated),
         _ => _previewState.Status.ToString(),
     };
 
-    public string ConversionProgressTitle => Text(
-        "Conversion progress",
-        "Progreso de conversión");
+    public string ConversionProgressTitle => T(LocalizationKeys.VideoConversionProgressTitle);
 
-    public string ConversionExecutionStatusLabel => Text("Status", "Estado");
+    public string ConversionExecutionStatusLabel => T(LocalizationKeys.VideoConversionExecutionStatusLabel);
 
     public string ConversionExecutionStatusText => _conversionExecutionState.Status switch
     {
-        ConversionExecutionStatus.NotStarted => Text("Not started", "No iniciada"),
-        ConversionExecutionStatus.Ready => Text("Ready", "Lista"),
-        ConversionExecutionStatus.Blocked => Text("Blocked", "Bloqueada"),
-        ConversionExecutionStatus.Running => Text("Running", "En ejecución"),
-        ConversionExecutionStatus.Canceling => Text("Canceling", "Cancelando"),
-        ConversionExecutionStatus.Canceled => Text("Canceled", "Cancelada"),
-        ConversionExecutionStatus.Failed => Text("Failed", "Fallida"),
-        ConversionExecutionStatus.Completed => Text("Completed", "Completada"),
+        ConversionExecutionStatus.NotStarted => T(LocalizationKeys.VideoConversionStatusNotStarted),
+        ConversionExecutionStatus.Ready => T(LocalizationKeys.VideoConversionStatusReady),
+        ConversionExecutionStatus.Blocked => T(LocalizationKeys.VideoConversionStatusBlocked),
+        ConversionExecutionStatus.Running => T(LocalizationKeys.VideoConversionStatusRunning),
+        ConversionExecutionStatus.Canceling => T(LocalizationKeys.VideoConversionStatusCanceling),
+        ConversionExecutionStatus.Canceled => T(LocalizationKeys.VideoConversionStatusCanceledShort),
+        ConversionExecutionStatus.Failed => T(LocalizationKeys.VideoConversionStatusFailedShort),
+        ConversionExecutionStatus.Completed => T(LocalizationKeys.VideoConversionStatusCompletedShort),
         _ => _conversionExecutionState.Status.ToString(),
     };
 
-    public string ConversionExecutionStepLabel => Text("Current step", "Paso actual");
+    public string ConversionExecutionStepLabel => T(LocalizationKeys.VideoConversionExecutionStepLabel);
 
-    public string ConversionExecutionStepText => Text(
-        _conversionExecutionState.CurrentStep.EnglishText,
-        _conversionExecutionState.CurrentStep.SpanishText);
+    public string ConversionExecutionStepText => LocalizeConversionExecutionStep(_conversionExecutionState);
 
-    public string ConversionExecutionProgressLabel => Text("Progress", "Progreso");
+    public string ConversionExecutionProgressLabel => T(LocalizationKeys.VideoConversionExecutionProgressLabel);
 
     public int ConversionExecutionProgressPercent => _conversionExecutionState.ProgressPercent;
 
@@ -3508,15 +3388,13 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string ConversionProgressBarText => ConversionExecutionProgressText;
 
-    public string ConversionExecutionDetailText => Text(
-        _conversionExecutionState.DetailEnglish,
-        _conversionExecutionState.DetailSpanish);
+    public string ConversionExecutionDetailText => LocalizeConversionExecutionDetail(_conversionExecutionState);
 
-    public string ConversionElapsedLabelText => Text("Elapsed", "Transcurrido");
+    public string ConversionElapsedLabelText => T(LocalizationKeys.VideoConversionElapsedLabel);
 
-    public string ConversionRemainingLabelText => Text("Remaining", "Restante");
+    public string ConversionRemainingLabelText => T(LocalizationKeys.VideoConversionRemainingLabel);
 
-    public string ConversionEstimatedTotalLabelText => Text("Estimated total", "Total estimado");
+    public string ConversionEstimatedTotalLabelText => T(LocalizationKeys.VideoConversionEstimatedTotalLabel);
 
     public string ConversionElapsedValueText => IsConversionRunning
         ? FormatDuration(GetCurrentConversionElapsed())
@@ -3525,18 +3403,18 @@ public sealed class MainWindowViewModel : ObservableObject
     public string ConversionRemainingValueText => IsConversionRunning
         ? _conversionTimingEstimate?.Remaining is { } remaining
             ? FormatDuration(remaining)
-            : Text("Estimating...", "Calculando...")
+            : T(LocalizationKeys.VideoPreviewProgressEstimating)
         : "-";
 
     public string ConversionEstimatedTotalValueText => IsConversionRunning
         ? _conversionTimingEstimate?.EstimatedTotal is { } total
             ? FormatDuration(total)
-            : Text("Estimating...", "Calculando...")
+            : T(LocalizationKeys.VideoPreviewProgressEstimating)
         : "-";
 
     public bool CanCancelConversion => _conversionExecutionState.CanCancel;
 
-    public string CancelConversionText => Text("Cancel", "Cancelar");
+    public string CancelConversionText => T(LocalizationKeys.VideoConversionCancel);
 
     public bool IsConversionRunning =>
         _conversionExecutionState.Status is
@@ -3555,64 +3433,49 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility ConversionSummaryVisibility =>
         IsConversionRunning ? Visibility.Visible : Visibility.Collapsed;
 
-    public string ConversionRunningTitle => Text(
-        "Live conversion",
-        "Conversion en vivo");
+    public string ConversionRunningTitle => T(LocalizationKeys.VideoConversionRunningTitle);
 
-    public string ConversionRunningStatusText => Text("Converting...", "Convirtiendo...");
+    public string ConversionRunningStatusText => T(LocalizationKeys.VideoConversionRunningStatus);
 
-    public string ConversionLiveLogEmptyText => Text(
-        "Waiting for local iw3 output...",
-        "Esperando salida local de iw3...");
+    public string ConversionLiveLogEmptyText => T(LocalizationKeys.VideoConversionLiveLogEmpty);
 
-    public string ConversionSummaryTitle => Text(
-        "Conversion summary",
-        "Resumen de conversion");
+    public string ConversionSummaryTitle => T(LocalizationKeys.VideoConversionSummaryTitle);
 
-    public string ConversionSummaryPresetText => ConversionPlanLabelValue(
-        "Output profile",
-        "Perfil de salida",
+    public string ConversionSummaryPresetText => LabelValue(
+        LocalizationKeys.VideoOutputProfileLabel,
         OutputProfileDisplayText);
 
-    public string ConversionSummaryOutputContainerText => ConversionPlanLabelValue(
-        "Output container",
-        "Contenedor de salida",
+    public string ConversionSummaryOutputContainerText => LabelValue(
+        LocalizationKeys.VideoSetupOutputContainerLabel,
         SelectedOutputContainer.ToString());
 
-    public string ConversionSummaryQualityText => ConversionPlanLabelValue(
-        "Quality",
-        "Calidad",
-        QualityPresetText(SelectedQualityPreset, IsSpanish));
+    public string ConversionSummaryQualityText => LabelValue(
+        LocalizationKeys.VideoSetupQualityLabel,
+        QualityPresetText(SelectedQualityPreset));
 
-    public string ConversionSummaryIntensityText => ConversionPlanLabelValue(
-        "3D intensity",
-        "Intensidad 3D",
-        ThreeDIntensityText(SelectedThreeDIntensity, IsSpanish));
+    public string ConversionSummaryIntensityText => LabelValue(
+        LocalizationKeys.VideoSetupThreeDIntensityLabel,
+        ThreeDIntensityText(SelectedThreeDIntensity));
 
-    public string ConversionSummaryLayoutText => ConversionPlanLabelValue(
-        "3D layout",
-        "Diseno 3D",
-        ThreeDOutputFormatText(SelectedThreeDOutputFormat, IsSpanish));
+    public string ConversionSummaryLayoutText => LabelValue(
+        LocalizationKeys.VideoSetupThreeDOutputFormatLabel,
+        ThreeDOutputFormatText(SelectedThreeDOutputFormat));
 
-    public string ConversionSummaryLocalModelText => ConversionPlanLabelValue(
-        "Local 3D/depth model",
-        "Modelo local 3D/profundidad",
+    public string ConversionSummaryLocalModelText => LabelValue(
+        LocalizationKeys.VideoModelSelectorLabel,
         SelectedLocalModelCandidate?.DisplayName);
 
-    public string ConversionSummaryOutputPathText => ConversionPlanLabelValue(
-        "Primary output",
-        "Salida principal",
+    public string ConversionSummaryOutputPathText => LabelValue(
+        LocalizationKeys.VideoOutputPrimary,
         _conversionPlan?.SuggestedOutputPath);
 
     public string ConversionSummaryLgCompatibilityCopyText =>
-        ConversionPlanLabelValue(
-            "LG-compatible copy",
-            "Copia compatible LG",
+        LabelValue(
+            LocalizationKeys.VideoOutputLgCompatibilityCopy,
             GetLgCompatibilityCopyPath());
 
-    public string ConversionSummaryCurrentStatusText => ConversionPlanLabelValue(
-        "Current status",
-        "Estado actual",
+    public string ConversionSummaryCurrentStatusText => LabelValue(
+        LocalizationKeys.VideoConversionSummaryCurrentStatus,
         IsConversionRunning ? ConversionRunningStatusText : ConversionExecutionStatusText);
 
     public string CpuUsageText => _cpuUsageText;
@@ -3623,103 +3486,77 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string VramUsageText => _vramUsageText;
 
-    public string ConversionReadinessTitle => Text(
-        "Conversion readiness",
-        "Estado de conversión");
+    public string ConversionReadinessTitle => T(LocalizationKeys.VideoReadinessTitle);
 
-    public string SystemStatusTitle => Text(
-        "System status",
-        "Estado del sistema");
+    public string SystemStatusTitle => T(LocalizationKeys.SystemStatusTitle);
 
-    public string SystemStatusToolsTabTitle => Text("Tools", "Herramientas");
+    public string SystemStatusToolsTabTitle => T(LocalizationKeys.SystemStatusToolsTabTitle);
 
-    public string SystemStatusConversionTabTitle => Text("Conversion", "Conversión");
+    public string SystemStatusConversionTabTitle => T(LocalizationKeys.VideoConversionPlanTitle);
 
-    public string SystemStatusTechnicalDetailsTitle => Text(
-        "Technical details",
-        "Detalles técnicos");
+    public string SystemStatusTechnicalDetailsTitle => T(LocalizationKeys.SystemStatusTechnicalDetailsTitle);
 
-    public string SystemStatusDetailsButtonText => Text("Details", "Detalles");
+    public string SystemStatusDetailsButtonText => T(LocalizationKeys.SystemStatusDetailsButton);
 
-    public string CloseDialogText => Text("Close", "Cerrar");
+    public string CloseDialogText => T(LocalizationKeys.ModalClose);
 
-    public string CancelDialogText => Text("Cancel", "Cancelar");
+    public string CancelDialogText => T(LocalizationKeys.ModalCancel);
 
-    public string ReplaceSelectedVideoTitleText => Text(
-        "Replace selected video?",
-        "¿Reemplazar video seleccionado?");
+    public string ReplaceSelectedVideoTitleText => T(LocalizationKeys.VideoDialogReplaceTitle);
 
-    public string ReplaceSelectedVideoBodyText => Text(
-        "Selecting a new video will clear the current analysis, recommended setup, conversion plan, and custom output path before analyzing the new video. Plan options may update when the new recommendation is prepared.",
-        "Seleccionar un nuevo video borrará el análisis actual, la configuración recomendada, el plan de conversión y la ruta de salida personalizada antes de analizar el nuevo video. Las opciones del plan pueden actualizarse cuando se prepare la nueva recomendación.");
+    public string ReplaceSelectedVideoBodyText => T(LocalizationKeys.VideoDialogReplaceBody);
 
-    public string ReplaceVideoConfirmText => Text("Replace", "Reemplazar");
+    public string ReplaceVideoConfirmText => T(LocalizationKeys.VideoDialogReplaceConfirm);
 
-    public string PreviewInvalidationConfirmationTitleText => Text(
-        "Changing this setting requires a new preview",
-        "Este cambio requiere generar un nuevo preview");
+    public string PreviewInvalidationConfirmationTitleText => T(LocalizationKeys.VideoDialogPreviewInvalidationTitle);
 
-    public string PreviewInvalidationConfirmationBodyText => Text(
-        "You already generated a preview for the current setup. Changing this setting will invalidate that preview and you will need to generate it again before final conversion.",
-        "Ya generaste un preview para la configuracion actual. Si cambias esta opcion, ese preview dejara de ser valido y tendras que generarlo de nuevo antes de la conversion final.");
+    public string PreviewInvalidationConfirmationBodyText => T(LocalizationKeys.VideoDialogPreviewInvalidationBody);
 
-    public string PreviewInvalidationConfirmText => Text(
-        "Change setting",
-        "Cambiar configuracion");
+    public string PreviewInvalidationConfirmText => T(LocalizationKeys.VideoDialogPreviewInvalidationConfirm);
 
-    public string ModelPackImportConfirmationTitleText => Text(
-        _modelPackImportConfirmationPrompt?.EnglishTitle ?? "Confirm model pack import",
-        _modelPackImportConfirmationPrompt?.SpanishTitle ?? "Confirmar importacion de paquete de modelos");
+    public string ModelPackImportConfirmationTitleText => T(LocalizationKeys.ModelPackConfirmationTitle);
 
-    public string ModelPackImportConfirmationIntroText => Text(
-        "Review this model pack before Windows asks for administrator permission.",
-        "Revisa este paquete de modelos antes de que Windows pida permiso de administrador.");
+    public string ModelPackImportConfirmationIntroText => T(LocalizationKeys.ModelPackConfirmationIntro);
 
-    public string ModelPackImportConfirmationMessageText => Text(
-        _modelPackImportConfirmationPrompt?.EnglishMessage ?? string.Empty,
-        _modelPackImportConfirmationPrompt?.SpanishMessage ?? string.Empty);
+    public string ModelPackImportConfirmationMessageText =>
+        _modelPackImportConfirmationPrompt is null
+            ? string.Empty
+            : CreateModelPackConfirmationMessage(_modelPackImportConfirmationPrompt.Preparation);
 
-    public string ModelPackImportConfirmationContinueText => Text("Continue", "Continuar");
+    public string ModelPackImportConfirmationContinueText => T(LocalizationKeys.CommonContinue);
 
-    public string ConversionCompletedTitleText => Text(
-        "Conversion complete",
-        "Conversi\u00f3n finalizada");
+    public string ConversionCompletedTitleText => T(LocalizationKeys.VideoConversionCompletedTitle);
 
-    public string ConversionCompletedBodyText => Text(
-        "The 3D video was created successfully.",
-        "El video 3D se cre\u00f3 correctamente.");
+    public string ConversionCompletedBodyText => T(LocalizationKeys.VideoConversionCompletedBody);
 
-    public string ConversionCompletedOutputPathText => ConversionPlanLabelValue(
-        "Output path",
-        "Ruta de salida",
+    public string ConversionCompletedOutputPathText => LabelValue(
+        LocalizationKeys.VideoOutputPathLabel,
         CompletedConversionOutputPath);
 
-    public string AcceptConversionCompletedText => Text("OK", "Aceptar");
+    public string AcceptConversionCompletedText => T(LocalizationKeys.VideoConversionCompletedAccept);
 
     public string CompletedConversionOutputPath => _completedConversionOutputPath;
 
-    public string ProfileDetailsTitleText => Text(
-        "Profile details",
-        "Detalles del perfil");
+    public string ProfileDetailsTitleText => T(LocalizationKeys.VideoProfileDetailsTitle);
 
     public string ProfileDetailsButtonText => "?";
 
-    public string ViewLogText => Text("View log", "Ver log");
+    public string ViewLogText => T(LocalizationKeys.CommonViewLog);
 
-    public string CopyFullLogText => Text("Copy full log", "Copiar todo el log");
+    public string CommonCopyText => T(LocalizationKeys.CommonCopy);
 
-    public string CopyPreviewLogText => Text(
-        "Copy preview log",
-        "Copiar log de vista previa");
+    public string CommonSelectAllText => T(LocalizationKeys.CommonSelectAll);
 
-    public string LogCopiedText => Text("Log copied", "Log copiado");
+    public string CopyFullLogText => T(LocalizationKeys.ModalCopyFullLog);
 
-    public string CouldNotCopyLogText => Text(
-        "Could not copy log",
-        "No se pudo copiar el log");
+    public string CopyPreviewLogText => T(LocalizationKeys.VideoLogCopyPreview);
+
+    public string LogCopiedText => T(LocalizationKeys.CommonLogCopied);
+
+    public string CouldNotCopyLogText => T(LocalizationKeys.CommonCouldNotCopyLog);
 
     public string LogCopyNotificationText =>
-        Text(_logCopyNotificationEnglishText, _logCopyNotificationSpanishText);
+        _logCopyNotificationEnglishText;
 
     public Visibility LogCopyNotificationVisibility =>
         _isLogCopyNotificationVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -4002,9 +3839,7 @@ public sealed class MainWindowViewModel : ObservableObject
         private set => SetProperty(ref _technicalDetailsBodyText, value);
     }
 
-    public string LogsDiagnosticsTechnicalDetailsTitleText => Text(
-        "Technical details",
-        "Detalles tecnicos");
+    public string LogsDiagnosticsTechnicalDetailsTitleText => T(LocalizationKeys.SystemStatusTechnicalDetailsTitle);
 
     public string LogsDiagnosticsTechnicalDetailsText => CreateSystemStatusTechnicalDetailsText();
 
@@ -4029,9 +3864,7 @@ public sealed class MainWindowViewModel : ObservableObject
             TvPlaybackInstructions,
         ]);
 
-    public string ConversionReadinessEmptyText => Text(
-        "Analyze a video to see conversion readiness.",
-        "Analiza un video para ver el estado de conversión.");
+    public string ConversionReadinessEmptyText => T(LocalizationKeys.VideoReadinessEmpty);
 
     public bool ShowConversionReadinessCard =>
         _workflowState.ShowConversionReadinessCard(_conversionExecutionState.Status);
@@ -4045,11 +3878,9 @@ public sealed class MainWindowViewModel : ObservableObject
     public Visibility ConversionProgressVisibility =>
         ShowConversionProgressCard ? Visibility.Visible : Visibility.Collapsed;
 
-    public string ConversionReadinessStatusLabel => Text("Status", "Estado");
+    public string ConversionReadinessStatusLabel => T(LocalizationKeys.VideoReadinessStatusLabel);
 
-    public string ConversionReadinessMissingRequirementsTitle => Text(
-        "Missing requirements",
-        "Requisitos faltantes");
+    public string ConversionReadinessMissingRequirementsTitle => T(LocalizationKeys.VideoReadinessMissingRequirementsTitle);
 
     public Visibility ConversionMissingRequirementsVisibility =>
         ShouldShowConversionMissingRequirements()
@@ -4061,13 +3892,9 @@ public sealed class MainWindowViewModel : ObservableObject
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-    public string PreviewConversionMissingToolsText => Text(
-        "Open Settings to review missing tools.",
-        "Abre Ajustes para revisar herramientas faltantes.");
+    public string PreviewConversionMissingToolsText => T(LocalizationKeys.VideoReadinessMissingTools);
 
-    public string OpenSettingsForToolsText => Text(
-        "Open Settings",
-        "Abrir ajustes");
+    public string OpenSettingsForToolsText => T(LocalizationKeys.VideoReadinessOpenSettings);
 
     public string ConversionReadinessStatusText
     {
@@ -4076,7 +3903,7 @@ public sealed class MainWindowViewModel : ObservableObject
             if (IsConversionRunning)
             {
                 return _conversionExecutionState.Status == ConversionExecutionStatus.Running
-                    ? Text("Converting", "Convirtiendo")
+                    ? T(LocalizationKeys.VideoConversionStatusConverting)
                     : ConversionExecutionStatusText;
             }
 
@@ -4088,25 +3915,23 @@ public sealed class MainWindowViewModel : ObservableObject
             var startGate = EvaluateConversionStartGate();
             if (!startGate.CanStart)
             {
-                return Text(startGate.EnglishStatus, startGate.SpanishStatus);
+                return LocalizeConversionStartGateStatus(startGate);
             }
 
-            return Text(
-                _conversionReadiness?.EnglishStatus ??
-                "Conversion unavailable. Required local components are missing.",
-                _conversionReadiness?.SpanishStatus ??
-                "Conversión no disponible. Faltan componentes locales requeridos.");
+            return _conversionReadiness is null
+                ? T(LocalizationKeys.VideoConversionStatusUnavailableMissingComponents)
+                : LocalizeConversionReadinessStatus(_conversionReadiness);
         }
     }
 
     public string ConversionReadinessIssuesText => _conversionReadiness is null
         ? "-"
         : _conversionReadiness.Issues.Count == 0
-            ? Text("No missing requirements.", "No hay requisitos faltantes.")
+            ? T(LocalizationKeys.VideoReadinessNoMissingRequirements)
             : string.Join(
                 Environment.NewLine,
                 _conversionReadiness.Issues.Select(issue =>
-                    $"- {Text(issue.EnglishMessage, issue.SpanishMessage)}"));
+                    $"- {LocalizeConversionReadinessIssue(issue)}"));
 
     public string ConversionReadinessMissingComponentsSummaryText =>
         _dependencyHealth is null || !HasCompletedAnalysis || IsConversionRunning || IsPreviewGenerating
@@ -4117,9 +3942,7 @@ public sealed class MainWindowViewModel : ObservableObject
             || IsConversionRunning
             || IsPreviewGenerating
         ? string.Empty
-        : Text(
-            _conversionReadiness.EnglishRequiredComponentsSummary,
-            _conversionReadiness.SpanishRequiredComponentsSummary);
+        : T(LocalizationKeys.VideoReadinessRequiredComponents);
 
     public string ConversionBlockedReasonText
     {
@@ -4138,7 +3961,7 @@ public sealed class MainWindowViewModel : ObservableObject
             var startGate = EvaluateConversionStartGate();
             return startGate.CanStart
                 ? string.Empty
-                : Text(startGate.EnglishDetail, startGate.SpanishDetail);
+                : LocalizeConversionStartGateDetail(startGate);
         }
     }
 
@@ -4173,7 +3996,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private string? FormatConversionReadyOutput() =>
         _conversionPlan is null
             ? null
-            : $"{_conversionPlan.OutputContainer} \u00b7 {ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat, IsSpanish)} \u00b7 {_conversionPlan.Width}x{_conversionPlan.Height}";
+            : $"{_conversionPlan.OutputContainer} \u00b7 {ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat)} \u00b7 {_conversionPlan.Width}x{_conversionPlan.Height}";
 
     private ConversionTimeEstimate CreateCurrentConversionTimeEstimate() =>
         _conversionTimeEstimator.Estimate(
@@ -4210,20 +4033,69 @@ public sealed class MainWindowViewModel : ObservableObject
             selectedModel?.MappingKey ?? SelectedLocalModelCandidate?.MappingKey,
             selectedModel?.DisplayName ?? SelectedLocalModelCandidate?.DisplayName,
             SelectedOutputPreset.Id,
-            Text(SelectedOutputPreset.Name, SelectedOutputPreset.SpanishName),
+            TargetPresetName(SelectedOutputPreset),
             SelectedOutputContainer,
             SelectedQualityPreset,
             SelectedThreeDOutputFormat,
             GetDeviceCapabilityBucket());
     }
 
+    private string LocalizeRecommendationCompatibilityIssue(VideoCompatibilityIssue issue)
+    {
+        var message = issue.EnglishMessage;
+        if (message.Contains("LG Full HD target", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoRecommendationCompatibilityResolutionLg);
+        }
+
+        if (message.StartsWith("Source resolution is higher than the selected preset target", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(
+                LocalizationKeys.VideoRecommendationCompatibilityResolutionPresetFormat,
+                ("width", _conversionRecommendation?.Width.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
+                ("height", _conversionRecommendation?.Height.ToString(CultureInfo.InvariantCulture) ?? string.Empty));
+        }
+
+        if (message.Contains("HDR was detected", StringComparison.OrdinalIgnoreCase) &&
+            message.Contains("older 3D TVs", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoRecommendationCompatibilityHdrLg);
+        }
+
+        if (message.Contains("HDR was detected", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoRecommendationCompatibilityHdrGeneric);
+        }
+
+        if (message.StartsWith("MKV is a good master/archive source", StringComparison.OrdinalIgnoreCase) &&
+            message.Contains("older LG 3D TVs", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoRecommendationCompatibilityMkvLg);
+        }
+
+        if (message.StartsWith("MKV is a good master/archive source", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoRecommendationCompatibilityMkvGeneric);
+        }
+
+        if (message.StartsWith("No audio streams were detected", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoRecommendationCompatibilityNoAudio);
+        }
+
+        if (message.StartsWith("Subtitle handling will be configured", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoRecommendationCompatibilitySubtitlesLater);
+        }
+
+        return message;
+    }
+
     private string CreateSelectedModelGuidanceText()
     {
         if (SelectedLocalModelCandidate is null)
         {
-            return Text(
-                "Model guidance: v3dfy includes a usable base model when the bundled base model is selected. Optional model packs can be imported later.",
-                "Guia de modelo: v3dfy incluye un modelo base utilizable cuando se selecciona el modelo base incluido. Los paquetes opcionales pueden importarse despues.");
+            return T(LocalizationKeys.VideoModelGuidanceDefault);
         }
 
         var entry = FindRegistryEntry(SelectedLocalModelCandidate);
@@ -4232,9 +4104,13 @@ public sealed class MainWindowViewModel : ObservableObject
             SelectedLocalModelCandidate.Iw3DepthModelName,
             SelectedLocalModelCandidate.DisplayName,
             entry?.IsEmbeddedBase == true);
-        return Text(
-            $"Model guidance: {guidance.EnglishHeadline}. Good for: {guidance.EnglishBestFor}. Speed: {guidance.EnglishSpeed}. Quality: {guidance.EnglishQuality}. Size: {guidance.EnglishSize}.",
-            $"Guia de modelo: {guidance.SpanishHeadline}. Bueno para: {guidance.SpanishBestFor}. Velocidad: {guidance.SpanishSpeed}. Calidad: {guidance.SpanishQuality}. Tamano: {guidance.SpanishSize}.");
+        return T(
+            LocalizationKeys.VideoModelGuidanceFormat,
+            ("headline", LocalizeModelGuidanceHeadline(SelectedLocalModelCandidate, entry, guidance)),
+            ("bestFor", LocalizeModelGuidanceBestFor(SelectedLocalModelCandidate, entry, guidance)),
+            ("speed", LocalizeModelGuidanceSpeed(guidance.EnglishSpeed)),
+            ("quality", LocalizeModelGuidanceQuality(guidance.EnglishQuality)),
+            ("size", LocalizeModelGuidanceSize(guidance.EnglishSize)));
     }
 
     private string GetDeviceCapabilityBucket()
@@ -4250,14 +4126,12 @@ public sealed class MainWindowViewModel : ObservableObject
             : "hardware not benchmarked yet";
     }
 
-    private static string ConfidenceText(
-        ConversionEstimateConfidence confidence,
-        bool useSpanish) => confidence switch
+    private string ConfidenceText(ConversionEstimateConfidence confidence) => confidence switch
     {
-        ConversionEstimateConfidence.High => useSpanish ? "Alta" : "High",
-        ConversionEstimateConfidence.Medium => useSpanish ? "Media" : "Medium",
-        ConversionEstimateConfidence.Low => useSpanish ? "Baja" : "Low",
-        _ => useSpanish ? "No disponible" : "Unavailable",
+        ConversionEstimateConfidence.High => T(LocalizationKeys.VideoOptionConfidenceHigh),
+        ConversionEstimateConfidence.Medium => T(LocalizationKeys.VideoOptionConfidenceMedium),
+        ConversionEstimateConfidence.Low => T(LocalizationKeys.VideoOptionConfidenceLow),
+        _ => T(LocalizationKeys.VideoOptionConfidenceUnavailable),
     };
 
     private static string FormatEstimateRange(TimeSpan low, TimeSpan high) =>
@@ -4309,9 +4183,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public string StartConversionText => _conversionExecutionState.Status switch
     {
-        ConversionExecutionStatus.Running => Text("Cancel", "Cancelar"),
-        ConversionExecutionStatus.Canceling => Text("Canceling...", "Cancelando..."),
-        _ => Text("Convert", "Convertir"),
+        ConversionExecutionStatus.Running => T(LocalizationKeys.VideoConversionCancel),
+        ConversionExecutionStatus.Canceling => T(LocalizationKeys.VideoConversionCanceling),
+        _ => T(LocalizationKeys.VideoConversionStart),
     };
 
     public bool CanUseSystemStatusActions =>
@@ -4327,71 +4201,64 @@ public sealed class MainWindowViewModel : ObservableObject
         !IsPreviewGenerating &&
         !IsModelPackImportRunning;
 
-    public string ToolStatusTitle => Text(
-        "Internal tool status",
-        "Estado de herramientas internas");
+    public string ToolStatusTitle => T(LocalizationKeys.SystemStatusTitle);
 
-    public string RefreshText => Text("Refresh", "Actualizar");
+    public string RefreshText => T(LocalizationKeys.CommonRefresh);
 
-    public string OpenEngineFolderText => Text(
-        "Open engine folder",
-        "Abrir carpeta del motor");
+    public string OpenEngineFolderText => T(LocalizationKeys.SystemOpenEngineFolder);
 
-    public string ActivityLogTitle => Text("Activity log", "Registro de actividad");
+    public string ActivityLogTitle => T(LocalizationKeys.VideoLogTitle);
 
     public string ActiveActivityLogModalTitleText =>
         _activeActivityLogModalKind == ActivityLogModalKind.Image ? ImageActivityLogTitleText : ActivityLogTitle;
 
-    public string ClearText => Text("Clear", "Limpiar");
+    public string ClearText => T(LocalizationKeys.CommonClear);
 
-    public string RecommendedPresetTitle => Text(
-        "Output profile details",
-        "Detalles del perfil de salida");
+    public string RecommendedPresetTitle => T(LocalizationKeys.VideoProfileDetailsTitle);
 
-    public string OutputPresetLabel => Text("Output profile", "Perfil de salida");
+    public string OutputPresetLabel => T(LocalizationKeys.VideoOutputProfileLabel);
 
-    public string PresetName => Text(SelectedOutputPreset.Name, SelectedOutputPreset.SpanishName);
+    public string PresetName => TargetPresetName(SelectedOutputPreset);
 
-    public string PresetDescriptionText => Text("Description", "Descripción") +
-        $": {Text(SelectedOutputPreset.Description, SelectedOutputPreset.SpanishDescription)}";
+    public string PresetDescriptionText => LabelValue(
+        LocalizationKeys.VideoProfileDescriptionLabel,
+        TargetPresetDescription(SelectedOutputPreset));
 
-    public string PresetBestForText => Text("Best for", "Ideal para") +
-        $": {Text(SelectedOutputPreset.BestFor, SelectedOutputPreset.SpanishBestFor)}";
+    public string PresetBestForText => LabelValue(
+        LocalizationKeys.VideoProfileBestForLabel,
+        TargetPresetBestFor(SelectedOutputPreset));
 
-    public string PresetTechnicalRecommendationTitle => Text(
-        "Technical recommendation",
-        "Recomendación técnica");
+    public string PresetTechnicalRecommendationTitle => T(LocalizationKeys.VideoProfileTechnicalRecommendationTitle);
 
-    public string PresetContainerText => Text("Recommended container", "Contenedor recomendado") +
-        $": {SelectedOutputPreset.Recommendation.OutputContainer}";
+    public string PresetContainerText => LabelValue(
+        LocalizationKeys.VideoProfileRecommendedContainer,
+        SelectedOutputPreset.Recommendation.OutputContainer.ToString());
 
-    public string PresetVideoCodecText => Text("Codec", "Códec") +
-        $": {SelectedOutputPreset.Recommendation.VideoCodec}";
+    public string PresetVideoCodecText => LabelValue(
+        LocalizationKeys.VideoProfileCodec,
+        SelectedOutputPreset.Recommendation.VideoCodec);
 
-    public string PresetAudioCodecText => Text("Audio", "Audio") +
-        $": {SelectedOutputPreset.Recommendation.AudioCodec}";
+    public string PresetAudioCodecText => LabelValue(
+        LocalizationKeys.VideoProfileAudio,
+        SelectedOutputPreset.Recommendation.AudioCodec);
 
-    public string PresetResolutionText => Text("Target resolution", "Resolución objetivo") +
-        $": {SelectedOutputPreset.Recommendation.Width}x" +
-        $"{SelectedOutputPreset.Recommendation.Height}";
+    public string PresetResolutionText => LabelValue(
+        LocalizationKeys.VideoProfileTargetResolution,
+        $"{SelectedOutputPreset.Recommendation.Width}x{SelectedOutputPreset.Recommendation.Height}");
 
-    public string PresetThreeDLayoutText => Text("Recommended 3D layout", "Diseño 3D recomendado") +
-        $": {ThreeDOutputFormatText(SelectedOutputPreset.Recommendation.ThreeDOutputFormat, IsSpanish)}";
+    public string PresetThreeDLayoutText => LabelValue(
+        LocalizationKeys.VideoProfileRecommendedThreeDLayout,
+        ThreeDOutputFormatText(SelectedOutputPreset.Recommendation.ThreeDOutputFormat));
 
-    public string PresetAdvancedOutputText => Text(
-        "MKV: advanced/master primary output. LG compatibility: optional MP4 copy after the primary output succeeds.",
-        "MKV: salida principal avanzada/maestra. Compatibilidad LG: copia MP4 opcional despues de completar la salida principal.");
+    public string PresetAdvancedOutputText => T(LocalizationKeys.VideoProfileAdvancedOutput);
 
-    public string PresetCompatibilityNoteText => Text("Compatibility note", "Nota de compatibilidad") +
-        $": {Text(SelectedOutputPreset.CompatibilityNote, SelectedOutputPreset.SpanishCompatibilityNote)}";
+    public string PresetCompatibilityNoteText => LabelValue(
+        LocalizationKeys.VideoProfileCompatibilityNote,
+        TargetPresetCompatibilityNote(SelectedOutputPreset));
 
-    public string TvPlaybackTitle => Text(
-        SelectedOutputPreset.PlaybackTitle,
-        SelectedOutputPreset.SpanishPlaybackTitle);
+    public string TvPlaybackTitle => TargetPresetPlaybackTitle(SelectedOutputPreset);
 
-    public string TvPlaybackInstructions => Text(
-        SelectedOutputPreset.PlaybackInstructions,
-        SelectedOutputPreset.SpanishPlaybackInstructions);
+    public string TvPlaybackInstructions => TargetPresetPlaybackInstructions(SelectedOutputPreset);
 
     public ObservableCollection<ToolStatusItemViewModel> ToolStatuses { get; } = [];
 
@@ -4540,9 +4407,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (!IsSupportedVideoFile(path))
         {
-            AddLog(
-                "The dropped file is not a supported video format.",
-                "El archivo arrastrado no tiene un formato de video compatible.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogUnsupportedDroppedFile));
             return;
         }
 
@@ -4561,7 +4426,7 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     private bool IsSpanish =>
-        string.Equals(SelectedLanguage, "Español", StringComparison.Ordinal);
+        string.Equals(_localizationService.ActiveLanguageCode, "es", StringComparison.OrdinalIgnoreCase);
 
     private async void SelectVideo()
     {
@@ -4572,10 +4437,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = Text("Select a video", "Selecciona un video"),
-            Filter = Text("Video files", "Archivos de video") +
+            Title = T(LocalizationKeys.VideoSourceDialogTitle),
+            Filter = T(LocalizationKeys.VideoSourceDialogFilesFilter) +
                 "|*.mp4;*.mkv;*.avi;*.mov;*.m4v;*.webm|" +
-                Text("All files", "Todos los archivos") + "|*.*",
+                T(LocalizationKeys.VideoSourceDialogAllFilesFilter) + "|*.*",
             Multiselect = false,
             CheckFileExists = true,
         };
@@ -4595,10 +4460,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = Text("Select an image", "Selecciona una imagen"),
-            Filter = Text("Image files", "Archivos de imagen") +
+            Title = T(LocalizationKeys.ImageDialogSelectTitle),
+            Filter = T(LocalizationKeys.ImageDialogFilesFilter) +
                 "|*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff;*.webp|" +
-                Text("All files", "Todos los archivos") + "|*.*",
+                T(LocalizationKeys.ImageDialogAllFilesFilter) + "|*.*",
             Multiselect = false,
             CheckFileExists = true,
         };
@@ -4618,9 +4483,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (!IsSupportedImageFile(path))
         {
-            AddImageLog(
-                "The selected file is not a supported image format.",
-                "El archivo seleccionado no tiene un formato de imagen compatible.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogUnsupportedFormat));
             return;
         }
 
@@ -4630,9 +4493,9 @@ public sealed class MainWindowViewModel : ObservableObject
         ResetImageExportState();
         _hasEnteredImagePreviewExportStage = false;
         SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
-        AddImageLog(
-            $"Image selected: {Path.GetFileName(path)}",
-            $"Imagen seleccionada: {Path.GetFileName(path)}");
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogSelectedFormat,
+            ("fileName", Path.GetFileName(path))));
         AnalyzeImage();
     }
 
@@ -4645,9 +4508,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (!HasSelectedImage || SelectedImagePath is null)
         {
-            AddImageLog(
-                "Select an image before analysis.",
-                "Selecciona una imagen antes del analisis.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogSelectBeforeAnalysis));
             return;
         }
 
@@ -4657,17 +4518,19 @@ public sealed class MainWindowViewModel : ObservableObject
             ResetImageExportState();
             _hasEnteredImagePreviewExportStage = false;
             SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
-            AddImageLog(
-                $"Image metadata analyzed: {_selectedImageMetadata.WidthText} x {_selectedImageMetadata.HeightText}, {_selectedImageMetadata.Format}.",
-                $"Metadata de imagen analizada: {_selectedImageMetadata.WidthText} x {_selectedImageMetadata.HeightText}, {_selectedImageMetadata.Format}.");
+            AddImageLogResolved(T(
+                LocalizationKeys.ImageLogMetadataAnalyzedFormat,
+                ("width", _selectedImageMetadata.WidthText),
+                ("height", _selectedImageMetadata.HeightText),
+                ("format", _selectedImageMetadata.Format)));
         }
         catch (Exception exception)
         {
             _selectedImageMetadata = null;
             ResetImageExportState();
-            AddImageLog(
-                $"Could not read image metadata: {exception.Message}",
-                $"No se pudo leer la metadata de imagen: {exception.Message}");
+            AddImageLogResolved(T(
+                LocalizationKeys.ImageLogMetadataFailedFormat,
+                ("message", exception.Message)));
         }
 
         RaiseImageConversionPropertiesChanged();
@@ -4719,9 +4582,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (string.IsNullOrWhiteSpace(SelectedVideoPath))
         {
-            AddLog(
-                "Select a video before starting analysis.",
-                "Selecciona un video antes de iniciar el análisis.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogSelectBeforeAnalysis));
             return;
         }
 
@@ -4735,9 +4596,7 @@ public sealed class MainWindowViewModel : ObservableObject
         if (string.Equals(SelectedVideoPath, path, StringComparison.OrdinalIgnoreCase))
         {
             SelectedWorkflowTabIndex = 0;
-            AddLog(
-                "Starting automatic analysis.",
-                "Iniciando análisis automático.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogAnalysisStarted));
             ResetAnalysisState(clearOutputPath: false);
             await Task.Yield();
             await AnalyzeSelectedVideoAsync();
@@ -4749,9 +4608,7 @@ public sealed class MainWindowViewModel : ObservableObject
             ShouldConfirmPreviewInvalidatingChange() &&
             !await ConfirmPreviewInvalidatingChangeAsync())
         {
-            AddLog(
-                "Video replacement canceled.",
-                "Reemplazo de video cancelado.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogReplacementCanceled));
             return;
         }
 
@@ -4759,16 +4616,12 @@ public sealed class MainWindowViewModel : ObservableObject
             !ShouldConfirmPreviewInvalidatingChange() &&
             !await ConfirmReplaceSelectedVideoAsync())
         {
-            AddLog(
-                "Video replacement canceled.",
-                "Reemplazo de video cancelado.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogReplacementCanceled));
             return;
         }
 
         SetSelectedVideo(path, replacingVideo);
-        AddLog(
-            "Starting automatic analysis.",
-            "Iniciando análisis automático.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoLogAnalysisStarted));
         await Task.Yield();
         await AnalyzeSelectedVideoAsync();
     }
@@ -4817,15 +4670,9 @@ public sealed class MainWindowViewModel : ObservableObject
                 RaiseRecommendationPropertiesChanged();
                 RaiseConversionPlanPropertiesChanged();
                 HasCompletedAnalysis = true;
-                AddLog(
-                    "Video analysis completed.",
-                    "Análisis de video completado.");
-                AddLog(
-                    "Recommended 3D setup generated.",
-                    "Configuración 3D recomendada generada.");
-                AddLog(
-                    "Conversion plan prepared.",
-                    "Plan de conversión preparado.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoLogAnalysisCompleted));
+                AddVideoLogResolved(T(LocalizationKeys.VideoLogRecommendationGenerated));
+                AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionPlanPrepared));
                 return;
             }
 
@@ -4833,9 +4680,9 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            AddLog(
-                $"Video analysis failed unexpectedly: {exception.Message}",
-                $"El análisis de video falló inesperadamente: {exception.Message}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoLogAnalysisFailedUnexpectedFormat,
+                ("message", exception.Message)));
         }
         finally
         {
@@ -4868,9 +4715,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseImageConversionPropertiesChanged();
         if (logRefresh)
         {
-            AddLog(
-                "Internal tool status refreshed.",
-                "Estado de herramientas internas actualizado.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogToolsRefreshed));
         }
     }
 
@@ -4881,9 +4726,7 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        ShowGlobalBusyOverlay(
-            "Refreshing model inventory...",
-            "Actualizando inventario de modelos...");
+        ShowGlobalBusyOverlay(LocalizationKeys.BusyRefreshingModelInventory);
         try
         {
             await RefreshEngineStatusAsync(logRefresh);
@@ -4894,14 +4737,15 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    private void ShowGlobalBusyOverlay(string englishText, string spanishText)
+    private void ShowGlobalBusyOverlay(string key) =>
+        ShowGlobalBusyOverlayResolved(T(key));
+
+    private void ShowGlobalBusyOverlayResolved(string text)
     {
-        _globalBusyEnglishText = string.IsNullOrWhiteSpace(englishText)
-            ? "Loading..."
-            : englishText;
-        _globalBusySpanishText = string.IsNullOrWhiteSpace(spanishText)
-            ? "Cargando..."
-            : spanishText;
+        _globalBusyEnglishText = string.IsNullOrWhiteSpace(text)
+            ? T(LocalizationKeys.CommonLoading)
+            : text;
+        _globalBusySpanishText = _globalBusyEnglishText;
         OnPropertyChanged(nameof(GlobalBusyText));
         IsGlobalBusyOverlayVisible = true;
     }
@@ -4915,9 +4759,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanImportModelPack)
         {
-            AddLog(
-                "Model pack import is unavailable while another operation is running.",
-                "La importacion de paquetes de modelos no esta disponible mientras hay otra operacion en ejecucion.");
+            AddLogResolved(T(LocalizationKeys.ModelPackLogUnavailableBusy));
             return;
         }
 
@@ -4929,9 +4771,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _reopenModelInventoryAfterImport = IsModelInventoryModalOpen;
         IsModelPackImportRunning = true;
-        ShowGlobalBusyOverlay(
-            "Validating model pack...",
-            "Validando paquete de modelos...");
+        ShowGlobalBusyOverlay(LocalizationKeys.BusyValidatingModelPack);
         try
         {
             var result = await _modelPackImportCoordinator.ImportAsync(
@@ -4940,27 +4780,20 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            SetModelPackImportStatus(
-                "Model pack import was canceled.",
-                "La importacion del paquete de modelos fue cancelada.");
-            AddLog(
-                "Model pack import was canceled.",
-                "La importacion del paquete de modelos fue cancelada.");
+            SetModelPackImportStatusResolved(T(LocalizationKeys.ModelPackStatusCanceled));
+            AddLogResolved(T(LocalizationKeys.ModelPackLogCanceled));
         }
         catch (Exception exception)
         {
             var errorLogPath = AppErrorLogService.LogRecoverableException(
                 "Import model pack",
                 exception);
-            SetModelPackImportStatus(
-                "Model pack import failed unexpectedly.",
-                "La importacion del paquete de modelos fallo inesperadamente.");
-            SetLastModelPackImportSummary(
-                $"Model pack import failed unexpectedly. Details were written to {errorLogPath}. {exception.Message}",
-                $"La importacion del paquete de modelos fallo inesperadamente. Los detalles se escribieron en {errorLogPath}. {exception.Message}");
-            AddLog(
-                $"Model pack import failed unexpectedly: {exception.Message}",
-                $"La importacion del paquete de modelos fallo inesperadamente: {exception.Message}");
+            SetModelPackImportStatusResolved(T(LocalizationKeys.ModelPackStatusUnexpectedFailure));
+            SetLastModelPackImportSummaryResolved(T(
+                LocalizationKeys.ModelPackSummaryUnexpectedFailureFormat,
+                ("path", errorLogPath),
+                ("message", exception.Message)));
+            AddLogResolved(T(LocalizationKeys.ModelPackLogUnexpectedFailureFormat, ("message", exception.Message)));
         }
         finally
         {
@@ -4993,9 +4826,7 @@ public sealed class MainWindowViewModel : ObservableObject
         },
         RefreshAfterSuccessfulImportAsync = async _ =>
         {
-            ShowGlobalBusyOverlay(
-                "Refreshing model inventory...",
-                "Actualizando inventario de modelos...");
+            ShowGlobalBusyOverlay(LocalizationKeys.BusyRefreshingModelInventory);
             await RefreshEngineStatusAsync(logRefresh: true);
         },
     };
@@ -5070,29 +4901,25 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void RecordValidModelPackPreparation(ModelPackImportPreparationResult preparation)
     {
-        SetModelPackImportStatus(
-            "Model pack validated. Review the confirmation before Windows asks for administrator permission.",
-            "Paquete de modelos validado. Revisa la confirmacion antes de que Windows pida permiso de administrador.");
+        SetModelPackImportStatusResolved(T(LocalizationKeys.ModelPackStatusValidated));
         var prompt = ModelPackImportConfirmationFormatter.CreatePrompt(preparation);
-        SetLastModelPackImportSummary(prompt.EnglishMessage, prompt.SpanishMessage);
-        AddLog(
-            $"Model pack validated: {GetModelPackDisplayName(preparation)}. Files to install: {preparation.FilesToInstall.Count}. Already installed: {preparation.AlreadyInstalledFiles.Count}.",
-            $"Paquete de modelos validado: {GetModelPackDisplayName(preparation)}. Archivos por instalar: {preparation.FilesToInstall.Count}. Ya instalados: {preparation.AlreadyInstalledFiles.Count}.");
-        AddLog(
-            $"Model pack install target: {preparation.TargetPretrainedModelsRoot}",
-            $"Destino de instalacion del paquete de modelos: {preparation.TargetPretrainedModelsRoot}");
+        SetLastModelPackImportSummaryResolved(CreateModelPackConfirmationMessage(preparation));
+        AddLogResolved(T(
+            LocalizationKeys.ModelPackLogValidatedFormat,
+            ("name", GetModelPackDisplayName(preparation)),
+            ("filesToInstall", preparation.FilesToInstall.Count),
+            ("alreadyInstalled", preparation.AlreadyInstalledFiles.Count)));
+        AddLogResolved(T(
+            LocalizationKeys.ModelPackLogInstallTargetFormat,
+            ("path", preparation.TargetPretrainedModelsRoot)));
 
         if (preparation.ElevationRequired)
         {
-            AddLog(
-                "Windows administrator permission is required because the model target is under Program Files.",
-                "Se requiere permiso de administrador de Windows porque el destino de modelos esta en Program Files.");
+            AddLogResolved(T(LocalizationKeys.ModelPackLogAdminRequired));
         }
         else
         {
-            AddLog(
-                "The model target is outside Program Files; administrator permission may not be required for this target.",
-                "El destino de modelos esta fuera de Program Files; puede que este destino no requiera permiso de administrador.");
+            AddLogResolved(T(LocalizationKeys.ModelPackLogAdminMaybeNotRequired));
         }
 
         LogModelPackWarnings(preparation.Warnings);
@@ -5100,36 +4927,26 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void RecordCanceledModelPackImport(ModelPackAppImportResult result)
     {
-        SetModelPackImportStatus(
-            "Model pack import canceled before Windows administrator permission.",
-            "Importacion del paquete de modelos cancelada antes del permiso de administrador de Windows.");
-        SetLastModelPackImportSummary(
-            "Model pack import canceled. No files were installed.",
-            "Importacion del paquete de modelos cancelada. No se instalo ningun archivo.");
-        AddLog(
-            $"Model pack import canceled before launching the helper: {Path.GetFileName(result.SelectedModelPackZipPath)}",
-            $"Importacion del paquete de modelos cancelada antes de iniciar el helper: {Path.GetFileName(result.SelectedModelPackZipPath)}");
+        SetModelPackImportStatusResolved(T(LocalizationKeys.ModelPackStatusCanceledBeforeAdmin));
+        SetLastModelPackImportSummaryResolved(T(LocalizationKeys.ModelPackSummaryCanceledNoFiles));
+        AddLogResolved(T(
+            LocalizationKeys.ModelPackLogCanceledBeforeHelperFormat,
+            ("file", Path.GetFileName(result.SelectedModelPackZipPath))));
     }
 
     private void RecordInvalidModelPackPreparation(ModelPackAppImportResult result)
     {
-        SetModelPackImportStatus(
-            "Model pack validation failed.",
-            "La validacion del paquete de modelos fallo.");
+        SetModelPackImportStatusResolved(T(LocalizationKeys.ModelPackStatusValidationFailed));
         IReadOnlyList<string> errors = result.Errors.Count == 0
-            ? ["Model pack import preparation did not produce a launchable helper request."]
+            ? [T(LocalizationKeys.ModelPackSummaryPreparationMissingRequest)]
             : result.Errors;
-        SetLastModelPackImportSummary(
-            CreateModelPackErrorSummary("Model pack validation failed.", errors),
-            CreateModelPackErrorSummary("La validacion del paquete de modelos fallo.", errors));
-        AddLog(
-            "Model pack validation failed. Helper was not launched.",
-            "La validacion del paquete de modelos fallo. No se inicio el helper.");
+        SetLastModelPackImportSummaryResolved(CreateModelPackErrorSummary(
+            T(LocalizationKeys.ModelPackSummaryValidationFailedHeading),
+            errors));
+        AddLogResolved(T(LocalizationKeys.ModelPackLogValidationFailed));
         foreach (var error in errors)
         {
-            AddLog(
-                $"Model pack validation error: {error}",
-                $"Error de validacion del paquete de modelos: {error}");
+            AddLogResolved(T(LocalizationKeys.ModelPackLogValidationErrorFormat, ("error", error)));
         }
 
         LogModelPackWarnings(result.Warnings);
@@ -5138,39 +4955,25 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RecordFailedModelPackImport(ModelPackAppImportResult result)
     {
         var helperWasNotStarted = result.ExecutionResult?.HelperProcessStarted != true;
-        SetModelPackImportStatus(
+        SetModelPackImportStatusResolved(T(
             helperWasNotStarted
-                ? "Model pack import did not start. Windows administrator permission may have been canceled."
-                : "Model pack import failed.",
-            helperWasNotStarted
-                ? "La importacion del paquete de modelos no inicio. Es posible que se haya cancelado el permiso de administrador de Windows."
-                : "La importacion del paquete de modelos fallo.");
+                ? LocalizationKeys.ModelPackStatusImportDidNotStart
+                : LocalizationKeys.ModelPackStatusImportFailed));
         IReadOnlyList<string> errors = result.Errors.Count == 0
-            ? ["Model pack helper did not report a successful install."]
+            ? [T(LocalizationKeys.ModelPackSummaryHelperFailed)]
             : result.Errors;
-        SetLastModelPackImportSummary(
-            CreateModelPackErrorSummary(
-                helperWasNotStarted
-                    ? "Model pack import did not start. No files were installed."
-                    : "Model pack import failed.",
-                errors),
-            CreateModelPackErrorSummary(
-                helperWasNotStarted
-                    ? "La importacion del paquete de modelos no inicio. No se instalo ningun archivo."
-                    : "La importacion del paquete de modelos fallo.",
-                errors));
-        AddLog(
+        SetLastModelPackImportSummaryResolved(CreateModelPackErrorSummary(
             helperWasNotStarted
-                ? "Model pack import did not start. Windows administrator permission may have been canceled."
-                : "Model pack import failed.",
+                ? T(LocalizationKeys.ModelPackSummaryImportDidNotStartNoFiles)
+                : T(LocalizationKeys.ModelPackStatusImportFailed),
+            errors));
+        AddLogResolved(T(
             helperWasNotStarted
-                ? "La importacion del paquete de modelos no inicio. Es posible que se haya cancelado el permiso de administrador de Windows."
-                : "La importacion del paquete de modelos fallo.");
+                ? LocalizationKeys.ModelPackLogImportDidNotStart
+                : LocalizationKeys.ModelPackLogImportFailed));
         foreach (var error in errors)
         {
-            AddLog(
-                $"Model pack import error: {error}",
-                $"Error de importacion del paquete de modelos: {error}");
+            AddLogResolved(T(LocalizationKeys.ModelPackLogImportErrorFormat, ("error", error)));
         }
 
         LogModelPackWarnings(result.ExecutionResult?.HelperResult?.Warnings ?? []);
@@ -5178,20 +4981,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void RecordSuccessfulModelPackImport(ModelPackAppImportResult result)
     {
-        SetModelPackImportStatus(
-            "Model pack import completed.",
-            "Importacion del paquete de modelos completada.");
-        SetLastModelPackImportSummary(
-            CreateModelPackSuccessSummary(result, useSpanish: false),
-            CreateModelPackSuccessSummary(result, useSpanish: true));
-        AddLog(
-            CreateModelPackSuccessLog(result, useSpanish: false),
-            CreateModelPackSuccessLog(result, useSpanish: true));
+        SetModelPackImportStatusResolved(T(LocalizationKeys.ModelPackStatusCompleted));
+        SetLastModelPackImportSummaryResolved(CreateModelPackSuccessSummary(result));
+        AddLogResolved(CreateModelPackSuccessLog(result));
         if (result.AppRefreshCompleted)
         {
-            AddLog(
-                "Model inventory refreshed after model pack import.",
-                "Inventario de modelos actualizado despues de importar el paquete.");
+            AddLogResolved(T(LocalizationKeys.ModelPackLogInventoryRefreshed));
         }
 
         LogModelPackWarnings(result.ExecutionResult?.HelperResult?.Warnings ?? []);
@@ -5204,6 +4999,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ModelPackImportStatusText));
     }
 
+    private void SetModelPackImportStatusResolved(string text) =>
+        SetModelPackImportStatus(text, text);
+
     private void SetLastModelPackImportSummary(string englishText, string spanishText)
     {
         _lastModelPackImportSummaryEnglishText = englishText;
@@ -5212,6 +5010,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LastModelPackImportSummaryVisibility));
     }
 
+    private void SetLastModelPackImportSummaryResolved(string text) =>
+        SetLastModelPackImportSummary(text, text);
+
     private static string GetCurrentV3dfyVersion() =>
         typeof(MainWindowViewModel).Assembly.GetName().Version?.ToString() ?? "unknown";
 
@@ -5219,47 +5020,54 @@ public sealed class MainWindowViewModel : ObservableObject
         preparation.Manifest?.DisplayName ??
         Path.GetFileName(preparation.ModelPackZipPath);
 
-    private static string CreateModelPackSuccessSummary(
-        ModelPackAppImportResult result,
-        bool useSpanish)
+    private string CreateModelPackConfirmationMessage(ModelPackImportPreparationResult preparation)
     {
-        var helperResult = result.ExecutionResult?.HelperResult;
-        var manifestName = helperResult?.Manifest?.DisplayName ??
-            result.LaunchPreparation?.Preparation.Manifest?.DisplayName ??
-            Path.GetFileName(result.SelectedModelPackZipPath);
-        IReadOnlyList<string> lines = useSpanish
-            ?
-            [
-                $"Paquete importado: {manifestName}",
-                $"Archivos instalados: {helperResult?.InstalledFiles.Count ?? 0}",
-                $"Archivos ya presentes: {helperResult?.AlreadyInstalledFiles.Count ?? 0}",
-                $"Archivos omitidos: {helperResult?.SkippedFiles.Count ?? 0}",
-                $"Inventario actualizado: {(result.AppRefreshCompleted ? "si" : "no")}",
-                "Modelos seleccionables: solo se muestran para conversion los modelos soportados/mapeados.",
-            ]
-            :
-            [
-                $"Imported pack: {manifestName}",
-                $"Installed files: {helperResult?.InstalledFiles.Count ?? 0}",
-                $"Already present files: {helperResult?.AlreadyInstalledFiles.Count ?? 0}",
-                $"Skipped files: {helperResult?.SkippedFiles.Count ?? 0}",
-                $"Inventory refreshed: {(result.AppRefreshCompleted ? "yes" : "no")}",
-                "Selectable models: only supported/mapped models are shown for conversion.",
-            ];
+        IReadOnlyList<string> lines =
+        [
+            T(LocalizationKeys.ModelPackConfirmationPackFormat, ("name", GetModelPackDisplayName(preparation))),
+            T(LocalizationKeys.ModelPackConfirmationFilesToInstallFormat, ("count", preparation.FilesToInstall.Count)),
+            T(LocalizationKeys.ModelPackConfirmationAlreadyInstalledFormat, ("count", preparation.AlreadyInstalledFiles.Count)),
+            T(LocalizationKeys.ModelPackConfirmationConflictsFormat, ("count", preparation.Conflicts.Count)),
+            T(LocalizationKeys.ModelPackConfirmationTargetFolderFormat, ("path", preparation.TargetPretrainedModelsRoot)),
+            preparation.ElevationRequired
+                ? T(LocalizationKeys.ModelPackConfirmationAdminRequired)
+                : T(LocalizationKeys.ModelPackConfirmationAdminNotExpected),
+            T(LocalizationKeys.ModelPackConfirmationModelAvailability),
+            string.Empty,
+            T(LocalizationKeys.ModelPackConfirmationTrustInstruction),
+        ];
+
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static string CreateModelPackSuccessLog(
-        ModelPackAppImportResult result,
-        bool useSpanish)
+    private string CreateModelPackSuccessSummary(ModelPackAppImportResult result)
     {
         var helperResult = result.ExecutionResult?.HelperResult;
         var manifestName = helperResult?.Manifest?.DisplayName ??
             result.LaunchPreparation?.Preparation.Manifest?.DisplayName ??
             Path.GetFileName(result.SelectedModelPackZipPath);
-        return useSpanish
-            ? $"Paquete de modelos importado: {manifestName}. Archivos instalados: {helperResult?.InstalledFiles.Count ?? 0}."
-            : $"Model pack imported: {manifestName}. Installed files: {helperResult?.InstalledFiles.Count ?? 0}.";
+        IReadOnlyList<string> lines =
+        [
+            T(LocalizationKeys.ModelPackSummaryImportedPackFormat, ("name", manifestName)),
+            T(LocalizationKeys.ModelPackSummaryInstalledFilesFormat, ("count", helperResult?.InstalledFiles.Count ?? 0)),
+            T(LocalizationKeys.ModelPackSummaryAlreadyPresentFilesFormat, ("count", helperResult?.AlreadyInstalledFiles.Count ?? 0)),
+            T(LocalizationKeys.ModelPackSummarySkippedFilesFormat, ("count", helperResult?.SkippedFiles.Count ?? 0)),
+            T(LocalizationKeys.ModelPackSummaryInventoryRefreshedFormat, ("value", result.AppRefreshCompleted ? T(LocalizationKeys.CommonYes) : T(LocalizationKeys.CommonNo))),
+            T(LocalizationKeys.ModelPackSummarySelectableModels),
+        ];
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private string CreateModelPackSuccessLog(ModelPackAppImportResult result)
+    {
+        var helperResult = result.ExecutionResult?.HelperResult;
+        var manifestName = helperResult?.Manifest?.DisplayName ??
+            result.LaunchPreparation?.Preparation.Manifest?.DisplayName ??
+            Path.GetFileName(result.SelectedModelPackZipPath);
+        return T(
+            LocalizationKeys.ModelPackLogImportedFormat,
+            ("name", manifestName),
+            ("count", helperResult?.InstalledFiles.Count ?? 0));
     }
 
     private static string CreateModelPackErrorSummary(
@@ -5275,9 +5083,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         foreach (var warning in warnings)
         {
-            AddLog(
-                $"Model pack warning: {warning}",
-                $"Advertencia de paquete de modelos: {warning}");
+            AddLogResolved(T(LocalizationKeys.ModelPackLogWarningFormat, ("warning", warning)));
         }
     }
 
@@ -5290,9 +5096,7 @@ public sealed class MainWindowViewModel : ObservableObject
         var candidates = GetCurrentModelInventory().SelectionCandidates;
         if (candidates.Count == 0)
         {
-            return Text(
-                "No installed or imported models were detected.",
-                "No se detectaron modelos instalados o importados.");
+            return T(LocalizationKeys.ModelInventoryNoticeNoModels);
         }
 
         var lines = new List<string>();
@@ -5300,24 +5104,22 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             var entry = FindRegistryEntry(candidate);
             lines.Add($"- {GetCandidateDisplayName(candidate)}");
-            lines.Add(Text(
-                $"  File/pack identity: {candidate.RelativePath}",
-                $"  Identidad de archivo/paquete: {candidate.RelativePath}"));
+            lines.Add(T(
+                LocalizationKeys.ModelInventoryNoticeFilePackIdentityFormat,
+                ("path", candidate.RelativePath)));
             if (entry is not null)
             {
-                lines.Add(Text(
-                    $"  Catalog notice status: {ModelNoticeStatusText(entry.RedistributionDecision, useSpanish: false)}",
-                    $"  Estado de avisos del catalogo: {ModelNoticeStatusText(entry.RedistributionDecision, useSpanish: true)}"));
+                lines.Add(T(
+                    LocalizationKeys.ModelInventoryNoticeCatalogStatusFormat,
+                    ("status", ModelNoticeStatusText(entry.RedistributionDecision))));
             }
 
             var noticeFiles = FindMatchingModelNoticeFiles(candidate, entry);
             lines.Add(noticeFiles.Count > 0
-                ? Text(
-                    $"  License/notice files: {string.Join(", ", noticeFiles)}",
-                    $"  Archivos de licencia/avisos: {string.Join(", ", noticeFiles)}")
-                : Text(
-                    "  License metadata not available",
-                    "  Metadatos de licencia no disponibles"));
+                ? T(
+                    LocalizationKeys.ModelInventoryNoticeLicenseFilesFormat,
+                    ("files", string.Join(", ", noticeFiles)))
+                : T(LocalizationKeys.ModelInventoryNoticeLicenseMetadataUnavailable));
         }
 
         return string.Join(Environment.NewLine, lines);
@@ -5396,29 +5198,15 @@ public sealed class MainWindowViewModel : ObservableObject
             .Replace(' ', '-')
             .ToLowerInvariant();
 
-    private static string ModelNoticeStatusText(
-        Iw3DepthModelRedistributionDecision decision,
-        bool useSpanish) => decision switch
+    private string ModelNoticeStatusText(Iw3DepthModelRedistributionDecision decision) => decision switch
     {
-        Iw3DepthModelRedistributionDecision.SafeForPublicRelease => useSpanish
-            ? "apto para release publico"
-            : "safe for public release",
-        Iw3DepthModelRedistributionDecision.SafeWithNotice => useSpanish
-            ? "apto con avisos"
-            : "safe with notices",
-        Iw3DepthModelRedistributionDecision.UserDownloadOnly => useSpanish
-            ? "solo descarga/importacion del usuario"
-            : "user download/import only",
-        Iw3DepthModelRedistributionDecision.ExcludeNonCommercial => useSpanish
-            ? "excluido por restriccion no comercial"
-            : "excluded due to non-commercial restriction",
-        Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => useSpanish
-            ? "bloqueado por licencia no clara"
-            : "blocked by unclear license",
-        Iw3DepthModelRedistributionDecision.NotAModelPackTarget => useSpanish
-            ? "no es objetivo de paquete de modelos"
-            : "not a model-pack target",
-        _ => useSpanish ? "desconocido" : "unknown",
+        Iw3DepthModelRedistributionDecision.SafeForPublicRelease => T(LocalizationKeys.ModelInventoryNoticeStatusSafePublic),
+        Iw3DepthModelRedistributionDecision.SafeWithNotice => T(LocalizationKeys.ModelInventoryNoticeStatusSafeWithNotice),
+        Iw3DepthModelRedistributionDecision.UserDownloadOnly => T(LocalizationKeys.ModelInventoryNoticeStatusUserDownloadOnly),
+        Iw3DepthModelRedistributionDecision.ExcludeNonCommercial => T(LocalizationKeys.ModelInventoryNoticeStatusExcludeNonCommercial),
+        Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => T(LocalizationKeys.ModelInventoryNoticeStatusBlockedUnclearLicense),
+        Iw3DepthModelRedistributionDecision.NotAModelPackTarget => T(LocalizationKeys.ModelInventoryNoticeStatusNotModelPackTarget),
+        _ => T(LocalizationKeys.ModelInventoryNoticeStatusUnknown),
     };
 
     private IReadOnlyList<SelectableModelInventoryRow> CreateSelectableModelInventoryRows()
@@ -5439,8 +5227,8 @@ public sealed class MainWindowViewModel : ObservableObject
                 Model: GetCandidateDisplayName(candidate),
                 Iw3DepthModel: candidate.Iw3DepthModelName ?? "-",
                 Checkpoint: candidate.RelativePath,
-                Type: GetDepthTypeText(entry, IsSpanish),
-                Source: GetModelSourceText(candidate, entry, IsSpanish)));
+                Type: GetDepthTypeText(entry),
+                Source: GetModelSourceText(candidate, entry)));
         }
 
         return rows;
@@ -5453,9 +5241,7 @@ public sealed class MainWindowViewModel : ObservableObject
             IsSpanish);
         if (candidates.Count == 0)
         {
-            return Text(
-                "No selectable models are available. A verified v3dfy mapping is required before a detected file can be used for conversion.",
-                "No hay modelos seleccionables disponibles. Se requiere un mapeo verificado de v3dfy antes de usar un archivo detectado para convertir.");
+            return T(LocalizationKeys.ModelInventorySelectableEmpty);
         }
 
         var lines = new List<string>();
@@ -5464,7 +5250,7 @@ public sealed class MainWindowViewModel : ObservableObject
             lines.Add($"- {GetCandidateDisplayName(candidate)}");
             lines.Add($"  --depth-model {candidate.Iw3DepthModelName ?? "-"}");
             lines.Add($"  {candidate.RelativePath}");
-            var note = Text(candidate.EnglishStatusNote, candidate.SpanishStatusNote);
+            var note = GetSelectionStatusNoteText(candidate);
             if (!string.IsNullOrWhiteSpace(note))
             {
                 lines.Add($"  {note}");
@@ -5480,9 +5266,7 @@ public sealed class MainWindowViewModel : ObservableObject
             GetCurrentModelInventory().SelectionCandidates);
         if (unmappedCandidates.Count == 0)
         {
-            return Text(
-                "No diagnostic-only model files were detected.",
-                "No se detectaron modelos solo de diagnostico.");
+            return T(LocalizationKeys.ModelInventoryDiagnosticEmpty);
         }
 
         var lines = new List<string>();
@@ -5490,12 +5274,34 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             lines.Add($"- {GetCandidateDisplayName(candidate)}");
             lines.Add($"  {candidate.RelativePath}");
-            lines.Add(Text(
-                "  Reason: no verified v3dfy mapping / diagnostic only.",
-                "  Motivo: sin mapeo verificado de v3dfy / solo diagnostico."));
+            lines.Add($"  {T(LocalizationKeys.ModelInventoryDiagnosticReason)}");
         }
 
         return string.Join(Environment.NewLine, lines);
+    }
+
+    private string GetSelectionStatusNoteText(LocalModelSelectionCandidate candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate.EnglishStatusNote))
+        {
+            return string.Empty;
+        }
+
+        if (candidate.EnglishStatusNote.Contains(
+                "not eligible for public v3dfy model packs",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ModelInventorySelectableStatusUserProvidedNotPackEligible);
+        }
+
+        if (candidate.EnglishStatusNote.Contains(
+                "verified local checkpoint",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ModelInventorySelectableStatusVerifiedLocalCheckpoint);
+        }
+
+        return string.Empty;
     }
 
     private IReadOnlyList<ModelHelpRow> CreateModelHelpRows()
@@ -5511,10 +5317,10 @@ public sealed class MainWindowViewModel : ObservableObject
             var entry = FindRegistryEntry(candidate);
             rows.Add(new ModelHelpRow(
                 Model: GetCandidateDisplayName(candidate),
-                Purpose: GetModelPurpose(candidate, entry, IsSpanish),
-                Use: GetModelUseExample(candidate, entry, IsSpanish),
-                Scene: GetSceneScopeText(entry, IsSpanish),
-                Depth: GetDepthTypeText(entry, IsSpanish),
+                Purpose: GetModelPurpose(candidate, entry),
+                Use: GetModelUseExample(candidate, entry),
+                Scene: GetSceneScopeText(entry),
+                Depth: GetDepthTypeText(entry),
                 SizePerformance: GetModelSizePerformanceText(candidate, entry)));
         }
 
@@ -5535,10 +5341,10 @@ public sealed class MainWindowViewModel : ObservableObject
             var entry = FindRegistryEntry(candidate);
             rows.Add(new ModelHelpRow(
                 Model: GetCandidateDisplayName(candidate),
-                Purpose: GetImageParallaxModelPurpose(candidate, entry, IsSpanish),
-                Use: GetImageParallaxModelUse(candidate, entry, IsSpanish),
-                Scene: GetSceneScopeText(entry, IsSpanish),
-                Depth: GetDepthTypeText(entry, IsSpanish),
+                Purpose: GetImageParallaxModelPurpose(candidate, entry),
+                Use: GetImageParallaxModelUse(candidate, entry),
+                Scene: GetSceneScopeText(entry),
+                Depth: GetDepthTypeText(entry),
                 SizePerformance: GetModelSizePerformanceText(candidate, entry)));
         }
 
@@ -5554,11 +5360,125 @@ public sealed class MainWindowViewModel : ObservableObject
             candidate.Iw3DepthModelName,
             candidate.DisplayName,
             entry?.IsEmbeddedBase == true);
-        var sizeClass = GetSizeClassText(entry, IsSpanish);
-        return IsSpanish
-            ? $"{sizeClass}; velocidad {guidance.SpanishSpeed}; calidad {guidance.SpanishQuality}; tamano {guidance.SpanishSize}"
-            : $"{sizeClass}; speed {guidance.EnglishSpeed}; quality {guidance.EnglishQuality}; size {guidance.EnglishSize}";
+        var sizeClass = GetSizeClassText(entry);
+        return T(
+            LocalizationKeys.ModelInventoryGuidanceFormat,
+            ("sizeClass", sizeClass),
+            ("speed", LocalizeModelGuidanceSpeed(guidance.EnglishSpeed)),
+            ("quality", LocalizeModelGuidanceQuality(guidance.EnglishQuality)),
+            ("size", LocalizeModelGuidanceSize(guidance.EnglishSize)));
     }
+
+    private string LocalizeModelGuidanceHeadline(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        ModelGuidance guidance) =>
+        T(GetModelGuidanceHeadlineKey(candidate, entry, guidance));
+
+    private string LocalizeModelGuidanceBestFor(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        ModelGuidance guidance) =>
+        T(GetModelGuidanceBestForKey(candidate, entry, guidance));
+
+    private string LocalizeModelGuidanceSpeed(string englishValue) => englishValue switch
+    {
+        "Fast" => T(LocalizationKeys.ModelInventoryGuidanceSpeedFast),
+        "Medium" => T(LocalizationKeys.ModelInventoryGuidanceSpeedMedium),
+        "Slow" => T(LocalizationKeys.ModelInventoryGuidanceSpeedSlow),
+        _ => englishValue,
+    };
+
+    private string LocalizeModelGuidanceQuality(string englishValue) => englishValue switch
+    {
+        "Good" => T(LocalizationKeys.ModelInventoryGuidanceQualityGood),
+        "High" => T(LocalizationKeys.ModelInventoryGuidanceQualityHigh),
+        "Better" => T(LocalizationKeys.ModelInventoryGuidanceQualityBetter),
+        "Experimental" => T(LocalizationKeys.ModelInventoryGuidanceQualityExperimental),
+        "Usable" => T(LocalizationKeys.ModelInventoryGuidanceQualityUsable),
+        _ => englishValue,
+    };
+
+    private string LocalizeModelGuidanceSize(string englishValue) => englishValue switch
+    {
+        "Small" => T(LocalizationKeys.ModelInventoryGuidanceSizeSmall),
+        "Large" => T(LocalizationKeys.ModelInventoryGuidanceSizeLarge),
+        "Base" => T(LocalizationKeys.ModelInventoryGuidanceSizeBase),
+        "Small/Base" => T(LocalizationKeys.ModelInventoryGuidanceSizeSmallBase),
+        _ => englishValue,
+    };
+
+    private static string GetModelGuidanceHeadlineKey(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        ModelGuidance guidance)
+    {
+        var source = NormalizeModelGuidanceSource(candidate, entry);
+        if (source.Contains("any_v2_s") ||
+            source.Contains("depth-anything-v2-small"))
+        {
+            return LocalizationKeys.ModelInventoryGuidanceHeadlineRecommendedFirst;
+        }
+
+        if (source.Contains("3-mono") ||
+            source.Contains("depth-anything-3"))
+        {
+            return LocalizationKeys.ModelInventoryGuidanceHeadlineExperimentalLarge;
+        }
+
+        if (guidance.IsBaseModel)
+        {
+            return LocalizationKeys.ModelInventoryGuidanceHeadlineIncludedBase;
+        }
+
+        if (source.Contains("indoor") || source.Contains("hypersim") || source.Contains("any_n"))
+        {
+            return LocalizationKeys.ModelInventoryGuidanceHeadlineIndoorRoom;
+        }
+
+        if (source.Contains("outdoor") || source.Contains("vkitti") || source.Contains("any_k"))
+        {
+            return LocalizationKeys.ModelInventoryGuidanceHeadlineOutdoorRoad;
+        }
+
+        if (source.Contains("large"))
+        {
+            return LocalizationKeys.ModelInventoryGuidanceHeadlineLargeQuality;
+        }
+
+        if (source.Contains("base"))
+        {
+            return LocalizationKeys.ModelInventoryGuidanceHeadlineBalanced;
+        }
+
+        return LocalizationKeys.ModelInventoryGuidanceHeadlineSmallGeneral;
+    }
+
+    private static string GetModelGuidanceBestForKey(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry,
+        ModelGuidance guidance)
+    {
+        var headlineKey = GetModelGuidanceHeadlineKey(candidate, entry, guidance);
+        return headlineKey switch
+        {
+            LocalizationKeys.ModelInventoryGuidanceHeadlineRecommendedFirst => LocalizationKeys.ModelInventoryGuidanceBestForRecommendedFirst,
+            LocalizationKeys.ModelInventoryGuidanceHeadlineExperimentalLarge => LocalizationKeys.ModelInventoryGuidanceBestForExperimentalLarge,
+            LocalizationKeys.ModelInventoryGuidanceHeadlineIndoorRoom => LocalizationKeys.ModelInventoryGuidanceBestForIndoorRoom,
+            LocalizationKeys.ModelInventoryGuidanceHeadlineOutdoorRoad => LocalizationKeys.ModelInventoryGuidanceBestForOutdoorRoad,
+            LocalizationKeys.ModelInventoryGuidanceHeadlineLargeQuality => LocalizationKeys.ModelInventoryGuidanceBestForLargeQuality,
+            LocalizationKeys.ModelInventoryGuidanceHeadlineIncludedBase => LocalizationKeys.ModelInventoryGuidanceBestForIncludedBase,
+            LocalizationKeys.ModelInventoryGuidanceHeadlineBalanced => LocalizationKeys.ModelInventoryGuidanceBestForBalanced,
+            _ => LocalizationKeys.ModelInventoryGuidanceBestForSmallGeneral,
+        };
+    }
+
+    private static string NormalizeModelGuidanceSource(
+        LocalModelSelectionCandidate candidate,
+        Iw3DepthModelRegistryEntry? entry) =>
+        $"{entry?.Key ?? candidate.MappingKey} {candidate.Iw3DepthModelName} {candidate.DisplayName}"
+            .Trim()
+            .ToLowerInvariant();
 
     private static Iw3DepthModelRegistryEntry? FindRegistryEntry(
         LocalModelSelectionCandidate candidate) =>
@@ -5575,282 +5495,154 @@ public sealed class MainWindowViewModel : ObservableObject
             Iw3DepthModelMediaCapability.ImageOnly;
     }
 
-    private static string GetImageParallaxModelPurpose(
+    private string GetImageParallaxModelPurpose(
         LocalModelSelectionCandidate candidate,
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
+        Iw3DepthModelRegistryEntry? entry)
     {
-        var basePurpose = GetModelPurpose(candidate, entry, useSpanish);
-        return useSpanish
-            ? $"{basePurpose} Compatible con profundidad de imagen para Parallax 2.5D."
-            : $"{basePurpose} Compatible with image depth for 2.5D Parallax.";
+        var basePurpose = GetModelPurpose(candidate, entry);
+        return $"{basePurpose} {T(LocalizationKeys.ImageModelHelpPurposeSuffix)}";
     }
 
-    private static string GetImageParallaxModelUse(
+    private string GetImageParallaxModelUse(
         LocalModelSelectionCandidate candidate,
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
+        Iw3DepthModelRegistryEntry? entry)
     {
-        var baseUse = GetModelUseExample(candidate, entry, useSpanish);
-        return useSpanish
-            ? $"{baseUse} Usa intensidad baja/media para objetos finos, transparencias o sujetos superpuestos."
-            : $"{baseUse} Use low/medium depth for thin objects, transparency, or overlapping subjects.";
+        var baseUse = GetModelUseExample(candidate, entry);
+        return $"{baseUse} {T(LocalizationKeys.ImageModelHelpUseSuffix)}";
     }
 
-    private static string GetModelPurpose(
+    private string GetModelPurpose(
         LocalModelSelectionCandidate candidate,
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
+        Iw3DepthModelRegistryEntry? entry)
     {
         var key = entry?.Key ?? candidate.MappingKey ?? string.Empty;
         return key switch
         {
-            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => useSpanish
-                ? "Modelo metrico para interiores."
-                : "Metric indoor model.",
-            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => useSpanish
-                ? "Modelo metrico para exteriores."
-                : "Metric outdoor model.",
-            Iw3DepthModelMapper.DepthAnythingV2SmallKey => useSpanish
-                ? "Modelo general ligero."
-                : "General-purpose lightweight model.",
-            Iw3DepthModelMapper.DepthAnythingSmallKey => useSpanish
-                ? "Modelo general relativo pequeno."
-                : "Small general relative-depth model.",
-            Iw3DepthModelMapper.DepthAnythingBaseKey => useSpanish
-                ? "Modelo general relativo balanceado."
-                : "Balanced general relative-depth model.",
-            Iw3DepthModelMapper.DepthAnythingLargeKey => useSpanish
-                ? "Modelo general relativo grande."
-                : "Large general relative-depth model.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => useSpanish
-                ? "Modelo metrico ligero entrenado para escenas tipo interior."
-                : "Lightweight metric model tuned for indoor-like scenes.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => useSpanish
-                ? "Modelo metrico base entrenado para escenas tipo interior."
-                : "Base metric model tuned for indoor-like scenes.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => useSpanish
-                ? "Modelo metrico ligero entrenado para escenas tipo exterior."
-                : "Lightweight metric model tuned for outdoor-like scenes.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => useSpanish
-                ? "Modelo metrico base entrenado para escenas tipo exterior."
-                : "Base metric model tuned for outdoor-like scenes.",
-            Iw3DepthModelMapper.DistillAnyDepthSmallKey => useSpanish
-                ? "Modelo destilado general para profundidad."
-                : "General distilled depth model.",
-            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => useSpanish
-                ? "Modelo monocular grande de Depth Anything 3."
-                : "Large Depth Anything 3 monocular model.",
-            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => useSpanish
-                ? "Variante de Depth Anything 3 ajustada para TV 3D."
-                : "Depth Anything 3 variant tuned for 3D TV output.",
+            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => T(LocalizationKeys.ModelInventoryHelpPurposeMetricIndoor),
+            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => T(LocalizationKeys.ModelInventoryHelpPurposeMetricOutdoor),
+            Iw3DepthModelMapper.DepthAnythingV2SmallKey => T(LocalizationKeys.ModelInventoryHelpPurposeV2Small),
+            Iw3DepthModelMapper.DepthAnythingSmallKey => T(LocalizationKeys.ModelInventoryHelpPurposeSmall),
+            Iw3DepthModelMapper.DepthAnythingBaseKey => T(LocalizationKeys.ModelInventoryHelpPurposeBase),
+            Iw3DepthModelMapper.DepthAnythingLargeKey => T(LocalizationKeys.ModelInventoryHelpPurposeLarge),
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => T(LocalizationKeys.ModelInventoryHelpPurposeMetricHypersimSmall),
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => T(LocalizationKeys.ModelInventoryHelpPurposeMetricHypersimBase),
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => T(LocalizationKeys.ModelInventoryHelpPurposeMetricVkittiSmall),
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => T(LocalizationKeys.ModelInventoryHelpPurposeMetricVkittiBase),
+            Iw3DepthModelMapper.DistillAnyDepthSmallKey => T(LocalizationKeys.ModelInventoryHelpPurposeDistillAnyDepthSmall),
+            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => T(LocalizationKeys.ModelInventoryHelpPurposeDepthAnything3MonoLarge),
+            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => T(LocalizationKeys.ModelInventoryHelpPurposeDepthAnything3MonoLarge3dTv),
             _ when entry?.RedistributionDecision ==
-                Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => useSpanish
-                    ? "Checkpoint proporcionado por el usuario."
-                    : "User-provided checkpoint.",
-            _ => useSpanish
-                ? "Modelo de profundidad instalado y mapeado."
-                : "Installed mapped depth model.",
+                Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => T(LocalizationKeys.ModelInventoryHelpPurposeUserProvided),
+            _ => T(LocalizationKeys.ModelInventoryHelpPurposeDefault),
         };
     }
 
-    private static string GetModelUseExample(
+    private string GetModelUseExample(
         LocalModelSelectionCandidate candidate,
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
+        Iw3DepthModelRegistryEntry? entry)
     {
         var key = entry?.Key ?? candidate.MappingKey ?? string.Empty;
         return key switch
         {
-            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => useSpanish
-                ? "Habitaciones, personas en interiores e interiores de peliculas. Ejemplos: dramas, animacion interior, escenas de dialogo, recamaras, oficinas."
-                : "Rooms, people indoors, movie interiors. Examples: dramas, animation interiors, dialogue scenes, bedrooms, offices.",
-            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => useSpanish
-                ? "Carreteras, paisajes y exteriores. Ejemplos: calles, montanas, playas, mar, barcos, planos exteriores amplios."
-                : "Road, landscape, and outdoor scenes. Examples: streets, mountains, beaches, sea, boats, wide exterior shots.",
-            Iw3DepthModelMapper.DepthAnythingV2SmallKey => useSpanish
-                ? "Buen primer modelo opcional para conversiones rapidas. Ejemplos: peliculas generales, anime, escenas mixtas, pruebas rapidas."
-                : "Good first optional model for faster conversions. Examples: general movies, anime, mixed scenes, quick tests.",
-            Iw3DepthModelMapper.DepthAnythingSmallKey => useSpanish
-                ? "Conversiones ligeras cuando importa el tamano. Ejemplos: pruebas rapidas, poco almacenamiento, equipos antiguos."
-                : "Lightweight conversions when size matters. Examples: quick tests, low storage, older machines.",
-            Iw3DepthModelMapper.DepthAnythingBaseKey => useSpanish
-                ? "Calidad y tamano balanceados para Depth Anything v1. Ejemplos: peliculas generales, animacion, escenas mixtas interior/exterior."
-                : "Balanced quality and size for Depth Anything v1. Examples: general movies, animation, mixed indoor/outdoor scenes.",
-            Iw3DepthModelMapper.DepthAnythingLargeKey => useSpanish
-                ? "Conversiones enfocadas en calidad cuando la velocidad importa menos. Ejemplos: peliculas detalladas, close-ups, escenas complejas."
-                : "Quality-focused conversions when speed matters less. Examples: detailed movies, close-ups, complex scenes.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => useSpanish
-                ? "Escenas metricas interiores o parecidas a interiores. Ejemplos: habitaciones, pasillos, oficinas, interiores CG."
-                : "Indoor or indoor-like metric scenes. Examples: rooms, corridors, offices, CG interiors.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => useSpanish
-                ? "Modelo base metrico para interiores. Ejemplos: interiores detallados, habitaciones, pasillos, interiores CG/animados."
-                : "Indoor metric base model. Examples: detailed interiors, rooms, hallways, CG/animated interiors.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => useSpanish
-                ? "Escenas metricas exteriores. Ejemplos: carreteras, autos, calles de ciudad, paisajes, mar, barcos."
-                : "Outdoor metric scenes. Examples: roads, cars, city streets, landscapes, sea, boats.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => useSpanish
-                ? "Modelo base metrico para exteriores. Ejemplos: escenas de carretera, paisajes, accion exterior, mar/barcos."
-                : "Outdoor metric base model. Examples: road scenes, landscapes, outdoor action, sea/boats.",
-            Iw3DepthModelMapper.DistillAnyDepthSmallKey => useSpanish
-                ? "Modelo de profundidad destilado pequeno. Ejemplos: comparaciones rapidas, pruebas experimentales, escenas generales."
-                : "Small distilled depth model. Examples: quick comparisons, experimental tests, general scenes.",
-            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => useSpanish
-                ? "Escenas generales al probar Depth Anything 3. Ejemplos: peliculas, animacion, escenas mixtas detalladas."
-                : "General scenes when trying Depth Anything 3. Examples: movies, animation, detailed mixed scenes.",
-            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => useSpanish
-                ? "Variante de Depth Anything 3 orientada a TV 3D/anaglifo. Ejemplos: pruebas en TV 3D, pruebas anaglifo, experimentos de TV 3D."
-                : "3D TV/anaglyph-oriented Depth Anything 3 variant. Examples: TV playback tests, anaglyph tests, 3D TV experiments.",
-            _ => GetModelBestUse(candidate, entry, useSpanish),
-        };
-    }
-
-    private static string GetModelBestUse(
-        LocalModelSelectionCandidate candidate,
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
-    {
-        var key = entry?.Key ?? candidate.MappingKey ?? string.Empty;
-        return key switch
-        {
-            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => useSpanish
-                ? "Habitaciones, personas en interiores e interiores de peliculas."
-                : "Rooms, people indoors, and movie interiors.",
-            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => useSpanish
-                ? "Carreteras, paisajes y escenas exteriores."
-                : "Road, landscape, and outdoor scenes.",
-            Iw3DepthModelMapper.DepthAnythingV2SmallKey => useSpanish
-                ? "Primera opcion opcional para conversiones mas rapidas."
-                : "Good first optional model for faster conversions.",
-            Iw3DepthModelMapper.DepthAnythingSmallKey => useSpanish
-                ? "Conversiones ligeras cuando el tamano importa."
-                : "Lightweight conversions when size matters.",
-            Iw3DepthModelMapper.DepthAnythingBaseKey => useSpanish
-                ? "Equilibrio entre calidad y tamano en Depth Anything v1."
-                : "Balanced quality and size for Depth Anything v1.",
-            Iw3DepthModelMapper.DepthAnythingLargeKey => useSpanish
-                ? "Conversiones enfocadas en calidad cuando la velocidad importa menos."
-                : "Quality-focused conversions when speed matters less.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => useSpanish
-                ? "Escenas interiores o similares a interiores con salida metrica."
-                : "Indoor or indoor-like scenes when metric output is useful.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => useSpanish
-                ? "Interiores cuando se prefiere el modelo base metrico."
-                : "Indoor scenes when the metric base model is preferred.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => useSpanish
-                ? "Exteriores, carreteras y paisajes con salida metrica."
-                : "Outdoor, road, and landscape scenes when metric output is useful.",
-            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => useSpanish
-                ? "Exteriores cuando se prefiere el modelo base metrico."
-                : "Outdoor scenes when the metric base model is preferred.",
-            Iw3DepthModelMapper.DistillAnyDepthSmallKey => useSpanish
-                ? "Opcion pequena cuando se quiera probar un modelo destilado."
-                : "Small option when trying a distilled model.",
-            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => useSpanish
-                ? "Escenas generales cuando se quiere probar Depth Anything 3."
-                : "General scenes when trying Depth Anything 3.",
-            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => useSpanish
-                ? "Salida anaglifo o TV 3D con el escalador alternativo de iw3."
-                : "Anaglyph or 3D TV output with iw3's alternate scaler.",
+            Iw3DepthModelMapper.DepthAnythingMetricDepthIndoorKey => T(LocalizationKeys.ModelInventoryHelpUseMetricIndoor),
+            Iw3DepthModelMapper.DepthAnythingMetricDepthOutdoorKey => T(LocalizationKeys.ModelInventoryHelpUseMetricOutdoor),
+            Iw3DepthModelMapper.DepthAnythingV2SmallKey => T(LocalizationKeys.ModelInventoryHelpUseV2Small),
+            Iw3DepthModelMapper.DepthAnythingSmallKey => T(LocalizationKeys.ModelInventoryHelpUseSmall),
+            Iw3DepthModelMapper.DepthAnythingBaseKey => T(LocalizationKeys.ModelInventoryHelpUseBase),
+            Iw3DepthModelMapper.DepthAnythingLargeKey => T(LocalizationKeys.ModelInventoryHelpUseLarge),
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimSmallKey => T(LocalizationKeys.ModelInventoryHelpUseMetricHypersimSmall),
+            Iw3DepthModelMapper.DepthAnythingV2MetricHypersimBaseKey => T(LocalizationKeys.ModelInventoryHelpUseMetricHypersimBase),
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiSmallKey => T(LocalizationKeys.ModelInventoryHelpUseMetricVkittiSmall),
+            Iw3DepthModelMapper.DepthAnythingV2MetricVkittiBaseKey => T(LocalizationKeys.ModelInventoryHelpUseMetricVkittiBase),
+            Iw3DepthModelMapper.DistillAnyDepthSmallKey => T(LocalizationKeys.ModelInventoryHelpUseDistillAnyDepthSmall),
+            Iw3DepthModelMapper.DepthAnything3MonoLargeKey => T(LocalizationKeys.ModelInventoryHelpUseDepthAnything3MonoLarge),
+            Iw3DepthModelMapper.DepthAnything3MonoLarge3dTvKey => T(LocalizationKeys.ModelInventoryHelpUseDepthAnything3MonoLarge3dTv),
             _ when entry?.RedistributionDecision ==
-                Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => useSpanish
-                    ? "Solo si tu proporcionaste este checkpoint; no es un paquete oficial de v3dfy."
-                    : "Only when you supplied this checkpoint yourself; it is not an official v3dfy pack.",
-            _ => useSpanish
-                ? "Conversiones locales cuando este modelo este instalado."
-                : "Local conversions when this model is installed.",
+                Iw3DepthModelRedistributionDecision.BlockedUnclearLicense => T(LocalizationKeys.ModelInventoryHelpUseUserProvided),
+            _ => T(LocalizationKeys.ModelInventoryHelpUseDefault),
         };
     }
 
-    private static string GetSceneScopeText(
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
+    private string GetSceneScopeText(Iw3DepthModelRegistryEntry? entry)
     {
         var category = entry?.Category ?? string.Empty;
         if (category.Contains("indoor/outdoor", StringComparison.OrdinalIgnoreCase))
         {
-            return useSpanish ? "interior/exterior" : "indoor/outdoor";
+            return T(LocalizationKeys.ModelInventorySceneIndoorOutdoor);
         }
 
         if (category.Contains("indoor", StringComparison.OrdinalIgnoreCase) ||
             category.Contains("Hypersim", StringComparison.OrdinalIgnoreCase))
         {
-            return useSpanish ? "interior" : "indoor";
+            return T(LocalizationKeys.ModelInventorySceneIndoor);
         }
 
         if (category.Contains("outdoor", StringComparison.OrdinalIgnoreCase) ||
             category.Contains("VKITTI", StringComparison.OrdinalIgnoreCase))
         {
-            return useSpanish ? "exterior" : "outdoor";
+            return T(LocalizationKeys.ModelInventorySceneOutdoor);
         }
 
-        return useSpanish ? "general" : "general";
+        return T(LocalizationKeys.ModelInventorySceneGeneral);
     }
 
-    private static string GetDepthTypeText(
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish) =>
+    private string GetDepthTypeText(Iw3DepthModelRegistryEntry? entry) =>
         entry?.DepthType switch
         {
-            Iw3DepthModelDepthType.Metric => useSpanish ? "metrica" : "metric",
-            Iw3DepthModelDepthType.Relative => useSpanish ? "relativa" : "relative",
-            Iw3DepthModelDepthType.ForcedDisparity => useSpanish
-                ? "disparidad forzada"
-                : "forced disparity",
-            _ => useSpanish ? "segun el modelo" : "model-defined",
+            Iw3DepthModelDepthType.Metric => T(LocalizationKeys.ModelInventoryDepthTypeMetric),
+            Iw3DepthModelDepthType.Relative => T(LocalizationKeys.ModelInventoryDepthTypeRelative),
+            Iw3DepthModelDepthType.ForcedDisparity => T(LocalizationKeys.ModelInventoryDepthTypeForcedDisparity),
+            _ => T(LocalizationKeys.ModelInventoryDepthTypeModelDefined),
         };
 
-    private static string GetModelSourceText(
+    private string GetModelSourceText(
         LocalModelSelectionCandidate candidate,
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
+        Iw3DepthModelRegistryEntry? entry)
     {
         if (entry?.RedistributionDecision ==
             Iw3DepthModelRedistributionDecision.BlockedUnclearLicense)
         {
-            return useSpanish ? "proporcionado por el usuario" : "user-provided";
+            return T(LocalizationKeys.ModelInventorySourceUserProvided);
         }
 
         if (entry?.Availability == Iw3DepthModelAvailability.EmbeddedBase)
         {
-            return useSpanish ? "incluido" : "bundled";
+            return T(LocalizationKeys.ModelInventorySourceBundled);
         }
 
         if (entry?.IsPublicPackEligible == true)
         {
-            return useSpanish ? "paquete de modelos" : "model pack";
+            return T(LocalizationKeys.ModelInventorySourceModelPack);
         }
 
         return candidate.IsCatalogManaged
-            ? useSpanish ? "catalogo local" : "local catalog"
-            : useSpanish ? "archivo local" : "local file";
+            ? T(LocalizationKeys.ModelInventorySourceLocalCatalog)
+            : T(LocalizationKeys.ModelInventorySourceLocalFile);
     }
 
-    private static string GetSizeClassText(
-        Iw3DepthModelRegistryEntry? entry,
-        bool useSpanish)
+    private string GetSizeClassText(Iw3DepthModelRegistryEntry? entry)
     {
         var name = entry?.DepthModelName ?? string.Empty;
         var key = entry?.Key ?? string.Empty;
         if (name.EndsWith("_S", StringComparison.OrdinalIgnoreCase) ||
             key.Contains("small", StringComparison.OrdinalIgnoreCase))
         {
-            return useSpanish ? "pequeno / mas rapido" : "small / faster";
+            return T(LocalizationKeys.ModelInventorySizeSmallFaster);
         }
 
         if (name.EndsWith("_B", StringComparison.OrdinalIgnoreCase) ||
             key.Contains("base", StringComparison.OrdinalIgnoreCase))
         {
-            return useSpanish ? "base / equilibrado" : "base / balanced";
+            return T(LocalizationKeys.ModelInventorySizeBaseBalanced);
         }
 
         if (name.EndsWith("_L", StringComparison.OrdinalIgnoreCase) ||
             key.Contains("large", StringComparison.OrdinalIgnoreCase))
         {
-            return useSpanish ? "grande / mas pesado" : "large / heavier";
+            return T(LocalizationKeys.ModelInventorySizeLargeHeavier);
         }
 
-        return useSpanish ? "estandar" : "standard";
+        return T(LocalizationKeys.ModelInventorySizeStandard);
     }
 
     private string CreateRuntimeDependenciesInventoryText()
@@ -5860,17 +5652,15 @@ public sealed class MainWindowViewModel : ObservableObject
             ToolHealthDetailKind.Iw3RuntimeDependenciesMissing,
             _toolPaths.Iw3DefaultStereoRuntimeDependencyFile);
         var statusText = dependency.Status == ToolHealthStatus.Found
-            ? Text("Found", "Encontrada")
-            : Text("Missing", "Faltante");
+            ? T(LocalizationKeys.CommonFound)
+            : T(LocalizationKeys.CommonMissing);
         return string.Join(
             Environment.NewLine,
             [
                 $"- {Path.GetFileName(dependency.ExpectedPath)}",
                 $"  {statusText}",
                 $"  {dependency.ExpectedPath}",
-                Text(
-                    "  Note: runtime dependency, not a selectable model.",
-                    "  Nota: dependencia de runtime, no es un modelo seleccionable."),
+                $"  {T(LocalizationKeys.ModelInventoryRuntimeDependencyNote)}",
             ]);
     }
 
@@ -5893,15 +5683,15 @@ public sealed class MainWindowViewModel : ObservableObject
                 UseShellExecute = true,
             });
 
-            AddLog(
-                $"Opened expected engine folder: {_toolPaths.Iw3EngineDirectory}",
-                $"Carpeta esperada del motor abierta: {_toolPaths.Iw3EngineDirectory}");
+            AddLogResolved(T(
+                LocalizationKeys.SystemLogOpenedEngineFolderFormat,
+                ("path", _toolPaths.Iw3EngineDirectory)));
         }
         catch (Exception exception)
         {
-            AddLog(
-                $"Could not open expected engine folder: {exception.Message}",
-                $"No se pudo abrir la carpeta esperada del motor: {exception.Message}");
+            AddLogResolved(T(
+                LocalizationKeys.SystemLogOpenEngineFolderFailedFormat,
+                ("message", exception.Message)));
         }
     }
 
@@ -5916,15 +5706,15 @@ public sealed class MainWindowViewModel : ObservableObject
                 UseShellExecute = true,
             });
 
-            AddLog(
-                $"Opened expected models folder: {_toolPaths.ModelsDirectory}",
-                $"Carpeta esperada de modelos abierta: {_toolPaths.ModelsDirectory}");
+            AddLogResolved(T(
+                LocalizationKeys.SystemLogOpenedModelsFolderFormat,
+                ("path", _toolPaths.ModelsDirectory)));
         }
         catch (Exception exception)
         {
-            AddLog(
-                $"Could not open expected models folder: {exception.Message}",
-                $"No se pudo abrir la carpeta esperada de modelos: {exception.Message}");
+            AddLogResolved(T(
+                LocalizationKeys.SystemLogOpenModelsFolderFailedFormat,
+                ("message", exception.Message)));
         }
     }
 
@@ -5988,13 +5778,13 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var previousModeEnglish = GetImageModeDisplayText(SelectedImageConversionMode, spanish: false);
-        var previousModeSpanish = GetImageModeDisplayText(SelectedImageConversionMode, spanish: true);
+        var previousMode = GetImageModeDisplayText(SelectedImageConversionMode);
         SelectedImageConversionMode = mode;
         IsImageWorkflowChooserExpanded = false;
-        ApplyImageSetupChanged(
-            $"Image workflow mode changed: {previousModeEnglish} -> {GetImageModeDisplayText(mode, spanish: false)}.",
-            $"Modo de flujo de imagen cambio: {previousModeSpanish} -> {GetImageModeDisplayText(mode, spanish: true)}.");
+        ApplyImageSetupChanged(T(
+            LocalizationKeys.ImageLogWorkflowChangedFormat,
+            ("previous", previousMode),
+            ("next", GetImageModeDisplayText(mode))));
         if (SelectedImageConversionStep == ImageConversionStep.ModeAndSource)
         {
             return;
@@ -6028,17 +5818,13 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (step == ImageConversionStep.Setup && !CanOpenImageSetupStep)
         {
-            AddImageLog(
-                "Analyze a readable image before opening image setup.",
-                "Analiza una imagen legible antes de abrir la configuracion.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogAnalyzeBeforeSetup));
             return;
         }
 
         if (step == ImageConversionStep.PreviewAndExport && !CanOpenImagePreviewExportStep)
         {
-            AddImageLog(
-                "Choose an image workflow and complete setup before opening image conversion.",
-                "Elige un flujo de imagen y completa la configuracion antes de abrir la conversion de imagen.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogCompleteSetupBeforeConversion));
             return;
         }
 
@@ -6064,9 +5850,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanMoveImageWizardNext)
         {
-            AddImageLog(
-                "Image workflow cannot continue until the current phase is ready.",
-                "El flujo de imagen no puede continuar hasta que la fase actual este lista.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogCannotContinue));
             return;
         }
 
@@ -6079,9 +5863,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (SelectedImageConversionStep == ImageConversionStep.PreviewAndExport)
         {
-            AddImageLog(
-                "Image conversion setup is ready for review.",
-                "La configuracion de conversion de imagen esta lista para revisar.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogSetupReadyForReview));
         }
     }
 
@@ -6089,29 +5871,23 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanContinueWithImageConversion)
         {
-            AddImageLog(
-                "Review image setup before preparing image conversion.",
-                "Revisa la configuracion de imagen antes de preparar la conversion de imagen.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogReviewSetupBeforePreparing));
             return;
         }
 
         _hasEnteredImagePreviewExportStage = true;
         if (IsImageStereoModeSelected)
         {
-            AddImageLog(
-                "Image conversion prepared. Stereoscopic conversion requires verified bundled iw3 image capability and a bundled mapped depth model.",
-                "Conversion de imagen preparada. La conversion estereoscopica requiere capacidad de imagen iw3 incluida verificada y un modelo de profundidad incluido mapeado.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogPreparedStereo));
         }
         else
         {
-            AddImageLog(
-                "Image conversion prepared. 2.5D conversion will use bundled iw3 depth export and bundled FFmpeg.",
-                "Conversion de imagen preparada. La conversion 2.5D usara exportacion de profundidad iw3 incluida y FFmpeg incluido.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogPreparedParallax));
         }
 
         ShowLogCopyNotification(
-            "Image conversion prepared",
-            "Conversion de imagen preparada");
+            T(LocalizationKeys.ImageLogPreparedToast),
+            T(LocalizationKeys.ImageLogPreparedToast));
         RaiseImageConversionPropertiesChanged();
     }
 
@@ -6135,14 +5911,12 @@ public sealed class MainWindowViewModel : ObservableObject
         if (HasCurrentImageConversionOutput)
         {
             var fileName = Path.GetFileName(_lastImageExportPrimaryPath);
-            return Text(
-                $"Conversion completed: {fileName}",
-                $"Conversion completada: {fileName}");
+            return T(LocalizationKeys.ImageOutputCompletedFormat, ("fileName", fileName));
         }
 
         return IsImageStereoModeSelected
-            ? $"{Text("Conversion prepared.", "Conversion preparada.")} {CreateImageStereoExportReadinessText()}"
-            : $"{Text("Conversion prepared.", "Conversion preparada.")} {CreateImageParallaxExportReadinessText()}";
+            ? $"{T(LocalizationKeys.ImageOutputPrepared)} {CreateImageStereoExportReadinessText()}"
+            : $"{T(LocalizationKeys.ImageOutputPrepared)} {CreateImageParallaxExportReadinessText()}";
     }
 
     private Iw3ImageStereoExportReadiness? EvaluateCurrentImageStereoExportReadiness()
@@ -6161,32 +5935,24 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (_dependencyHealth is null)
         {
-            return Text(
-                "Refresh System status before exporting with bundled iw3.",
-                "Actualiza el estado del sistema antes de exportar con iw3 incluido.");
+            return T(LocalizationKeys.ImageReadinessRefreshSystemStatusStereo);
         }
 
         if (SelectedImagePath is null)
         {
-            return Text(
-                "Select and analyze an image before exporting.",
-                "Selecciona y analiza una imagen antes de exportar.");
+            return T(LocalizationKeys.ImageReadinessMissingImageBeforeExportStereo);
         }
 
         var readiness = EvaluateCurrentImageStereoExportReadiness();
         if (readiness?.CanExport == true)
         {
-            return Text(
-                "Ready to convert.",
-                "Listo para convertir.");
+            return T(LocalizationKeys.ImageReadinessReady);
         }
 
         var firstIssue = readiness?.Issues.FirstOrDefault();
         return firstIssue is null
-            ? Text(
-                "Bundled iw3 image export is not ready.",
-                "La exportacion de imagen con iw3 incluido no esta lista.")
-            : Text(firstIssue.EnglishMessage, firstIssue.SpanishMessage);
+            ? T(LocalizationKeys.ImageReadinessStereoNotReady)
+            : LocalizeImageExportReadinessIssue(firstIssue.EnglishMessage);
     }
 
     private Iw3ImageParallaxExportReadiness? EvaluateCurrentImageParallaxExportReadiness()
@@ -6205,32 +5971,24 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (_dependencyHealth is null)
         {
-            return Text(
-                "Refresh System status before converting with bundled iw3.",
-                "Actualiza el estado del sistema antes de convertir con iw3 incluido.");
+            return T(LocalizationKeys.ImageReadinessRefreshSystemStatusParallax);
         }
 
         if (SelectedImagePath is null)
         {
-            return Text(
-                "Select and analyze an image before converting.",
-                "Selecciona y analiza una imagen antes de convertir.");
+            return T(LocalizationKeys.ImageReadinessMissingImageBeforeExportParallax);
         }
 
         var readiness = EvaluateCurrentImageParallaxExportReadiness();
         if (readiness?.CanExport == true)
         {
-            return Text(
-                "Ready to convert a depth-based 2.5D parallax MP4.",
-                "Listo para convertir un MP4 parallax 2.5D basado en profundidad.");
+            return T(LocalizationKeys.ImageReadinessReadyParallax);
         }
 
         var firstIssue = readiness?.Issues.FirstOrDefault();
         return firstIssue is null
-            ? Text(
-                "Bundled iw3 2.5D image conversion is not ready.",
-                "La conversion de imagen 2.5D con iw3 incluido no esta lista.")
-            : Text(firstIssue.EnglishMessage, firstIssue.SpanishMessage);
+            ? T(LocalizationKeys.ImageReadinessParallaxNotReady)
+            : LocalizeImageExportReadinessIssue(firstIssue.EnglishMessage);
     }
 
     private Task ConvertImageAsync()
@@ -6247,17 +6005,16 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanExportStereoscopicImage || SelectedImagePath is null)
         {
-            AddImageLog(
-                $"Stereoscopic image conversion is blocked: {ImageStereoExportDisabledReasonText}",
-                $"La conversion de imagen estereoscopica esta bloqueada: {ImageStereoExportDisabledReasonText}");
+            AddImageLogResolved(T(
+                LocalizationKeys.ImageLogStereoBlockedFormat,
+                ("reason", ImageStereoExportDisabledReasonText)));
             return;
         }
 
         ResetImageExportState();
         IsImageExportRunning = true;
         _imageExportProgressPercent = 0;
-        _imageExportProgressEnglishText = "Preparing bundled iw3 stereoscopic image conversion.";
-        _imageExportProgressSpanishText = "Preparando conversion estereoscopica de imagen con iw3 incluido.";
+        _imageExportProgressKey = LocalizationKeys.ImageProgressPreparingStereo;
         RaiseImageExportPropertiesChanged();
 
         var outputDirectory = GetDefaultImageExportDirectory(SelectedImagePath);
@@ -6269,27 +6026,26 @@ public sealed class MainWindowViewModel : ObservableObject
             outputFormat,
             selectedModel?.MappingKey ?? selectedModel?.DisplayName,
             File.Exists);
-        AddImageLog(
-            "Bundled iw3 image stereo export started.",
-            "Exportacion estereoscopica de imagen con iw3 incluido iniciada.");
-        AddImageLog(
-            $"Source image: {Path.GetFileName(SelectedImagePath)}",
-            $"Imagen de origen: {Path.GetFileName(SelectedImagePath)}");
-        AddImageLog(
-            $"Selected model: {selectedModel?.DisplayName ?? "none"}. iw3 depth model: {selectedModel?.Iw3DepthModelName ?? "-"}",
-            $"Modelo seleccionado: {selectedModel?.DisplayName ?? "ninguno"}. Modelo de profundidad iw3: {selectedModel?.Iw3DepthModelName ?? "-"}");
-        AddImageLog(
-            $"Stereo format: {SelectedStereoOutputFormatDisplayText}.",
-            $"Formato estereo: {SelectedStereoOutputFormatDisplayText}.");
-        AddImageLog(
-            $"Output path: {plannedOutputPaths.PrimaryOutputPath}",
-            $"Ruta de salida: {plannedOutputPaths.PrimaryOutputPath}");
-        AddImageLog(
-            $"Bundled Python: {_toolPaths.PythonExecutable}",
-            $"Python incluido: {_toolPaths.PythonExecutable}");
-        AddImageLog(
-            $"Bundled iw3 package: {_toolPaths.Iw3PackageDirectory}",
-            $"Paquete iw3 incluido: {_toolPaths.Iw3PackageDirectory}");
+        AddImageLogResolved(T(LocalizationKeys.ImageLogStereoStarted));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogSourceImageFormat,
+            ("fileName", Path.GetFileName(SelectedImagePath))));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogSelectedModelFormat,
+            ("model", selectedModel?.DisplayName ?? T(LocalizationKeys.ImageModelNone)),
+            ("iw3Model", selectedModel?.Iw3DepthModelName ?? "-")));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogStereoFormatFormat,
+            ("format", SelectedStereoOutputFormatDisplayText)));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogOutputPathFormat,
+            ("path", plannedOutputPaths.PrimaryOutputPath)));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogBundledPythonFormat,
+            ("path", _toolPaths.PythonExecutable)));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogBundledIw3PackageFormat,
+            ("path", _toolPaths.Iw3PackageDirectory)));
 
         await Task.Yield();
 
@@ -6301,75 +6057,66 @@ public sealed class MainWindowViewModel : ObservableObject
 
             if (!string.IsNullOrWhiteSpace(result.CommandPreview))
             {
-                AddImageLog(
-                    $"iw3 command: {result.CommandPreview}",
-                    $"Comando iw3: {result.CommandPreview}");
+                AddImageLogResolved(T(LocalizationKeys.ImageLogIw3CommandFormat, ("command", result.CommandPreview)));
             }
 
             if (result.ExitCode.HasValue)
             {
-                AddImageLog(
-                    $"iw3 process exit code: {result.ExitCode.Value}",
-                    $"Codigo de salida del proceso iw3: {result.ExitCode.Value}");
+                AddImageLogResolved(T(
+                    LocalizationKeys.ImageLogProcessExitCodeFormat,
+                    ("processName", "iw3"),
+                    ("exitCode", result.ExitCode.Value)));
             }
 
             if (!string.IsNullOrWhiteSpace(result.StandardOutputSummary))
             {
-                AddImageLog(
-                    $"iw3 stdout: {result.StandardOutputSummary}",
-                    $"stdout iw3: {result.StandardOutputSummary}");
+                AddImageLogResolved(T(LocalizationKeys.ImageLogIw3StdoutFormat, ("detail", result.StandardOutputSummary)));
             }
 
             if (!string.IsNullOrWhiteSpace(result.StandardErrorSummary))
             {
-                AddImageLog(
-                    $"iw3 stderr: {result.StandardErrorSummary}",
-                    $"stderr iw3: {result.StandardErrorSummary}");
+                AddImageLogResolved(T(LocalizationKeys.ImageLogIw3StderrFormat, ("detail", result.StandardErrorSummary)));
             }
 
             if (result.Success)
             {
+                var summary = LocalizeImageStereoExportSummary(result);
                 _lastImageExportPrimaryPath = result.PrimaryOutputPath ?? string.Empty;
                 _lastImageExportOutputDirectory = result.OutputDirectory;
                 _lastImageExportGeneratedFiles = result.GeneratedFiles;
                 _lastImageExportErrorEnglishText = string.Empty;
                 _lastImageExportErrorSpanishText = string.Empty;
                 _isImageExportOutputOutdated = false;
-                AddImageLog(result.EnglishSummary, result.SpanishSummary);
+                AddImageLogResolved(summary);
                 foreach (var generatedFile in result.GeneratedFiles)
                 {
-                    AddImageLog(
-                        $"Generated image file: {generatedFile}",
-                        $"Archivo de imagen generado: {generatedFile}");
+                    AddImageLogResolved(T(LocalizationKeys.ImageLogGeneratedImageFileFormat, ("path", generatedFile)));
                 }
             }
             else
             {
-                _lastImageExportErrorEnglishText = result.EnglishSummary;
-                _lastImageExportErrorSpanishText = result.SpanishSummary;
+                var summary = LocalizeImageStereoExportSummary(result);
+                _lastImageExportErrorEnglishText = summary;
+                _lastImageExportErrorSpanishText = summary;
                 _lastImageExportGeneratedFiles = [];
                 _lastImageExportPrimaryPath = string.Empty;
                 _isImageExportOutputOutdated = false;
-                AddImageLog(result.EnglishSummary, result.SpanishSummary);
+                AddImageLogResolved(summary);
                 if (!string.IsNullOrWhiteSpace(result.TechnicalDetail))
                 {
-                    AddImageLog(
-                        $"Technical detail: {result.TechnicalDetail}",
-                        $"Detalle tecnico: {result.TechnicalDetail}");
+                    AddImageLogResolved(T(LocalizationKeys.ImageLogTechnicalDetailFormat, ("detail", result.TechnicalDetail)));
                 }
             }
         }
         catch (Exception exception)
         {
-            _lastImageExportErrorEnglishText = $"Image conversion failed: {exception.Message}";
-            _lastImageExportErrorSpanishText = $"La conversion de imagen fallo: {exception.Message}";
+            _lastImageExportErrorEnglishText = T(LocalizationKeys.ImageErrorExportFailedFormat, ("message", exception.Message));
+            _lastImageExportErrorSpanishText = _lastImageExportErrorEnglishText;
             _lastImageExportGeneratedFiles = [];
             _lastImageExportPrimaryPath = string.Empty;
             _isImageExportOutputOutdated = false;
-            AddImageLog(_lastImageExportErrorEnglishText, _lastImageExportErrorSpanishText);
-            AddImageLog(
-                $"Technical detail: {exception}",
-                $"Detalle tecnico: {exception}");
+            AddImageLogResolved(_lastImageExportErrorEnglishText);
+            AddImageLogResolved(T(LocalizationKeys.ImageLogTechnicalDetailFormat, ("detail", exception)));
         }
         finally
         {
@@ -6382,17 +6129,16 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanConvertImage || !IsImageParallaxModeSelected || SelectedImagePath is null)
         {
-            AddImageLog(
-                $"2.5D image conversion is blocked: {ImageConvertDisabledReasonText}",
-                $"La conversion de imagen 2.5D esta bloqueada: {ImageConvertDisabledReasonText}");
+            AddImageLogResolved(T(
+                LocalizationKeys.ImageLogParallaxBlockedFormat,
+                ("reason", ImageConvertDisabledReasonText)));
             return;
         }
 
         ResetImageExportState();
         IsImageExportRunning = true;
         _imageExportProgressPercent = 0;
-        _imageExportProgressEnglishText = "Preparing bundled iw3 2.5D image conversion.";
-        _imageExportProgressSpanishText = "Preparando conversion de imagen 2.5D con iw3 incluido.";
+        _imageExportProgressKey = LocalizationKeys.ImageProgressPreparingParallax;
         RaiseImageExportPropertiesChanged();
 
         var outputDirectory = GetDefaultImageExportDirectory(SelectedImagePath);
@@ -6403,33 +6149,35 @@ public sealed class MainWindowViewModel : ObservableObject
             selectedModel?.MappingKey ?? selectedModel?.DisplayName,
             SelectedParallaxDuration,
             File.Exists);
-        AddImageLog(
-            "Bundled iw3 2.5D image conversion started.",
-            "Conversion de imagen 2.5D con iw3 incluido iniciada.");
-        AddImageLog(
-            $"Source image: {Path.GetFileName(SelectedImagePath)}",
-            $"Imagen de origen: {Path.GetFileName(SelectedImagePath)}");
-        AddImageLog(
-            $"Selected model: {selectedModel?.DisplayName ?? "none"}. iw3 depth model: {selectedModel?.Iw3DepthModelName ?? "-"}",
-            $"Modelo seleccionado: {selectedModel?.DisplayName ?? "ninguno"}. Modelo de profundidad iw3: {selectedModel?.Iw3DepthModelName ?? "-"}");
-        AddImageLog(
-            $"2.5D settings: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}, {SelectedParallaxSmoothing}, {SelectedParallaxLayerBehavior}.",
-            $"Configuracion 2.5D: {SelectedParallaxDepthIntensity}, {SelectedParallaxMotionDirection}, {SelectedParallaxZoomAmplitude}, {SelectedParallaxDuration}, {SelectedParallaxSmoothing}, {SelectedParallaxLayerBehavior}.");
-        AddImageLog(
-            "High-resolution 2.5D conversion can take a while; progress is reported by depth export, frame generation, and FFmpeg encoding phase.",
-            "La conversion 2.5D de alta resolucion puede tardar; el progreso se reporta por fase de profundidad, generacion de cuadros y codificacion FFmpeg.");
-        AddImageLog(
-            $"Output path: {plannedOutputPaths.PrimaryOutputPath}",
-            $"Ruta de salida: {plannedOutputPaths.PrimaryOutputPath}");
-        AddImageLog(
-            $"Bundled Python: {_toolPaths.PythonExecutable}",
-            $"Python incluido: {_toolPaths.PythonExecutable}");
-        AddImageLog(
-            $"Bundled FFmpeg: {_toolPaths.FfmpegExecutable}",
-            $"FFmpeg incluido: {_toolPaths.FfmpegExecutable}");
-        AddImageLog(
-            $"v3dfy parallax helper: {_toolPaths.V3dfyParallaxHelperScript}",
-            $"Auxiliar parallax v3dfy: {_toolPaths.V3dfyParallaxHelperScript}");
+        AddImageLogResolved(T(LocalizationKeys.ImageLogParallaxStarted));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogSourceImageFormat,
+            ("fileName", Path.GetFileName(SelectedImagePath))));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogSelectedModelFormat,
+            ("model", selectedModel?.DisplayName ?? T(LocalizationKeys.ImageModelNone)),
+            ("iw3Model", selectedModel?.Iw3DepthModelName ?? "-")));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogParallaxSettingsFormat,
+            ("depthIntensity", GetOptionDisplayName(ParallaxDepthIntensityOptions, SelectedParallaxDepthIntensity)),
+            ("motionDirection", GetOptionDisplayName(ParallaxMotionDirectionOptions, SelectedParallaxMotionDirection)),
+            ("zoomAmplitude", GetOptionDisplayName(ParallaxZoomAmplitudeOptions, SelectedParallaxZoomAmplitude)),
+            ("duration", GetOptionDisplayName(ParallaxDurationOptions, SelectedParallaxDuration)),
+            ("smoothing", GetOptionDisplayName(ParallaxSmoothingOptions, SelectedParallaxSmoothing)),
+            ("layerBehavior", GetOptionDisplayName(ParallaxLayerBehaviorOptions, SelectedParallaxLayerBehavior))));
+        AddImageLogResolved(T(LocalizationKeys.ImageLogHighResolutionParallaxWarning));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogOutputPathFormat,
+            ("path", plannedOutputPaths.PrimaryOutputPath)));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogBundledPythonFormat,
+            ("path", _toolPaths.PythonExecutable)));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogBundledFfmpegFormat,
+            ("path", _toolPaths.FfmpegExecutable)));
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogParallaxHelperFormat,
+            ("path", _toolPaths.V3dfyParallaxHelperScript)));
 
         await Task.Yield();
 
@@ -6441,86 +6189,78 @@ public sealed class MainWindowViewModel : ObservableObject
 
             if (!string.IsNullOrWhiteSpace(result.DepthExportCommandPreview))
             {
-                AddImageLog(
-                    $"iw3 depth command: {result.DepthExportCommandPreview}",
-                    $"Comando de profundidad iw3: {result.DepthExportCommandPreview}");
+                AddImageLogResolved(T(
+                    LocalizationKeys.ImageLogIw3DepthCommandFormat,
+                    ("command", result.DepthExportCommandPreview)));
             }
 
             if (!string.IsNullOrWhiteSpace(result.FrameGenerationCommandPreview))
             {
-                AddImageLog(
-                    $"Parallax frame command: {result.FrameGenerationCommandPreview}",
-                    $"Comando de cuadros parallax: {result.FrameGenerationCommandPreview}");
+                AddImageLogResolved(T(
+                    LocalizationKeys.ImageLogParallaxFrameCommandFormat,
+                    ("command", result.FrameGenerationCommandPreview)));
             }
 
             if (!string.IsNullOrWhiteSpace(result.FfmpegCommandPreview))
             {
-                AddImageLog(
-                    $"FFmpeg command: {result.FfmpegCommandPreview}",
-                    $"Comando FFmpeg: {result.FfmpegCommandPreview}");
+                AddImageLogResolved(T(
+                    LocalizationKeys.ImageLogFfmpegCommandFormat,
+                    ("command", result.FfmpegCommandPreview)));
             }
 
-            AddProcessExitLog("iw3 depth", "profundidad iw3", result.DepthExportExitCode);
-            AddProcessExitLog("parallax frames", "cuadros parallax", result.FrameGenerationExitCode);
-            AddProcessExitLog("FFmpeg", "FFmpeg", result.FfmpegExitCode);
+            AddProcessExitLog("iw3 depth", result.DepthExportExitCode);
+            AddProcessExitLog("parallax frames", result.FrameGenerationExitCode);
+            AddProcessExitLog("FFmpeg", result.FfmpegExitCode);
 
             if (!string.IsNullOrWhiteSpace(result.StandardOutputSummary))
             {
-                AddImageLog(
-                    $"2.5D conversion stdout: {result.StandardOutputSummary}",
-                    $"stdout conversion 2.5D: {result.StandardOutputSummary}");
+                AddImageLogResolved(T(LocalizationKeys.ImageLogParallaxStdoutFormat, ("detail", result.StandardOutputSummary)));
             }
 
             if (!string.IsNullOrWhiteSpace(result.StandardErrorSummary))
             {
-                AddImageLog(
-                    $"2.5D conversion stderr: {result.StandardErrorSummary}",
-                    $"stderr conversion 2.5D: {result.StandardErrorSummary}");
+                AddImageLogResolved(T(LocalizationKeys.ImageLogParallaxStderrFormat, ("detail", result.StandardErrorSummary)));
             }
 
             if (result.Success)
             {
+                var summary = LocalizeImageParallaxExportSummary(result);
                 _lastImageExportPrimaryPath = result.PrimaryOutputPath ?? string.Empty;
                 _lastImageExportOutputDirectory = result.OutputDirectory;
                 _lastImageExportGeneratedFiles = result.GeneratedFiles;
                 _lastImageExportErrorEnglishText = string.Empty;
                 _lastImageExportErrorSpanishText = string.Empty;
                 _isImageExportOutputOutdated = false;
-                AddImageLog(result.EnglishSummary, result.SpanishSummary);
+                AddImageLogResolved(summary);
                 foreach (var generatedFile in result.GeneratedFiles)
                 {
-                    AddImageLog(
-                        $"Generated 2.5D parallax file: {generatedFile}",
-                        $"Archivo parallax 2.5D generado: {generatedFile}");
+                    AddImageLogResolved(T(LocalizationKeys.ImageLogGeneratedParallaxFileFormat, ("path", generatedFile)));
                 }
             }
             else
             {
-                _lastImageExportErrorEnglishText = result.EnglishSummary;
-                _lastImageExportErrorSpanishText = result.SpanishSummary;
+                var summary = LocalizeImageParallaxExportSummary(result);
+                _lastImageExportErrorEnglishText = summary;
+                _lastImageExportErrorSpanishText = summary;
                 _lastImageExportGeneratedFiles = [];
                 _lastImageExportPrimaryPath = string.Empty;
                 _isImageExportOutputOutdated = false;
-                AddImageLog(result.EnglishSummary, result.SpanishSummary);
+                AddImageLogResolved(summary);
                 if (!string.IsNullOrWhiteSpace(result.TechnicalDetail))
                 {
-                    AddImageLog(
-                        $"Technical detail: {result.TechnicalDetail}",
-                        $"Detalle tecnico: {result.TechnicalDetail}");
+                    AddImageLogResolved(T(LocalizationKeys.ImageLogTechnicalDetailFormat, ("detail", result.TechnicalDetail)));
                 }
             }
         }
         catch (Exception exception)
         {
-            _lastImageExportErrorEnglishText = $"2.5D image conversion failed: {exception.Message}";
-            _lastImageExportErrorSpanishText = $"La conversion de imagen 2.5D fallo: {exception.Message}";
+            _lastImageExportErrorEnglishText = T(LocalizationKeys.ImageErrorParallaxExportFailedFormat, ("message", exception.Message));
+            _lastImageExportErrorSpanishText = _lastImageExportErrorEnglishText;
             _lastImageExportGeneratedFiles = [];
             _lastImageExportPrimaryPath = string.Empty;
             _isImageExportOutputOutdated = false;
-            AddImageLog(_lastImageExportErrorEnglishText, _lastImageExportErrorSpanishText);
-            AddImageLog(
-                $"Technical detail: {exception}",
-                $"Detalle tecnico: {exception}");
+            AddImageLogResolved(_lastImageExportErrorEnglishText);
+            AddImageLogResolved(T(LocalizationKeys.ImageLogTechnicalDetailFormat, ("detail", exception)));
         }
         finally
         {
@@ -6529,16 +6269,219 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    private void AddProcessExitLog(string englishName, string spanishName, int? exitCode)
+    private void AddProcessExitLog(string processName, int? exitCode)
     {
         if (!exitCode.HasValue)
         {
             return;
         }
 
-        AddImageLog(
-            $"{englishName} process exit code: {exitCode.Value}",
-            $"Codigo de salida del proceso {spanishName}: {exitCode.Value}");
+        AddImageLogResolved(T(
+            LocalizationKeys.ImageLogProcessExitCodeFormat,
+            ("processName", processName),
+            ("exitCode", exitCode.Value)));
+    }
+
+    private string LocalizeImageExportReadinessIssue(string englishMessage)
+    {
+        if (string.IsNullOrWhiteSpace(englishMessage))
+        {
+            return string.Empty;
+        }
+
+        if (TrySplitPrefixedLabelPath(
+                englishMessage,
+                "Missing bundled ",
+                out var label,
+                out var path))
+        {
+            var key = label.Contains("directory", StringComparison.OrdinalIgnoreCase)
+                ? LocalizationKeys.ImageReadinessMissingBundledDirectoryFormat
+                : LocalizationKeys.ImageReadinessMissingBundledFileFormat;
+            return T(key, ("label", label), ("path", path));
+        }
+
+        if (englishMessage.Contains("Select a bundled local depth model", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageReadinessSelectDepthModel);
+        }
+
+        if (englishMessage.Contains("not mapped to a verified iw3 depth model", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageReadinessModelUnmapped);
+        }
+
+        if (englishMessage.Contains("not verified for image input", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageReadinessModelNotImageVerified);
+        }
+
+        if (TrySplitAfterPrefix(
+                englishMessage,
+                "Selected bundled model file is missing: ",
+                out var missingModelPath))
+        {
+            return T(LocalizationKeys.ImageReadinessSelectedModelFileMissingFormat, ("path", missingModelPath));
+        }
+
+        if (englishMessage.Contains("selected anaglyph mode is not supported", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageReadinessUnsupportedAnaglyphMode);
+        }
+
+        if (englishMessage.Contains("Swap eyes requires", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageReadinessSwapEyesRequiresCrossEyed);
+        }
+
+        if (TrySplitAfterPrefix(
+                englishMessage,
+                "Bundled iw3 image export is blocked because IW3_CLI_CAPABILITIES.json does not verify ",
+                out var missingOptions))
+        {
+            return T(
+                LocalizationKeys.ImageReadinessIw3CapabilitiesMissingFormat,
+                ("options", missingOptions.TrimEnd('.')));
+        }
+
+        return englishMessage;
+    }
+
+    private string LocalizeImageStereoExportSummary(ImageStereoExportResult result)
+    {
+        if (result.Success)
+        {
+            return T(LocalizationKeys.ImageExportSummaryStereoCompleted);
+        }
+
+        return result.WasBlocked
+            ? T(LocalizationKeys.ImageExportSummaryStereoBlocked)
+            : T(LocalizationKeys.ImageExportSummaryStereoFailed);
+    }
+
+    private string LocalizeImageParallaxExportSummary(ImageParallaxExportResult result)
+    {
+        if (result.Success)
+        {
+            return T(LocalizationKeys.ImageExportSummaryParallaxCompleted);
+        }
+
+        return result.WasBlocked
+            ? T(LocalizationKeys.ImageExportSummaryParallaxBlocked)
+            : T(LocalizationKeys.ImageExportSummaryParallaxFailed);
+    }
+
+    private string LocalizeImageStereoExportProgress(ImageStereoExportProgress progress)
+    {
+        var message = progress.EnglishMessage;
+        if (message.Contains("Starting bundled iw3 image stereo export", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageExportProgressStereoStarting);
+        }
+
+        if (message.Contains("Bundled iw3 image stereo export completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageExportProgressStereoCompleted);
+        }
+
+        if (TryExtractAfter(message, "exit code ", out var exitCode))
+        {
+            return T(
+                LocalizationKeys.ImageExportProgressStereoFailedFormat,
+                ("exitCode", exitCode.TrimEnd('.')));
+        }
+
+        return message;
+    }
+
+    private string LocalizeImageParallaxExportProgress(ImageParallaxExportProgress progress)
+    {
+        var message = progress.EnglishMessage;
+        if (message.Contains("Starting bundled iw3 depth export", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxDepthStarting);
+        }
+
+        if (TrySplitAfterPrefix(message, "Expected depth output: ", out var depthOutputPath))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxDepthOutputFormat, ("path", depthOutputPath));
+        }
+
+        if (message.Contains("Bundled iw3 depth export failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxDepthFailed);
+        }
+
+        if (TrySplitAfterPrefix(message, "Expected depth map was not created: ", out var missingDepthPath))
+        {
+            return T(LocalizationKeys.ImageExportProgressExpectedDepthMapMissingFormat, ("path", missingDepthPath));
+        }
+
+        if (TryBetween(message, "Depth export completed in ", ".", out var depthElapsed))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxDepthCompletedFormat, ("elapsed", depthElapsed));
+        }
+
+        if (TryBetween(message, "Generating ", " 2.5D parallax frames", out var frameCount))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxFramesGeneratingFormat, ("frameCount", frameCount));
+        }
+
+        if (TrySplitAfterPrefix(message, "Parallax frame directory: ", out var frameDirectory))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxFrameDirectoryFormat, ("path", frameDirectory));
+        }
+
+        if (message.Contains("2.5D parallax frame generation failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxFramesFailed);
+        }
+
+        if (TrySplitAfterPrefix(message, "No parallax frames were created under: ", out var noFramesPath))
+        {
+            return T(LocalizationKeys.ImageExportProgressNoParallaxFramesFormat, ("path", noFramesPath));
+        }
+
+        if (TryBetween(message, "Parallax frame generation completed: ", " frame(s) in ", out var completedFrames) &&
+            TryBetween(message, " frame(s) in ", ".", out var framesElapsed))
+        {
+            return T(
+                LocalizationKeys.ImageExportProgressParallaxFramesCompletedFormat,
+                ("frameCount", completedFrames),
+                ("elapsed", framesElapsed));
+        }
+
+        if (message.Contains("Starting bundled FFmpeg MP4 encoding", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageExportProgressFfmpegStarting);
+        }
+
+        if (TrySplitAfterPrefix(message, "FFmpeg output path: ", out var ffmpegOutputPath))
+        {
+            return T(LocalizationKeys.ImageExportProgressFfmpegOutputFormat, ("path", ffmpegOutputPath));
+        }
+
+        if (message.Contains("Bundled FFmpeg parallax encoding failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.ImageExportProgressFfmpegFailed);
+        }
+
+        if (TrySplitAfterPrefix(message, "Expected MP4 output was not created: ", out var missingMp4Path))
+        {
+            return T(LocalizationKeys.ImageExportProgressExpectedMp4MissingFormat, ("path", missingMp4Path));
+        }
+
+        if (TryBetween(message, "FFmpeg encoding completed in ", ".", out var ffmpegElapsed))
+        {
+            return T(LocalizationKeys.ImageExportProgressFfmpegCompletedFormat, ("elapsed", ffmpegElapsed));
+        }
+
+        if (TrySplitAfterPrefix(message, "2.5D parallax conversion completed: ", out var completedPath))
+        {
+            return T(LocalizationKeys.ImageExportProgressParallaxCompletedFormat, ("path", completedPath));
+        }
+
+        return message;
     }
 
     private ImageStereoExportRequest CreateImageStereoExportRequest(string outputDirectory)
@@ -6601,18 +6544,22 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ApplyImageExportProgress(ImageStereoExportProgress progress)
     {
         _imageExportProgressPercent = Math.Clamp(progress.ProgressPercent, 0, 100);
-        _imageExportProgressEnglishText = progress.EnglishMessage;
-        _imageExportProgressSpanishText = progress.SpanishMessage;
-        AddImageLog(progress.EnglishMessage, progress.SpanishMessage);
+        _imageExportProgressKey = null;
+        var message = LocalizeImageStereoExportProgress(progress);
+        _imageExportProgressEnglishText = message;
+        _imageExportProgressSpanishText = message;
+        AddImageLogResolved(message);
         RaiseImageExportPropertiesChanged();
     }
 
     private void ApplyImageParallaxExportProgress(ImageParallaxExportProgress progress)
     {
         _imageExportProgressPercent = Math.Clamp(progress.ProgressPercent, 0, 100);
-        _imageExportProgressEnglishText = progress.EnglishMessage;
-        _imageExportProgressSpanishText = progress.SpanishMessage;
-        AddImageLog(progress.EnglishMessage, progress.SpanishMessage);
+        _imageExportProgressKey = null;
+        var message = LocalizeImageParallaxExportProgress(progress);
+        _imageExportProgressEnglishText = message;
+        _imageExportProgressSpanishText = message;
+        AddImageLogResolved(message);
         RaiseImageExportPropertiesChanged();
     }
 
@@ -6620,9 +6567,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanOpenImageOutputFolder)
         {
-            AddImageLog(
-                "No exported image output folder is available yet.",
-                "Aun no hay carpeta de salida de imagen exportada disponible.");
+            AddImageLogResolved(T(LocalizationKeys.ImageLogOpenOutputFolderUnavailable));
             return;
         }
 
@@ -6634,15 +6579,15 @@ public sealed class MainWindowViewModel : ObservableObject
                 UseShellExecute = true,
             });
 
-            AddImageLog(
-                $"Opened image output folder: {_lastImageExportOutputDirectory}",
-                $"Carpeta de salida de imagen abierta: {_lastImageExportOutputDirectory}");
+            AddImageLogResolved(T(
+                LocalizationKeys.ImageLogOpenedOutputFolderFormat,
+                ("path", _lastImageExportOutputDirectory)));
         }
         catch (Exception exception)
         {
-            AddImageLog(
-                $"Could not open image output folder: {exception.Message}",
-                $"No se pudo abrir la carpeta de salida de imagen: {exception.Message}");
+            AddImageLogResolved(T(
+                LocalizationKeys.ImageLogOpenOutputFolderFailedFormat,
+                ("message", exception.Message)));
         }
     }
 
@@ -6659,17 +6604,16 @@ public sealed class MainWindowViewModel : ObservableObject
         ResetImageExportState();
         _hasEnteredImagePreviewExportStage = false;
         SelectedImageConversionStep = ImageConversionStep.ModeAndSource;
-        AddImageLog(
-            "Image conversion reset for a new source image.",
-            "Conversion de imagen restablecida para una nueva imagen de origen.");
+        AddImageLogResolved(T(LocalizationKeys.ImageLogReset));
         RaiseImageConversionPropertiesChanged();
     }
 
     private void ResetImageExportState()
     {
         _imageExportProgressPercent = 0;
-        _imageExportProgressEnglishText = "No image conversion has run yet.";
-        _imageExportProgressSpanishText = "Aun no se ha ejecutado ninguna conversion de imagen.";
+        _imageExportProgressKey = LocalizationKeys.ImageProgressNotStarted;
+        _imageExportProgressEnglishText = string.Empty;
+        _imageExportProgressSpanishText = string.Empty;
         _lastImageExportPrimaryPath = string.Empty;
         _lastImageExportOutputDirectory = string.Empty;
         _lastImageExportGeneratedFiles = [];
@@ -6682,8 +6626,9 @@ public sealed class MainWindowViewModel : ObservableObject
     private void MarkImageExportOutputOutdated()
     {
         _imageExportProgressPercent = 0;
-        _imageExportProgressEnglishText = "Configuration changed. Convert again.";
-        _imageExportProgressSpanishText = "La configuracion cambio. Convierte de nuevo.";
+        _imageExportProgressKey = LocalizationKeys.ImageOutputOutdated;
+        _imageExportProgressEnglishText = string.Empty;
+        _imageExportProgressSpanishText = string.Empty;
         _lastImageExportErrorEnglishText = string.Empty;
         _lastImageExportErrorSpanishText = string.Empty;
         _isImageExportOutputOutdated = true;
@@ -6823,22 +6768,22 @@ public sealed class MainWindowViewModel : ObservableObject
         _allStereoOutputFormatOptions.FirstOrDefault(option => option.Value == format)?.DisplayName ??
         format.ToString();
 
-    private static string GetImageModeDisplayText(ImageConversionMode? mode, bool spanish) =>
+    private string GetImageModeDisplayText(ImageConversionMode? mode) =>
         mode switch
         {
-            ImageConversionMode.ParallaxPhoto => spanish ? "Foto 2.5D" : "2.5D Photo",
-            ImageConversionMode.StereoscopicImage => spanish ? "Imagen estereoscopica" : "Stereoscopic image",
-            null => spanish ? "Ninguno" : "None",
+            ImageConversionMode.ParallaxPhoto => T(LocalizationKeys.ImageWorkflowParallaxTitle),
+            ImageConversionMode.StereoscopicImage => T(LocalizationKeys.ImageWorkflowStereoTitle),
+            null => T(LocalizationKeys.ImageWorkflowNone),
             _ => mode.Value.ToString(),
         };
 
-    private static string GetToggleText(bool value, bool spanish) =>
+    private string GetToggleText(bool value) =>
         value
-            ? spanish ? "Activado" : "On"
-            : spanish ? "Desactivado" : "Off";
+            ? T(LocalizationKeys.ImageStereoToggleOn)
+            : T(LocalizationKeys.ImageStereoToggleOff);
 
-    private static string GetModelDisplayName(LocalModelSelectionCandidate? candidate, bool spanish) =>
-        candidate?.DisplayName ?? (spanish ? "Ninguno" : "None");
+    private string GetModelDisplayName(LocalModelSelectionCandidate? candidate) =>
+        candidate?.DisplayName ?? T(LocalizationKeys.ImageModelNone);
 
     private static double ParseStereoEyeSeparationPercent(string value)
     {
@@ -6848,17 +6793,12 @@ public sealed class MainWindowViewModel : ObservableObject
             : 4d;
     }
 
-    private void ApplyImageSetupChanged(
-        string? englishChange = null,
-        string? spanishChange = null)
+    private void ApplyImageSetupChanged(string? change = null)
     {
         var hadImageConversionOutput = HasAnyImageConversionOutput;
-        englishChange = string.IsNullOrWhiteSpace(englishChange)
-            ? "Image setup changed."
-            : englishChange;
-        spanishChange = string.IsNullOrWhiteSpace(spanishChange)
-            ? "Configuracion de imagen cambiada."
-            : spanishChange;
+        change = string.IsNullOrWhiteSpace(change)
+            ? T(LocalizationKeys.ImageLogSetupChangedDefault)
+            : change;
 
         if (HasAnyImageConversionOutput)
         {
@@ -6873,21 +6813,20 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             _hasEnteredImagePreviewExportStage = false;
             ShowLogCopyNotification(
-                "Image setup changed. Convert again.",
-                "La configuracion de imagen cambio. Convierte de nuevo.");
-            AddImageLog(
-                $"{EnsureSentence(englishChange)} Previous image conversion output is outdated. Prepare conversion again.",
-                $"{EnsureSentence(spanishChange)} La salida de conversion anterior esta desactualizada. Prepara la conversion de nuevo.");
+                T(LocalizationKeys.ImageOutputOutdated),
+                T(LocalizationKeys.ImageOutputOutdated));
+            AddImageLogResolved(T(
+                LocalizationKeys.ImageLogSetupChangedOutdatedPrepareFormat,
+                ("change", EnsureSentence(change))));
         }
         else
         {
-            AddImageLog(
+            AddImageLogResolved(
                 hadImageConversionOutput
-                    ? $"{EnsureSentence(englishChange)} Previous image conversion output is outdated."
-                    : englishChange,
-                hadImageConversionOutput
-                    ? $"{EnsureSentence(spanishChange)} La salida de conversion de imagen anterior esta desactualizada."
-                    : spanishChange);
+                    ? T(
+                        LocalizationKeys.ImageLogSetupChangedOutdatedFormat,
+                        ("change", EnsureSentence(change)))
+                    : change);
         }
 
         RaiseImageConversionPropertiesChanged();
@@ -6919,16 +6858,18 @@ public sealed class MainWindowViewModel : ObservableObject
     private void SetImageSetupString(
         ref string field,
         string value,
-        string englishLabel,
-        string spanishLabel,
+        string labelKey,
+        IReadOnlyList<LocalizedOptionViewModel<string>> options,
         [CallerMemberName] string? propertyName = null)
     {
         var previous = field;
         if (SetProperty(ref field, value, propertyName))
         {
-            ApplyImageSetupChanged(
-                $"{englishLabel} changed: {previous} -> {field}.",
-                $"{spanishLabel} cambio: {previous} -> {field}.");
+            ApplyImageSetupChanged(T(
+                LocalizationKeys.ImageLogSetupStringChangedFormat,
+                ("label", T(labelKey)),
+                ("previous", GetOptionDisplayName(options, previous)),
+                ("next", GetOptionDisplayName(options, field))));
         }
     }
 
@@ -7040,17 +6981,13 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanEnterPreviewConversionStage)
         {
-            AddLog(
-                "Review the conversion plan before generating a preview.",
-                "Revisa el plan de conversion antes de generar una vista previa.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoConversionOpenPlanBeforePreview));
             return;
         }
 
         SetHasEnteredPreviewConversionStage(true);
         ClearPreviewStageResetNotice();
-        AddLog(
-            "Preview and conversion controls are ready.",
-            "Los controles de preview y conversion estan listos.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoConversionControlsReady));
     }
 
     private void ShowModelInventory()
@@ -7207,8 +7144,7 @@ public sealed class MainWindowViewModel : ObservableObject
         ActivityLogModalText = logText;
         CopyLogToClipboard(
             logText,
-            englishLogName: isImageLogModal ? "image activity log" : "activity log",
-            spanishLogName: isImageLogModal ? "log de actividad de imagen" : "registro de actividad",
+            logNameKey: isImageLogModal ? LocalizationKeys.ActivityLogImageName : LocalizationKeys.ActivityLogName,
             appendFailureToPreviewLog: false);
     }
 
@@ -7216,15 +7152,13 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         CopyLogToClipboard(
             PreviewGenerationLogText,
-            englishLogName: "preview log",
-            spanishLogName: "log de vista previa",
+            logNameKey: LocalizationKeys.ActivityLogPreviewName,
             appendFailureToPreviewLog: true);
     }
 
     private void CopyLogToClipboard(
         string logText,
-        string englishLogName,
-        string spanishLogName,
+        string logNameKey,
         bool appendFailureToPreviewLog)
     {
         try
@@ -7235,14 +7169,16 @@ public sealed class MainWindowViewModel : ObservableObject
         catch (Exception exception)
         {
             ShowLogCopyFailureNotification();
-            var englishMessage = $"Could not copy {englishLogName} to clipboard: {exception.Message}";
-            var spanishMessage = $"No se pudo copiar el {spanishLogName} al portapapeles: {exception.Message}";
+            var message = T(
+                LocalizationKeys.ActivityLogCopyFailedFormat,
+                ("logName", T(logNameKey)),
+                ("message", exception.Message));
             if (appendFailureToPreviewLog)
             {
-                AppendPreviewLogLine(Text(englishMessage, spanishMessage));
+                AppendPreviewLogLine(message);
             }
 
-            AddLog(englishMessage, spanishMessage);
+            AddLogResolved(message);
         }
     }
 
@@ -7322,9 +7258,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ConfirmModelPackImport()
     {
         CompleteModelPackImportConfirmation(confirmImport: true);
-        ShowGlobalBusyOverlay(
-            "Importing model pack...",
-            "Importando paquete de modelos...");
+        ShowGlobalBusyOverlay(LocalizationKeys.BusyImportingModelPack);
     }
 
     private void CancelModelPackImport()
@@ -7487,10 +7421,8 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        var previousImageModelEnglish = GetModelDisplayName(_selectedLocalModelCandidate, spanish: false);
-        var previousImageModelSpanish = GetModelDisplayName(_selectedLocalModelCandidate, spanish: true);
-        var nextImageModelEnglish = GetModelDisplayName(candidate, spanish: false);
-        var nextImageModelSpanish = GetModelDisplayName(candidate, spanish: true);
+        var previousImageModel = GetModelDisplayName(_selectedLocalModelCandidate);
+        var nextImageModel = GetModelDisplayName(candidate);
         _selectedLocalModelCandidate = candidate;
         OnPropertyChanged(nameof(SelectedLocalModelCandidate));
         OnPropertyChanged(nameof(LocalModelSelectionStatusText));
@@ -7515,21 +7447,24 @@ public sealed class MainWindowViewModel : ObservableObject
             if (_hasEnteredImagePreviewExportStage)
             {
                 _hasEnteredImagePreviewExportStage = false;
-                AddImageLog(
-                    $"Model changed: {previousImageModelEnglish} -> {nextImageModelEnglish}. Previous image conversion output is outdated. Prepare conversion again.",
-                    $"Modelo cambiado: {previousImageModelSpanish} -> {nextImageModelSpanish}. La salida de conversion de imagen anterior esta desactualizada. Prepara la conversion de nuevo.");
+                AddImageLogResolved(T(
+                    LocalizationKeys.ImageLogModelChangedOutdatedPrepareFormat,
+                    ("previous", previousImageModel),
+                    ("next", nextImageModel)));
             }
             else if (HasAnyImageConversionOutput)
             {
-                AddImageLog(
-                    $"Model changed: {previousImageModelEnglish} -> {nextImageModelEnglish}. Previous image conversion output is outdated.",
-                    $"Modelo cambiado: {previousImageModelSpanish} -> {nextImageModelSpanish}. La salida de conversion de imagen anterior esta desactualizada.");
+                AddImageLogResolved(T(
+                    LocalizationKeys.ImageLogModelChangedOutdatedFormat,
+                    ("previous", previousImageModel),
+                    ("next", nextImageModel)));
             }
-            else if (!string.Equals(previousImageModelEnglish, "None", StringComparison.Ordinal))
+            else if (!string.Equals(previousImageModel, T(LocalizationKeys.ImageModelNone), StringComparison.Ordinal))
             {
-                AddImageLog(
-                    $"Model changed: {previousImageModelEnglish} -> {nextImageModelEnglish}.",
-                    $"Modelo cambiado: {previousImageModelSpanish} -> {nextImageModelSpanish}.");
+                AddImageLogResolved(T(
+                    LocalizationKeys.ImageLogModelChangedFormat,
+                    ("previous", previousImageModel),
+                    ("next", nextImageModel)));
             }
         }
         else
@@ -7575,16 +7510,18 @@ public sealed class MainWindowViewModel : ObservableObject
             return startGate;
         }
 
+        var previewStatus = previewGate.CanStart
+            ? T(LocalizationKeys.VideoPreviewRequiredTitle)
+            : LocalizePreviewGateStatus(previewGate);
+        var previewDetail = previewGate.CanStart
+            ? T(LocalizationKeys.VideoReadinessAcceptedPreviewFileMissing)
+            : LocalizePreviewGateDetail(previewGate);
         return ConversionExecutionStartGateResult.Blocked(
             ConversionExecutionBlocker.PreviewRequired,
-            previewGate.CanStart ? "Preview required" : previewGate.EnglishStatus,
-            previewGate.CanStart ? "Vista previa requerida" : previewGate.SpanishStatus,
-            previewGate.CanStart
-                ? "The accepted preview file was not found. Generate and accept a new preview."
-                : previewGate.EnglishDetail,
-            previewGate.CanStart
-                ? "No se encontro el archivo de vista previa aceptado. Genera y acepta una nueva vista previa."
-                : previewGate.SpanishDetail);
+            previewStatus,
+            previewStatus,
+            previewDetail,
+            previewDetail);
     }
 
     private bool CurrentExecutionRequestCanStart()
@@ -7609,6 +7546,469 @@ public sealed class MainWindowViewModel : ObservableObject
             .CanStartLocalProcess;
     }
 
+    private string LocalizePreviewGateStatus(PreviewConversionGateResult gate)
+    {
+        if (gate.CanStart)
+        {
+            return T(LocalizationKeys.VideoPreviewStatusAccepted);
+        }
+
+        return _previewState.Status == PreviewGenerationStatus.Outdated ||
+            gate.EnglishStatus.Contains("outdated", StringComparison.OrdinalIgnoreCase)
+            ? T(LocalizationKeys.VideoPreviewStatusOutdated)
+            : T(LocalizationKeys.VideoPreviewStatusRequired);
+    }
+
+    private string LocalizePreviewGateDetail(PreviewConversionGateResult gate)
+    {
+        if (gate.CanStart)
+        {
+            return T(LocalizationKeys.VideoPreviewGateAcceptedDetail);
+        }
+
+        if (_previewState.Status == PreviewGenerationStatus.Outdated ||
+            gate.EnglishStatus.Contains("outdated", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoPreviewGateOutdatedDetail);
+        }
+
+        return T(_previewState.Status switch
+        {
+            PreviewGenerationStatus.Generating => LocalizationKeys.VideoPreviewGateRequiredGenerating,
+            PreviewGenerationStatus.Ready => LocalizationKeys.VideoPreviewGateRequiredReady,
+            PreviewGenerationStatus.Failed => LocalizationKeys.VideoPreviewGateRequiredFailed,
+            PreviewGenerationStatus.Canceled => LocalizationKeys.VideoPreviewGateRequiredCanceled,
+            PreviewGenerationStatus.NotGenerated => HasCompletedAnalysis
+                ? LocalizationKeys.VideoPreviewGateRequiredAfterAnalysis
+                : LocalizationKeys.VideoPreviewGateRequiredDefault,
+            _ => LocalizationKeys.VideoPreviewGateRequiredDefault,
+        });
+    }
+
+    private string LocalizePreviewStateDetail(PreviewWorkflowState state) => state.Status switch
+    {
+        PreviewGenerationStatus.NotGenerated => T(LocalizationKeys.VideoPreviewStateNotGenerated),
+        PreviewGenerationStatus.Generating => T(LocalizationKeys.VideoPreviewStatePreparing),
+        PreviewGenerationStatus.Ready => T(LocalizationKeys.VideoPreviewSummaryCompleted),
+        PreviewGenerationStatus.Accepted => T(LocalizationKeys.VideoPreviewStateAcceptedUnlocked),
+        PreviewGenerationStatus.Outdated => T(LocalizationKeys.VideoPreviewStateOutdatedForCurrentSettings),
+        PreviewGenerationStatus.Canceled => T(LocalizationKeys.VideoPreviewSummaryCanceled),
+        PreviewGenerationStatus.Failed => T(LocalizationKeys.VideoPreviewSummaryFailed),
+        _ => state.Status.ToString(),
+    };
+
+    private string LocalizeConversionStartGateStatus(ConversionExecutionStartGateResult startGate) =>
+        startGate.CanStart
+            ? T(LocalizationKeys.VideoConversionGateReady)
+            : T(startGate.Blocker switch
+            {
+                ConversionExecutionBlocker.NoCompletedAnalysis => LocalizationKeys.VideoConversionGateNoCompletedAnalysisStatus,
+                ConversionExecutionBlocker.MissingConversionPlan => LocalizationKeys.VideoConversionGateMissingPlanStatus,
+                ConversionExecutionBlocker.ReadinessUnknown => LocalizationKeys.VideoConversionGateReadinessUnknownStatus,
+                ConversionExecutionBlocker.MissingLocalDependencies => LocalizationKeys.VideoConversionGateMissingDependenciesStatus,
+                ConversionExecutionBlocker.FeatureDisabled => LocalizationKeys.VideoConversionGateFeatureDisabledStatus,
+                ConversionExecutionBlocker.PreviewRequired => LocalizationKeys.VideoPreviewRequiredTitle,
+                _ => LocalizationKeys.VideoConversionGateMissingDependenciesStatus,
+            });
+
+    private string LocalizeConversionStartGateDetail(ConversionExecutionStartGateResult startGate)
+    {
+        if (startGate.CanStart)
+        {
+            return string.Empty;
+        }
+
+        if (startGate.Blocker == ConversionExecutionBlocker.PreviewRequired)
+        {
+            var previewGate = PreviewConversionGate.Evaluate(_previewState, CreateCurrentPreviewConfiguration());
+            return previewGate.CanStart && !PreviewOutputFileExists()
+                ? T(LocalizationKeys.VideoReadinessAcceptedPreviewFileMissing)
+                : LocalizePreviewGateDetail(previewGate);
+        }
+
+        return T(startGate.Blocker switch
+        {
+            ConversionExecutionBlocker.NoCompletedAnalysis => LocalizationKeys.VideoConversionGateNoCompletedAnalysisDetail,
+            ConversionExecutionBlocker.MissingConversionPlan => LocalizationKeys.VideoConversionGateMissingPlanDetail,
+            ConversionExecutionBlocker.ReadinessUnknown => LocalizationKeys.VideoConversionGateReadinessUnknownDetail,
+            ConversionExecutionBlocker.MissingLocalDependencies => LocalizationKeys.VideoConversionGateMissingDependenciesDetail,
+            ConversionExecutionBlocker.FeatureDisabled => LocalizationKeys.VideoConversionGateFeatureDisabledDetail,
+            _ => LocalizationKeys.VideoConversionGateMissingDependenciesDetail,
+        });
+    }
+
+    private string LocalizeConversionStartGateLog(ConversionExecutionStartGateResult startGate)
+    {
+        var status = LocalizeConversionStartGateStatus(startGate);
+        var detail = LocalizeConversionStartGateDetail(startGate);
+        return string.IsNullOrWhiteSpace(detail) ? status : $"{status} {detail}";
+    }
+
+    private string LocalizeConversionReadinessStatus(ConversionReadiness readiness)
+    {
+        if (readiness.CanConvert)
+        {
+            return T(LocalizationKeys.VideoReadinessReadyStatus);
+        }
+
+        return readiness.EnglishStatus.Contains("Selected local model", StringComparison.OrdinalIgnoreCase)
+            ? T(LocalizationKeys.VideoReadinessUnmappedModelStatus)
+            : T(LocalizationKeys.VideoReadinessBlockedStatus);
+    }
+
+    private string LocalizeConversionReadinessIssue(ConversionReadinessIssue issue)
+    {
+        var message = issue.EnglishMessage;
+        if (message.StartsWith("FFmpeg is missing.", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoReadinessIssueFfmpegMissingFormat, ("detail", string.Empty)).TrimEnd();
+        }
+
+        if (message.StartsWith("FFprobe is missing.", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoReadinessIssueFfprobeMissingFormat, ("detail", string.Empty)).TrimEnd();
+        }
+
+        if (message.StartsWith("Embedded Python runtime is missing.", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoReadinessIssuePythonMissingFormat, ("detail", string.Empty)).TrimEnd();
+        }
+
+        if (message.StartsWith("Local iw3 engine is missing.", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoReadinessIssueIw3EngineMissingFormat, ("detail", string.Empty)).TrimEnd();
+        }
+
+        if (message.StartsWith("Local 3D models are missing.", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoReadinessIssueModelsMissingFormat, ("detail", string.Empty)).TrimEnd();
+        }
+
+        if (message.StartsWith("Missing iw3 runtime dependency.", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoReadinessIssueIw3RuntimeDependencyMissingFormat, ("detail", string.Empty)).TrimEnd();
+        }
+
+        if (message.StartsWith("Selected local model is not mapped", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoReadinessIssueSelectedModelUnmapped);
+        }
+
+        return message;
+    }
+
+    private string LocalizeConversionExecutionStep(ConversionExecutionState state)
+    {
+        if (state.Status == ConversionExecutionStatus.Canceling)
+        {
+            return T(LocalizationKeys.VideoConversionCanceling);
+        }
+
+        return state.Status switch
+        {
+            ConversionExecutionStatus.NotStarted => T(LocalizationKeys.VideoConversionStepNotStarted),
+            ConversionExecutionStatus.Blocked => T(LocalizationKeys.VideoConversionStepDidNotStart),
+            ConversionExecutionStatus.Completed => T(LocalizationKeys.VideoConversionStepCompleted),
+            ConversionExecutionStatus.Canceled => T(LocalizationKeys.VideoConversionStepCanceled),
+            ConversionExecutionStatus.Failed => T(LocalizationKeys.VideoConversionStepFailed),
+            ConversionExecutionStatus.Running => LocalizeRunningConversionStep(state.CurrentStep.EnglishText),
+            _ => state.CurrentStep.EnglishText,
+        };
+    }
+
+    private string LocalizeRunningConversionStep(string englishText)
+    {
+        if (englishText.Contains("Starting", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionStepStarting);
+        }
+
+        if (englishText.Contains("LG-compatible", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionStepLgCopy);
+        }
+
+        if (englishText.Contains("Process metrics", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionStepProcessMetricsUpdated);
+        }
+
+        return T(LocalizationKeys.VideoConversionStepRunning);
+    }
+
+    private string LocalizeConversionExecutionDetail(ConversionExecutionState state)
+    {
+        if (state.Status == ConversionExecutionStatus.Blocked)
+        {
+            var startGate = EvaluateConversionStartGate();
+            return LocalizeConversionStartGateLog(startGate);
+        }
+
+        if (state.Status == ConversionExecutionStatus.Canceling)
+        {
+            return T(LocalizationKeys.VideoConversionDetailCancelRequested);
+        }
+
+        return state.Status switch
+        {
+            ConversionExecutionStatus.NotStarted => string.Empty,
+            ConversionExecutionStatus.Completed => T(LocalizationKeys.VideoConversionSummaryCompleted),
+            ConversionExecutionStatus.Canceled => T(LocalizationKeys.VideoConversionSummaryCanceled),
+            ConversionExecutionStatus.Failed => LocalizeConversionSummaryText(state.DetailEnglish),
+            ConversionExecutionStatus.Running => LocalizeRunningConversionDetail(state.DetailEnglish),
+            _ => state.DetailEnglish,
+        };
+    }
+
+    private string LocalizeRunningConversionDetail(string englishDetail)
+    {
+        if (englishDetail.Contains("Launching bundled", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionDetailLaunchingBundledIw3);
+        }
+
+        if (englishDetail.Contains("LG-compatible", StringComparison.OrdinalIgnoreCase) ||
+            englishDetail.Contains("Post-processing", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionDetailLgCopyPostProcessing);
+        }
+
+        return englishDetail;
+    }
+
+    private string LocalizeConversionSummaryText(string englishSummary)
+    {
+        if (englishSummary.Contains("dry run", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionSummaryDryRunBlocked);
+        }
+
+        if (englishSummary.Contains("not mapped", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionSummaryUnmappedModel);
+        }
+
+        if (englishSummary.Contains("request is invalid", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionSummaryInvalidRequest);
+        }
+
+        if (englishSummary.Contains("partial", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionSummaryPartialPreparationFailed);
+        }
+
+        if (englishSummary.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionSummaryTimedOut);
+        }
+
+        if (englishSummary.Contains("canceled", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionSummaryCanceled);
+        }
+
+        if (englishSummary.Contains("completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionSummaryCompleted);
+        }
+
+        if (TrySplitAfterPrefix(englishSummary, "Local iw3 conversion failed unexpectedly: ", out var unexpectedMessage))
+        {
+            return T(LocalizationKeys.VideoConversionDetailFailedUnexpectedFormat, ("message", unexpectedMessage));
+        }
+
+        return T(LocalizationKeys.VideoConversionSummaryFailed);
+    }
+
+    private string LocalizePreviewGenerationSummary(string englishSummary)
+    {
+        var runtimeWarning = englishSummary.Contains(
+            Iw3RuntimeDownloadDetector.EnglishWarning,
+            StringComparison.OrdinalIgnoreCase)
+                ? " " + T(LocalizationKeys.VideoLogRuntimeDownloadWarning)
+                : string.Empty;
+
+        if (englishSummary.Contains("canceled", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoPreviewSummaryCanceled) + runtimeWarning;
+        }
+
+        if (englishSummary.Contains("successfully", StringComparison.OrdinalIgnoreCase) ||
+            englishSummary.Contains("Preview generated", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoPreviewSummaryCompleted) + runtimeWarning;
+        }
+
+        return T(LocalizationKeys.VideoPreviewSummaryFailed) + runtimeWarning;
+    }
+
+    private string LocalizePreviewOpenWarning(string englishWarning)
+    {
+        if (englishWarning.StartsWith("Open preview skipped because no current preview is ready", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoOutputOpenPreviewSkippedNoReady);
+        }
+
+        if (englishWarning.StartsWith("Open preview skipped because the preview file was not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoOutputOpenPreviewFileMissing);
+        }
+
+        if (TrySplitAfterPrefix(englishWarning, "Open preview failed. ", out var message))
+        {
+            return T(LocalizationKeys.VideoOutputOpenPreviewFailedFormat, ("message", message));
+        }
+
+        return englishWarning;
+    }
+
+    private string LocalizeConversionOutputOpenWarning(string englishWarning)
+    {
+        if (englishWarning.StartsWith("Open video skipped because the final output file was not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoOutputOpenFinalFileMissing);
+        }
+
+        if (TrySplitAfterPrefix(englishWarning, "Conversion completed, but opening the video failed: ", out var message))
+        {
+            return T(LocalizationKeys.VideoOutputOpenFinalFailedFormat, ("message", message));
+        }
+
+        return englishWarning;
+    }
+
+    private string LocalizeConversionExecutionLog(ConversionExecutionLogEntry log)
+    {
+        var message = log.EnglishMessage;
+        if (string.Equals(message, Iw3RuntimeDownloadDetector.EnglishWarning, StringComparison.Ordinal))
+        {
+            return T(LocalizationKeys.VideoLogRuntimeDownloadWarning);
+        }
+
+        if (string.Equals(message, Iw3RuntimeDownloadDetector.EnglishTimingNote, StringComparison.Ordinal))
+        {
+            return T(LocalizationKeys.VideoLogRuntimeDownloadTimingNote);
+        }
+
+        if (TrySplitAfterPrefix(message, "Preview saved to ", out var previewPath))
+        {
+            return T(LocalizationKeys.VideoLogPreviewSavedFormat, ("path", previewPath));
+        }
+
+        if (TrySplitAfterPrefix(message, "Final output saved to ", out var finalOutputPath))
+        {
+            return T(LocalizationKeys.VideoLogConversionPrimaryOutputGeneratedFormat, ("path", finalOutputPath));
+        }
+
+        if (TrySplitAfterPrefix(message, "LG-compatible MP4 copy saved to ", out var compatibilityPath))
+        {
+            return T(LocalizationKeys.VideoLogConversionLgCopyGeneratedFormat, ("path", compatibilityPath.TrimEnd('.')));
+        }
+
+        if (message.StartsWith("LG-compatible MP4 copy failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoLogConversionLgCopyMissing);
+        }
+
+        if (message.StartsWith("Conversion partial file was cleaned", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoLogConversionPartialFileCleaned);
+        }
+
+        if (message.StartsWith("Stale conversion partial file was cleaned", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoLogConversionStalePartialFileCleaned);
+        }
+
+        if (message.StartsWith("Could not delete conversion partial file", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoLogConversionPartialFileDeleteFailed);
+        }
+
+        if (message.StartsWith("Could not delete stale partial file", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoLogConversionStalePartialFileDeleteFailed);
+        }
+
+        if (message.StartsWith("stdout:", StringComparison.OrdinalIgnoreCase) ||
+            message.StartsWith("stderr:", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains(" diagnostics:", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains(" timing diagnostics:", StringComparison.OrdinalIgnoreCase))
+        {
+            return message;
+        }
+
+        return message;
+    }
+
+    private string LocalizeConversionPlanStep(VideoConversionPlanStep step)
+    {
+        if (_conversionPlan is null)
+        {
+            return step.EnglishText;
+        }
+
+        var englishText = step.EnglishText;
+        if (englishText.StartsWith("Read the analyzed source video", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionPlanStepReadSource);
+        }
+
+        if (englishText.StartsWith("Plan selected local model", StringComparison.OrdinalIgnoreCase) &&
+            _conversionPlan.SelectedLocalModel is { } selectedModel)
+        {
+            var depthModelDetail = string.IsNullOrWhiteSpace(selectedModel.Iw3DepthModelName)
+                ? string.Empty
+                : T(
+                    LocalizationKeys.VideoConversionPlanStepSelectedLocalModelDepthModelDetailFormat,
+                    ("model", selectedModel.Iw3DepthModelName));
+            return T(
+                LocalizationKeys.VideoConversionPlanStepSelectedLocalModelFormat,
+                ("model", selectedModel.DisplayName),
+                ("path", selectedModel.RelativePath),
+                ("depthModelDetail", depthModelDetail));
+        }
+
+        if (englishText.StartsWith("Generate ", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(
+                LocalizationKeys.VideoConversionPlanStepGenerateFramesFormat,
+                ("layout", ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat)));
+        }
+
+        if (englishText.StartsWith("Prepare the ", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(
+                LocalizationKeys.VideoConversionPlanStepPrepareOutputFormat,
+                ("width", _conversionPlan.Width.ToString(CultureInfo.InvariantCulture)),
+                ("height", _conversionPlan.Height.ToString(CultureInfo.InvariantCulture)),
+                ("codec", _conversionPlan.VideoCodec),
+                ("preset", TargetPresetName(SelectedOutputPreset)));
+        }
+
+        if (englishText.StartsWith("After the primary iw3 output succeeds", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(LocalizationKeys.VideoConversionPlanStepLgCompatibilityHalfSbs);
+        }
+
+        if (englishText.StartsWith("LG 3D TV 2012 MP4 copy is selected", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(
+                LocalizationKeys.VideoConversionPlanStepLgCompatibilityUnsupportedFormat,
+                ("layout", ThreeDOutputFormatText(_conversionPlan.ThreeDOutputFormat)));
+        }
+
+        if (englishText.StartsWith("Write the converted video to ", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(
+                LocalizationKeys.VideoConversionPlanStepWriteOutputFormat,
+                ("path", _conversionPlan.SuggestedOutputPath));
+        }
+
+        return englishText;
+    }
+
     private void UpdateToolStatuses()
     {
         if (_dependencyHealth is null)
@@ -7618,54 +8018,47 @@ public sealed class MainWindowViewModel : ObservableObject
 
         ToolStatuses.Clear();
         ToolStatuses.Add(CreateToolStatus(
-            "FFmpeg",
-            "FFmpeg",
+            LocalizationKeys.SystemToolFfmpeg,
             _dependencyHealth.Ffmpeg,
             ToolStatusComponent.BundledTool));
         ToolStatuses.Add(CreateToolStatus(
-            "FFprobe",
-            "FFprobe",
+            LocalizationKeys.SystemToolFfprobe,
             _dependencyHealth.Ffprobe,
             ToolStatusComponent.BundledTool));
         ToolStatuses.Add(CreateToolStatus(
-            "Python",
-            "Python",
+            LocalizationKeys.SystemToolPython,
             _dependencyHealth.Python,
             ToolStatusComponent.EmbeddedPython));
         ToolStatuses.Add(CreateToolStatus(
-            "iw3 engine",
-            "Motor iw3",
+            LocalizationKeys.SystemToolIw3Engine,
             _dependencyHealth.Iw3EngineDirectory,
             ToolStatusComponent.Iw3Engine));
         ToolStatuses.Add(CreateToolStatus(
-            "3D models",
-            "modelos 3D",
+            LocalizationKeys.SystemToolModels,
             _dependencyHealth.ModelsDirectory,
             ToolStatusComponent.Models));
         ToolStatuses.Add(CreateToolStatus(
-            "iw3 runtime dependency",
-            "dependencia runtime iw3",
+            LocalizationKeys.SystemToolIw3RuntimeDependency,
             _dependencyHealth.Iw3RuntimeDependencies,
             ToolStatusComponent.Iw3RuntimeDependency));
     }
 
     private ToolStatusItemViewModel CreateToolStatus(
-        string englishName,
-        string spanishName,
+        string nameKey,
         ToolDependencyHealth dependencyHealth,
         ToolStatusComponent component)
     {
         var isEngine = component == ToolStatusComponent.Iw3Engine;
         var isModels = component == ToolStatusComponent.Models;
         return new(
-            Name: Text(englishName, spanishName),
+            Name: T(nameKey),
             StatusText: dependencyHealth.Status == ToolHealthStatus.Found
-                ? Text("Found", "Encontrado")
-                : Text("Missing", "Faltante"),
+                ? T(LocalizationKeys.CommonFound)
+                : T(LocalizationKeys.CommonMissing),
             ReasonText: ToolStatusReasonText(dependencyHealth, component),
             DetailText: ToolStatusDetailText(dependencyHealth, component),
             ContextActionText: isEngine
-                ? Text("Open", "Abrir")
+                ? T(LocalizationKeys.CommonOpen)
                 : isModels
                     ? ViewModelsText
                     : string.Empty,
@@ -7689,51 +8082,23 @@ public sealed class MainWindowViewModel : ObservableObject
         ToolStatusComponent component) =>
         dependencyHealth.DetailKind switch
         {
-            ToolHealthDetailKind.BundledFileFound => Text(
-                component == ToolStatusComponent.EmbeddedPython
-                    ? "Embedded Python executable found"
-                    : "Bundled executable found",
-                component == ToolStatusComponent.EmbeddedPython
-                    ? "Ejecutable de Python embebido encontrado"
-                    : "Ejecutable incluido encontrado"),
-            ToolHealthDetailKind.BundledFileMissing => Text(
-                component == ToolStatusComponent.EmbeddedPython
-                    ? "Embedded Python executable missing"
-                    : "Bundled executable not found",
-                component == ToolStatusComponent.EmbeddedPython
-                    ? "Falta el ejecutable de Python embebido"
-                    : "Ejecutable incluido no encontrado"),
-            ToolHealthDetailKind.EngineBundleFound => Text(
-                "Required manifest and iw3 entry found",
-                "Manifiesto requerido y entrada iw3 encontrados"),
-            ToolHealthDetailKind.EngineDirectoryMissing => Text(
-                "Engine folder not found",
-                "Carpeta del motor no encontrada"),
-            ToolHealthDetailKind.EnginePlaceholderOnly => Text(
-                "Only placeholder or contract files found",
-                "Solo se encontraron marcadores o archivos de contrato"),
-            ToolHealthDetailKind.EngineManifestMissing => Text(
-                "Engine manifest missing or placeholder",
-                "El manifiesto del motor falta o es marcador"),
-            ToolHealthDetailKind.EngineEntryFilesMissing => Text(
-                "Required iw3 entry file missing",
-                "Falta el archivo de entrada iw3 requerido"),
-            ToolHealthDetailKind.ModelFilesFound => Text(
-                "Compatible model files found",
-                "Modelos compatibles encontrados"),
-            ToolHealthDetailKind.ModelsDirectoryMissing => Text(
-                "Models folder not found",
-                "Carpeta de modelos no encontrada"),
-            ToolHealthDetailKind.ModelFilesMissing => Text(
-                "No compatible model files found",
-                "No se encontraron modelos compatibles"),
-            ToolHealthDetailKind.Iw3RuntimeDependenciesFound => Text(
-                "Required iw3 runtime dependency found",
-                "Dependencia de runtime iw3 requerida encontrada"),
-            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing => Text(
-                "Missing iw3 runtime dependency",
-                "Dependencia de runtime iw3 faltante"),
-            _ => Text("Local dependency checked", "Dependencia local revisada"),
+            ToolHealthDetailKind.BundledFileFound => component == ToolStatusComponent.EmbeddedPython
+                ? T(LocalizationKeys.SystemToolReasonEmbeddedPythonFound)
+                : T(LocalizationKeys.SystemToolReasonBundledExecutableFound),
+            ToolHealthDetailKind.BundledFileMissing => component == ToolStatusComponent.EmbeddedPython
+                ? T(LocalizationKeys.SystemToolReasonEmbeddedPythonMissing)
+                : T(LocalizationKeys.SystemToolReasonBundledExecutableMissing),
+            ToolHealthDetailKind.EngineBundleFound => T(LocalizationKeys.SystemToolReasonEngineBundleFound),
+            ToolHealthDetailKind.EngineDirectoryMissing => T(LocalizationKeys.SystemToolReasonEngineFolderMissing),
+            ToolHealthDetailKind.EnginePlaceholderOnly => T(LocalizationKeys.SystemToolReasonEnginePlaceholderOnly),
+            ToolHealthDetailKind.EngineManifestMissing => T(LocalizationKeys.SystemToolReasonEngineManifestMissing),
+            ToolHealthDetailKind.EngineEntryFilesMissing => T(LocalizationKeys.SystemToolReasonEngineEntryMissing),
+            ToolHealthDetailKind.ModelFilesFound => T(LocalizationKeys.SystemToolReasonModelFilesFound),
+            ToolHealthDetailKind.ModelsDirectoryMissing => T(LocalizationKeys.SystemToolReasonModelsFolderMissing),
+            ToolHealthDetailKind.ModelFilesMissing => T(LocalizationKeys.SystemToolReasonModelFilesMissing),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesFound => T(LocalizationKeys.SystemToolReasonIw3RuntimeDependencyFound),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing => T(LocalizationKeys.SystemToolReasonIw3RuntimeDependencyMissing),
+            _ => T(LocalizationKeys.SystemToolReasonLocalDependencyChecked),
         };
 
     private string ToolStatusDetailText(
@@ -7741,69 +8106,61 @@ public sealed class MainWindowViewModel : ObservableObject
         ToolStatusComponent component) =>
         dependencyHealth.DetailKind switch
         {
-            ToolHealthDetailKind.BundledFileFound => Text(
-                component == ToolStatusComponent.EmbeddedPython
-                    ? $"Embedded Python executable found: {dependencyHealth.ExpectedPath}"
-                    : $"Bundled executable found: {dependencyHealth.ExpectedPath}",
-                component == ToolStatusComponent.EmbeddedPython
-                    ? $"Ejecutable de Python embebido encontrado: {dependencyHealth.ExpectedPath}"
-                    : $"Ejecutable incluido encontrado: {dependencyHealth.ExpectedPath}"),
-            ToolHealthDetailKind.BundledFileMissing => Text(
-                component == ToolStatusComponent.EmbeddedPython
-                    ? $"Expected embedded Python executable: {dependencyHealth.ExpectedPath}"
-                    : $"Missing bundled executable: {dependencyHealth.ExpectedPath}",
-                component == ToolStatusComponent.EmbeddedPython
-                    ? $"Ejecutable esperado de Python embebido: {dependencyHealth.ExpectedPath}"
-                    : $"Falta el ejecutable incluido: {dependencyHealth.ExpectedPath}"),
-            ToolHealthDetailKind.EngineBundleFound => Text(
-                $"Local iw3 bundle found under: {dependencyHealth.ExpectedPath}. Required: non-placeholder ENGINE_MANIFEST.json and nunif/iw3/__main__.py.",
-                $"Bundle local de iw3 encontrado en: {dependencyHealth.ExpectedPath}. Requerido: ENGINE_MANIFEST.json que no sea marcador y nunif/iw3/__main__.py."),
-            ToolHealthDetailKind.EngineDirectoryMissing => Text(
-                $"Expected local iw3 engine folder: {dependencyHealth.ExpectedPath}. Required layout: ENGINE_MANIFEST.json, python/python.exe, nunif/iw3/__main__.py, and nunif/iw3/pretrained_models.",
-                $"Carpeta esperada del motor iw3 local: {dependencyHealth.ExpectedPath}. Estructura requerida: ENGINE_MANIFEST.json, python/python.exe, nunif/iw3/__main__.py y nunif/iw3/pretrained_models."),
-            ToolHealthDetailKind.EnginePlaceholderOnly => Text(
-                $"Engine folder exists, but only placeholder or contract files were detected: {dependencyHealth.ExpectedPath}. Add a real nunif bundle with a non-placeholder ENGINE_MANIFEST.json and nunif/iw3/__main__.py.",
-                $"La carpeta del motor existe, pero solo contiene marcadores o archivos de contrato: {dependencyHealth.ExpectedPath}. Agrega un bundle real de nunif con ENGINE_MANIFEST.json que no sea marcador y nunif/iw3/__main__.py."),
-            ToolHealthDetailKind.EngineManifestMissing => Text(
-                $"Engine content exists, but ENGINE_MANIFEST.json is missing or still has version=placeholder: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}",
-                $"Hay contenido del motor, pero ENGINE_MANIFEST.json falta o aÃºn tiene version=placeholder: {Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json")}"),
-            ToolHealthDetailKind.EngineEntryFilesMissing => Text(
-                $"Engine manifest exists, but no supported iw3 entry file was found. Expected nunif/iw3/__main__.py under: {dependencyHealth.ExpectedPath}",
-                $"El manifiesto del motor existe, pero no se encontrÃ³ un archivo de entrada iw3 compatible. Se esperaba nunif/iw3/__main__.py en: {dependencyHealth.ExpectedPath}"),
-            ToolHealthDetailKind.ModelFilesFound => Text(
-                $"Local 3D model files found under: {dependencyHealth.ExpectedPath}",
-                $"Modelos 3D locales encontrados en: {dependencyHealth.ExpectedPath}"),
-            ToolHealthDetailKind.ModelsDirectoryMissing => Text(
-                $"Expected local iw3 pretrained models folder: {dependencyHealth.ExpectedPath}",
-                $"Carpeta esperada de modelos preentrenados de iw3: {dependencyHealth.ExpectedPath}"),
-            ToolHealthDetailKind.ModelFilesMissing => Text(
-                $"No supported model files found in: {dependencyHealth.ExpectedPath}",
-                $"No se encontraron modelos compatibles en: {dependencyHealth.ExpectedPath}"),
-            ToolHealthDetailKind.Iw3RuntimeDependenciesFound => Text(
-                $"Bundled iw3 runtime dependency found: {dependencyHealth.ExpectedPath}",
-                $"Dependencia de runtime iw3 incluida encontrada: {dependencyHealth.ExpectedPath}"),
-            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing => Text(
-                $"Missing iw3 runtime dependency: {dependencyHealth.ExpectedPath}. The bundle is not fully offline-ready and iw3 may try to download this file at runtime.",
-                $"Dependencia de runtime iw3 faltante: {dependencyHealth.ExpectedPath}. El bundle aun no esta listo para uso offline e iw3 podria intentar descargar este archivo en tiempo de ejecucion."),
+            ToolHealthDetailKind.BundledFileFound => component == ToolStatusComponent.EmbeddedPython
+                ? T(LocalizationKeys.SystemToolDetailEmbeddedPythonFoundFormat, ("path", dependencyHealth.ExpectedPath))
+                : T(LocalizationKeys.SystemToolDetailBundledExecutableFoundFormat, ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.BundledFileMissing => component == ToolStatusComponent.EmbeddedPython
+                ? T(LocalizationKeys.SystemToolDetailEmbeddedPythonMissingFormat, ("path", dependencyHealth.ExpectedPath))
+                : T(LocalizationKeys.SystemToolDetailBundledExecutableMissingFormat, ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.EngineBundleFound => T(
+                LocalizationKeys.SystemToolDetailEngineBundleFoundFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.EngineDirectoryMissing => T(
+                LocalizationKeys.SystemToolDetailEngineFolderMissingFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.EnginePlaceholderOnly => T(
+                LocalizationKeys.SystemToolDetailEnginePlaceholderOnlyFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.EngineManifestMissing => T(
+                LocalizationKeys.SystemToolDetailEngineManifestMissingFormat,
+                ("path", Path.Combine(dependencyHealth.ExpectedPath, "ENGINE_MANIFEST.json"))),
+            ToolHealthDetailKind.EngineEntryFilesMissing => T(
+                LocalizationKeys.SystemToolDetailEngineEntryMissingFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.ModelFilesFound => T(
+                LocalizationKeys.SystemToolDetailModelFilesFoundFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.ModelsDirectoryMissing => T(
+                LocalizationKeys.SystemToolDetailModelsFolderMissingFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.ModelFilesMissing => T(
+                LocalizationKeys.SystemToolDetailModelFilesMissingFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesFound => T(
+                LocalizationKeys.SystemToolDetailIw3RuntimeDependencyFoundFormat,
+                ("path", dependencyHealth.ExpectedPath)),
+            ToolHealthDetailKind.Iw3RuntimeDependenciesMissing => T(
+                LocalizationKeys.SystemToolDetailIw3RuntimeDependencyMissingFormat,
+                ("path", dependencyHealth.ExpectedPath)),
             _ => dependencyHealth.ExpectedPath,
         };
-
     private string CreateSystemStatusTechnicalDetailsText()
     {
+        var supportedModelsPattern = Iw3EngineBundleContract.ModelsDirectoryRelativePath +
+            "/*" +
+            string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions);
         var lines = new List<string>
         {
-            Text("Expected local iw3 bundle layout", "Estructura esperada del bundle local iw3"),
-            Text($"{Iw3EngineBundleContract.ManifestRelativePath} (version must not be placeholder)",
-                $"{Iw3EngineBundleContract.ManifestRelativePath} (version no debe ser placeholder)"),
-            Text(Iw3EngineBundleContract.PythonExecutableRelativePath, Iw3EngineBundleContract.PythonExecutableRelativePath),
-            Text(Iw3EngineBundleContract.PythonPathFileRelativePath, Iw3EngineBundleContract.PythonPathFileRelativePath),
-            Text(Iw3EngineBundleContract.Iw3PackageMainRelativePath, Iw3EngineBundleContract.Iw3PackageMainRelativePath),
-            Text(Iw3EngineBundleContract.ModelsDirectoryRelativePath + "/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions),
-                Iw3EngineBundleContract.ModelsDirectoryRelativePath + "/*" + string.Join("|*", Iw3EngineBundleContract.SupportedModelExtensions)),
-            Text(Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyRelativePath,
-                Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyRelativePath),
-            Text($"{Iw3EngineBundleContract.CliCapabilitiesRelativePath} (optional)",
-                $"{Iw3EngineBundleContract.CliCapabilitiesRelativePath} (opcional)"),
+            T(LocalizationKeys.TechnicalDetailsExpectedIw3BundleLayout),
+            T(
+                LocalizationKeys.TechnicalDetailsManifestVersionRequirementFormat,
+                ("path", Iw3EngineBundleContract.ManifestRelativePath)),
+            Iw3EngineBundleContract.PythonExecutableRelativePath,
+            Iw3EngineBundleContract.PythonPathFileRelativePath,
+            Iw3EngineBundleContract.Iw3PackageMainRelativePath,
+            supportedModelsPattern,
+            Iw3EngineBundleContract.Iw3DefaultStereoRuntimeDependencyRelativePath,
+            T(LocalizationKeys.TechnicalDetailsOptionalFormat, ("path", Iw3EngineBundleContract.CliCapabilitiesRelativePath)),
             string.Empty,
         };
 
@@ -7812,7 +8169,7 @@ public sealed class MainWindowViewModel : ObservableObject
         lines.AddRange(Iw3CliCapabilitiesDetailsFormatter.CreateLines(
             _dependencyHealth?.Iw3CliCapabilities ??
             Iw3CliCapabilitiesManifest.Missing(_toolPaths.Iw3CliCapabilitiesFile),
-            IsSpanish));
+            LocalizeCore));
         lines.Add(string.Empty);
         lines.Add(SystemStatusToolsTabTitle);
         lines.Add(string.Empty);
@@ -7852,57 +8209,39 @@ public sealed class MainWindowViewModel : ObservableObject
             LocalModelInventory.Empty(_toolPaths.ModelsDirectory);
         var lines = new List<string>
         {
-            Text("Local model inventory", "Inventario local de modelos"),
-            Text(
-                $"Models directory: {inventory.ModelsDirectory}",
-                $"Carpeta de modelos: {inventory.ModelsDirectory}"),
-            Text(
-                $"Supported extensions: {string.Join(", ", inventory.SupportedExtensions)}",
-                $"Extensiones compatibles: {string.Join(", ", inventory.SupportedExtensions)}"),
-            Text(
-                $"Compatible model count: {inventory.CompatibleModelCount}",
-                $"Cantidad de modelos compatibles: {inventory.CompatibleModelCount}"),
-            Text(
-                $"Catalog path: {inventory.Catalog.CatalogPath}",
-                $"Ruta del catalogo: {inventory.Catalog.CatalogPath}"),
-            Text(
-                $"Catalog status: {CatalogStatusText(inventory.Catalog.Status, useSpanish: false)}",
-                $"Estado del catalogo: {CatalogStatusText(inventory.Catalog.Status, useSpanish: true)}"),
-            Text(
-                $"Catalog entries: {inventory.Catalog.EntryCount}",
-                $"Entradas del catalogo: {inventory.Catalog.EntryCount}"),
-            Text(
-                $"Entries with existing compatible files: {inventory.Catalog.EntriesWithExistingCompatibleFiles.Count}",
-                $"Entradas con archivos compatibles existentes: {inventory.Catalog.EntriesWithExistingCompatibleFiles.Count}"),
-            Text(
-                $"Entries referencing missing or unsupported files: {inventory.Catalog.EntriesWithMissingFiles.Count}",
-                $"Entradas con archivos faltantes o no compatibles: {inventory.Catalog.EntriesWithMissingFiles.Count}"),
-            Text(
-                $"Unmanaged compatible model files: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}",
-                $"Modelos compatibles no listados en el catalogo: {inventory.Catalog.UnmanagedCompatibleModelFiles.Count}"),
+            T(LocalizationKeys.TechnicalDetailsLocalModelInventory),
+            T(LocalizationKeys.TechnicalDetailsModelsDirectoryFormat, ("path", inventory.ModelsDirectory)),
+            T(LocalizationKeys.TechnicalDetailsSupportedExtensionsFormat, ("extensions", string.Join(", ", inventory.SupportedExtensions))),
+            T(LocalizationKeys.TechnicalDetailsCompatibleModelCountFormat, ("count", inventory.CompatibleModelCount.ToString(CultureInfo.InvariantCulture))),
+            T(LocalizationKeys.TechnicalDetailsCatalogPathFormat, ("path", inventory.Catalog.CatalogPath)),
+            T(LocalizationKeys.TechnicalDetailsCatalogStatusFormat, ("status", CatalogStatusText(inventory.Catalog.Status))),
+            T(LocalizationKeys.TechnicalDetailsCatalogEntriesFormat, ("count", inventory.Catalog.EntryCount.ToString(CultureInfo.InvariantCulture))),
+            T(
+                LocalizationKeys.TechnicalDetailsCatalogExistingEntriesFormat,
+                ("count", inventory.Catalog.EntriesWithExistingCompatibleFiles.Count.ToString(CultureInfo.InvariantCulture))),
+            T(
+                LocalizationKeys.TechnicalDetailsCatalogMissingEntriesFormat,
+                ("count", inventory.Catalog.EntriesWithMissingFiles.Count.ToString(CultureInfo.InvariantCulture))),
+            T(
+                LocalizationKeys.TechnicalDetailsUnmanagedModelFilesFormat,
+                ("count", inventory.Catalog.UnmanagedCompatibleModelFiles.Count.ToString(CultureInfo.InvariantCulture))),
         };
 
         AddModelCatalogStatusDetailLines(lines, inventory.Catalog);
 
         if (!inventory.DirectoryExists)
         {
-            lines.Add(Text(
-                "Models directory was not found.",
-                "No se encontro la carpeta de modelos."));
+            lines.Add(T(LocalizationKeys.TechnicalDetailsModelsDirectoryMissing));
             return lines;
         }
 
         if (!inventory.HasCompatibleModels)
         {
-            lines.Add(Text(
-                "No compatible model files were found.",
-                "No se encontraron modelos compatibles."));
+            lines.Add(T(LocalizationKeys.TechnicalDetailsNoCompatibleModelFiles));
             return lines;
         }
 
-        lines.Add(Text(
-            "Compatible model files:",
-            "Archivos de modelo compatibles:"));
+        lines.Add(T(LocalizationKeys.TechnicalDetailsCompatibleModelFiles));
         foreach (var modelFile in inventory.CompatibleModelFiles)
         {
             lines.Add($"- {modelFile.RelativePath}");
@@ -7911,14 +8250,10 @@ public sealed class MainWindowViewModel : ObservableObject
         var mappedCandidates = Iw3DepthModelMapper.CreateSelectableCandidates(
             inventory.SelectionCandidates,
             IsSpanish);
-        lines.Add(Text(
-            "Mapped selectable local models:",
-            "Modelos locales mapeados seleccionables:"));
+        lines.Add(T(LocalizationKeys.TechnicalDetailsMappedSelectableModels));
         if (mappedCandidates.Count == 0)
         {
-            lines.Add(Text(
-                "- None. A verified iw3 depth-model mapping is required before conversion.",
-                "- Ninguno. Se requiere un mapeo verificado de depth-model iw3 antes de convertir."));
+            lines.Add(T(LocalizationKeys.TechnicalDetailsNoMappedSelectableModels));
         }
         else
         {
@@ -7932,9 +8267,7 @@ public sealed class MainWindowViewModel : ObservableObject
         var unmappedCandidates = Iw3DepthModelMapper.GetUnmappedCandidates(inventory.SelectionCandidates);
         if (unmappedCandidates.Count > 0)
         {
-            lines.Add(Text(
-                "Unmapped model files were found. Add a model catalog entry or mapping before using them.",
-                "Se encontraron modelos no mapeados. Agrega una entrada de catalogo o mapeo antes de usarlos."));
+            lines.Add(T(LocalizationKeys.TechnicalDetailsUnmappedModelFilesFound));
             foreach (var candidate in unmappedCandidates)
             {
                 lines.Add($"- {candidate.DisplayName} -> {candidate.RelativePath}");
@@ -7951,33 +8284,23 @@ public sealed class MainWindowViewModel : ObservableObject
         switch (catalog.Status)
         {
             case LocalModelCatalogStatus.Missing:
-                lines.Add(Text(
-                    "Model catalog not found. Compatible files are treated as unmanaged local models.",
-                    "No se encontro el catalogo de modelos. Los archivos compatibles se tratan como modelos locales no administrados."));
+                lines.Add(T(LocalizationKeys.TechnicalDetailsCatalogMissing));
                 return;
             case LocalModelCatalogStatus.Invalid:
-                lines.Add(Text(
-                    $"Model catalog is invalid: {catalog.ErrorMessage}",
-                    $"El catalogo de modelos no es valido: {catalog.ErrorMessage}"));
-                lines.Add(Text(
-                    "Compatible files are treated as unmanaged local models.",
-                    "Los archivos compatibles se tratan como modelos locales no administrados."));
+                lines.Add(T(
+                    LocalizationKeys.TechnicalDetailsCatalogInvalidFormat,
+                    ("message", catalog.ErrorMessage ?? string.Empty)));
+                lines.Add(T(LocalizationKeys.TechnicalDetailsCatalogUnmanagedFallback));
                 return;
             case LocalModelCatalogStatus.Placeholder:
-                lines.Add(Text(
-                    "Model catalog is a placeholder and is ignored.",
-                    "El catalogo de modelos es un marcador y se ignora."));
-                lines.Add(Text(
-                    "Compatible files are treated as unmanaged local models.",
-                    "Los archivos compatibles se tratan como modelos locales no administrados."));
+                lines.Add(T(LocalizationKeys.TechnicalDetailsCatalogPlaceholder));
+                lines.Add(T(LocalizationKeys.TechnicalDetailsCatalogUnmanagedFallback));
                 return;
         }
 
         if (catalog.EntriesWithExistingCompatibleFiles.Count > 0)
         {
-            lines.Add(Text(
-                "Catalog entries with existing compatible files:",
-                "Entradas del catalogo con archivos compatibles existentes:"));
+            lines.Add(T(LocalizationKeys.TechnicalDetailsCatalogExistingFiles));
             foreach (var entry in catalog.EntriesWithExistingCompatibleFiles)
             {
                 lines.Add($"- {CatalogEntryDisplayText(entry)}");
@@ -7986,9 +8309,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (catalog.EntriesWithMissingFiles.Count > 0)
         {
-            lines.Add(Text(
-                "Catalog entries with missing or unsupported files:",
-                "Entradas del catalogo con archivos faltantes o no compatibles:"));
+            lines.Add(T(LocalizationKeys.TechnicalDetailsCatalogMissingFiles));
             foreach (var entry in catalog.EntriesWithMissingFiles)
             {
                 lines.Add($"- {CatalogEntryDisplayText(entry)}");
@@ -7997,9 +8318,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (catalog.UnmanagedCompatibleModelFiles.Count > 0)
         {
-            lines.Add(Text(
-                "Unmanaged compatible model files:",
-                "Archivos compatibles no listados en el catalogo:"));
+            lines.Add(T(LocalizationKeys.TechnicalDetailsCatalogUnmanagedFiles));
             foreach (var modelFile in catalog.UnmanagedCompatibleModelFiles)
             {
                 lines.Add($"- {modelFile.RelativePath}");
@@ -8029,14 +8348,12 @@ public sealed class MainWindowViewModel : ObservableObject
             : $"{name} [{type}] -> {file}";
     }
 
-    private static string CatalogStatusText(
-        LocalModelCatalogStatus status,
-        bool useSpanish) => status switch
+    private string CatalogStatusText(LocalModelCatalogStatus status) => status switch
     {
-        LocalModelCatalogStatus.Missing => useSpanish ? "No encontrado" : "Missing",
-        LocalModelCatalogStatus.Invalid => useSpanish ? "No valido" : "Invalid",
-        LocalModelCatalogStatus.Placeholder => useSpanish ? "Marcador" : "Placeholder",
-        LocalModelCatalogStatus.Found => useSpanish ? "Encontrado" : "Found",
+        LocalModelCatalogStatus.Missing => T(LocalizationKeys.TechnicalDetailsCatalogStatusMissing),
+        LocalModelCatalogStatus.Invalid => T(LocalizationKeys.TechnicalDetailsCatalogStatusInvalid),
+        LocalModelCatalogStatus.Placeholder => T(LocalizationKeys.TechnicalDetailsCatalogStatusPlaceholder),
+        LocalModelCatalogStatus.Found => T(LocalizationKeys.TechnicalDetailsCatalogStatusFound),
         _ => status.ToString(),
     };
 
@@ -8048,31 +8365,29 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         var missingComponents = new List<string>();
-        AddMissingComponent(missingComponents, _dependencyHealth.Ffmpeg, "FFmpeg", "FFmpeg");
-        AddMissingComponent(missingComponents, _dependencyHealth.Ffprobe, "FFprobe", "FFprobe");
-        AddMissingComponent(missingComponents, _dependencyHealth.Python, "Python", "Python");
-        AddMissingComponent(missingComponents, _dependencyHealth.Iw3EngineDirectory, "iw3 engine", "motor iw3");
-        AddMissingComponent(missingComponents, _dependencyHealth.ModelsDirectory, "3D models", "modelos 3D");
+        AddMissingComponent(missingComponents, _dependencyHealth.Ffmpeg, LocalizationKeys.SystemToolFfmpeg);
+        AddMissingComponent(missingComponents, _dependencyHealth.Ffprobe, LocalizationKeys.SystemToolFfprobe);
+        AddMissingComponent(missingComponents, _dependencyHealth.Python, LocalizationKeys.SystemToolPython);
+        AddMissingComponent(missingComponents, _dependencyHealth.Iw3EngineDirectory, LocalizationKeys.SystemToolIw3Engine);
+        AddMissingComponent(missingComponents, _dependencyHealth.ModelsDirectory, LocalizationKeys.SystemToolModels);
         AddMissingComponent(
             missingComponents,
             _dependencyHealth.Iw3RuntimeDependencies,
-            "iw3 runtime dependency",
-            "dependencia runtime iw3");
+            LocalizationKeys.SystemToolIw3RuntimeDependency);
 
         return missingComponents.Count == 0
-            ? Text("No missing components.", "No faltan componentes.")
-            : Text("Missing: ", "Faltan: ") + string.Join(", ", missingComponents);
+            ? T(LocalizationKeys.VideoReadinessNoMissingComponents)
+            : T(LocalizationKeys.VideoReadinessMissingComponentsPrefix) + string.Join(", ", missingComponents);
     }
 
     private void AddMissingComponent(
         ICollection<string> missingComponents,
         ToolDependencyHealth dependencyHealth,
-        string englishName,
-        string spanishName)
+        string nameKey)
     {
         if (dependencyHealth.Status == ToolHealthStatus.Missing)
         {
-            missingComponents.Add(Text(englishName, spanishName));
+            missingComponents.Add(T(nameKey));
         }
     }
 
@@ -8090,9 +8405,11 @@ public sealed class MainWindowViewModel : ObservableObject
         RaisePreviewPropertiesChanged();
         SelectedVideoPath = path;
         ResetAnalysisState(clearOutputPath: true);
-        AddLog(
-            replacingVideo ? $"Selected video replaced: {path}" : $"Selected video: {path}",
-            replacingVideo ? $"Video seleccionado reemplazado: {path}" : $"Video seleccionado: {path}");
+        AddVideoLogResolved(T(
+            replacingVideo
+                ? LocalizationKeys.VideoLogSelectedFileReplacedFormat
+                : LocalizationKeys.VideoLogSelectedFileFormat,
+            ("path", path)));
     }
 
     private void ResetAnalysisState(bool clearOutputPath)
@@ -8135,9 +8452,9 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            AddLog(
-                $"Preview cache cleanup skipped: {exception.Message}",
-                $"Limpieza de cache de vista previa omitida: {exception.Message}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoConversionLogPreviewCacheCleanupSkippedFormat,
+                ("message", exception.Message)));
         }
     }
 
@@ -8163,16 +8480,12 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (deleted > 0)
         {
-            AddLog(
-                "Stale preview partial file was cleaned.",
-                "Se limpi\u00f3 un archivo parcial anterior de vista previa.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewStalePartialFileCleaned));
         }
 
         if (warningCount > 0)
         {
-            AddLog(
-                "Could not delete stale partial file.",
-                "No se pudo eliminar un archivo parcial anterior.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewStalePartialFileDeleteFailed));
         }
     }
 
@@ -8219,35 +8532,29 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!HasEnteredPreviewConversionStage)
         {
-            AddLog(
-                "Open the conversion plan and continue before generating a preview.",
-                "Abre el plan de conversion y continua antes de generar una vista previa.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewOpenPlanFirst));
             RaisePreviewPropertiesChanged();
             return;
         }
 
         if (IsConversionRunning)
         {
-            AddLog(
-                "Preview generation is disabled while final conversion is running.",
-                "La generacion de vista previa esta deshabilitada mientras la conversion final esta en ejecucion.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewDisabledDuringConversion));
             return;
         }
 
         if (IsPreviewGenerating)
         {
-            AddLog(
-                "A preview is already being generated.",
-                "Ya se esta generando una vista previa.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewAlreadyGenerating));
             return;
         }
 
         var rangeValidation = CurrentPreviewTimeRangeValidation;
         if (!rangeValidation.IsValid)
         {
-            AddLog(
-                $"Preview cannot start. {PreviewTimeRangeValidationMessage(rangeValidation.Issue, useSpanish: false)}",
-                $"La vista previa no puede iniciar. {PreviewTimeRangeValidationMessage(rangeValidation.Issue, useSpanish: true)}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoLogPreviewCannotStartFormat,
+                ("reason", PreviewTimeRangeValidationMessage(rangeValidation.Issue))));
             RaisePreviewPropertiesChanged();
             return;
         }
@@ -8256,17 +8563,13 @@ public sealed class MainWindowViewModel : ObservableObject
         if (configuration is null ||
             _conversionPlan?.SelectedLocalModel is null)
         {
-            AddLog(
-                "Preview cannot start until a source video, conversion plan, and mapped local model are selected.",
-                "La vista previa no puede iniciar hasta seleccionar un video, un plan de conversion y un modelo local mapeado.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewConfigurationNotReady));
             return;
         }
 
         if (!CurrentExecutionRequestCanStart())
         {
-            AddLog(
-                "Preview cannot start because the selected configuration is not ready for local iw3 execution.",
-                "La vista previa no puede iniciar porque la configuracion seleccionada no esta lista para ejecucion local iw3.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewExecutionNotReady));
             return;
         }
 
@@ -8285,18 +8588,14 @@ public sealed class MainWindowViewModel : ObservableObject
         _hasLoggedPreviewOfflineDependencyWarning = false;
         ResetPreviewMetricText();
         ResetPreviewGenerationLog();
-        AppendPreviewLogLine(Text("Preparing preview...", "Preparando vista previa..."));
+        AppendPreviewLogLine(T(LocalizationKeys.VideoPreviewStagePreparing));
         IsPreviewReadyModalOpen = false;
         IsPreviewGeneratingModalOpen = true;
-        AppendPreviewLogLine(Text(
-            "Preview timing: modal opened.",
-            "Tiempo de vista previa: modal abierto."));
+        AppendPreviewLogLine(T(LocalizationKeys.VideoLogPreviewTimingModalOpened));
         RaisePreviewPropertiesChanged();
         RaiseConversionExecutionPropertiesChanged();
         RaiseConversionRunningModePropertiesChanged();
-        AddLog(
-            "Starting selected-configuration preview.",
-            "Iniciando vista previa de la configuracion seleccionada.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewStarted));
         await Task.Yield();
         await DeletePreviewFilesAsync(cleanupPaths, logDeletion: false);
 
@@ -8344,14 +8643,12 @@ public sealed class MainWindowViewModel : ObservableObject
             }
 
             MarkPreviewOutdatedIfNeeded(logChange: false);
-            AddLog(result.EnglishSummary, result.SpanishSummary);
+            AddVideoLogResolved(LocalizePreviewGenerationSummary(result.EnglishSummary));
             if (_previewState.Status == PreviewGenerationStatus.Ready &&
                 IsPreviewFingerprintCurrent())
             {
                 IsPreviewReadyModalOpen = true;
-                AppendPreviewLogLine(Text(
-                    "Preview timing: preview ready modal opened.",
-                    "Tiempo de vista previa: modal de vista previa lista abierto."));
+                AppendPreviewLogLine(T(LocalizationKeys.VideoLogPreviewTimingReadyModalOpened));
             }
         }
         catch (OperationCanceledException)
@@ -8383,20 +8680,19 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void RecordPreviewCanceled()
     {
+        var message = T(LocalizationKeys.VideoLogPreviewCanceled);
         _previewProgressPercent = 0;
         _previewState = _previewState with
         {
             Status = PreviewGenerationStatus.Canceled,
             OutputPath = null,
             FinishedAt = DateTimeOffset.UtcNow,
-            EnglishDetail = "Preview generation was canceled.",
-            SpanishDetail = "La generacion de vista previa fue cancelada.",
+            EnglishDetail = message,
+            SpanishDetail = message,
         };
         if (!_hasLoggedPreviewCancellationSummary)
         {
-            AddLog(
-                "Preview generation was canceled.",
-                "La generacion de vista previa fue cancelada.");
+            AddVideoLogResolved(message);
             _hasLoggedPreviewCancellationSummary = true;
         }
 
@@ -8411,18 +8707,24 @@ public sealed class MainWindowViewModel : ObservableObject
         var errorLogPath = AppErrorLogService.LogRecoverableException(
             "Generate preview",
             exception);
+        var detail = T(
+            LocalizationKeys.VideoErrorPreviewUnexpectedFormat,
+            ("message", exception.Message));
         _previewProgressPercent = 0;
         _previewState = _previewState with
         {
             Status = PreviewGenerationStatus.Failed,
             FinishedAt = DateTimeOffset.UtcNow,
-            EnglishDetail = $"Preview generation failed unexpectedly: {exception.Message}",
-            SpanishDetail = $"La generacion de vista previa fallo inesperadamente: {exception.Message}",
+            EnglishDetail = detail,
+            SpanishDetail = detail,
         };
-        AppendPreviewLogLine($"Preview generation failed unexpectedly: {exception}");
-        AddLog(
-            $"Preview generation failed. Details were written to {errorLogPath}. {exception.Message}",
-            $"La generacion de vista previa fallo. Los detalles se escribieron en {errorLogPath}. {exception.Message}");
+        AppendPreviewLogLine(T(
+            LocalizationKeys.VideoErrorPreviewUnexpectedFormat,
+            ("message", exception.ToString())));
+        AddVideoLogResolved(T(
+            LocalizationKeys.VideoLogPreviewFailedFormat,
+            ("logPath", errorLogPath),
+            ("message", exception.Message)));
         RaisePreviewPropertiesChanged();
         RaiseConversionReadinessPropertiesChanged();
     }
@@ -8432,9 +8734,7 @@ public sealed class MainWindowViewModel : ObservableObject
         if (!CanCancelPreview &&
             _previewCancellationTokenSource is null)
         {
-            AddLog(
-                "There is no active preview to cancel.",
-                "No hay una vista previa activa para cancelar.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogNoPreviewToCancel));
             return;
         }
 
@@ -8455,39 +8755,31 @@ public sealed class MainWindowViewModel : ObservableObject
         if (openResult.EnglishWarning is not null &&
             openResult.SpanishWarning is not null)
         {
-            AddLog(openResult.EnglishWarning, openResult.SpanishWarning);
+            AddVideoLogResolved(LocalizePreviewOpenWarning(openResult.EnglishWarning));
             return;
         }
 
-        AddLog(
-            "Preview opened with the default video player.",
-            "Vista previa abierta con el reproductor de video predeterminado.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewOpened));
     }
 
     private void ContinuePreview()
     {
         if (!CanContinuePreview)
         {
-            AddLog(
-                "Preview cannot be accepted because it does not match the current settings.",
-                "La vista previa no puede aceptarse porque no coincide con la configuracion actual.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewAcceptInvalid));
             return;
         }
 
         var configuration = CreateCurrentPreviewConfiguration();
         if (configuration is null)
         {
-            AddLog(
-                "Preview cannot be accepted until the current configuration is valid.",
-                "La vista previa no puede aceptarse hasta que la configuracion actual sea valida.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewAcceptConfigInvalid));
             return;
         }
 
         _previewState = _previewState.Accept(configuration);
         IsPreviewReadyModalOpen = false;
-        AddLog(
-            "Preview accepted. Final conversion is now available.",
-            "Vista previa aceptada. La conversion final ahora esta disponible.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewAccepted));
         RaisePreviewPropertiesChanged();
         RaiseConversionExecutionPropertiesChanged();
         RaiseConversionReadinessPropertiesChanged();
@@ -8514,16 +8806,14 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            AddLog(
-                $"Preview cleanup warning: {exception.Message}",
-                $"Advertencia de limpieza de vista previa: {exception.Message}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoLogPreviewCleanupWarningFormat,
+                ("message", exception.Message)));
         }
 
         if (logDeletion)
         {
-            AddLog(
-                "Preview files were deleted.",
-                "Los archivos de vista previa fueron eliminados.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewFilesDeleted));
         }
     }
 
@@ -8553,16 +8843,14 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            AddLog(
-                $"Preview cleanup warning: {exception.Message}",
-                $"Advertencia de limpieza de vista previa: {exception.Message}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoLogPreviewCleanupWarningFormat,
+                ("message", exception.Message)));
         }
 
         if (logDeletion)
         {
-            AddLog(
-                "Preview files were deleted.",
-                "Los archivos de vista previa fueron eliminados.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewFilesDeleted));
         }
 
         return deleted;
@@ -8585,16 +8873,14 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            AddLog(
-                $"Preview partial cleanup warning: {exception.Message}",
-                $"Advertencia de limpieza de parciales de vista previa: {exception.Message}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoLogPreviewPartialCleanupWarningFormat,
+                ("message", exception.Message)));
         }
 
         if (logDeletion && deleted > 0)
         {
-            AddLog(
-                "Preview partial files were cleaned.",
-                "Los archivos parciales de vista previa fueron limpiados.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewPartialFilesCleaned));
         }
     }
 
@@ -8686,15 +8972,11 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (restoredAccepted)
             {
-                AddLog(
-                    "Accepted preview matches the current settings again.",
-                    "La vista previa aceptada vuelve a coincidir con la configuracion actual.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewAcceptedRestored));
             }
             else
             {
-                AddLog(
-                    "Preview is outdated. Regenerate it for the current settings.",
-                    "La vista previa esta desactualizada. Regenerala para la configuracion actual.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewOutdated));
             }
         }
 
@@ -8714,9 +8996,7 @@ public sealed class MainWindowViewModel : ObservableObject
         _previewState = updatedState;
         if (logChange)
         {
-            AddLog(
-                "Preview is outdated. Regenerate it for the current settings.",
-                "La vista previa esta desactualizada. Regenerala para la configuracion actual.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogPreviewOutdated));
         }
 
         RaisePreviewPropertiesChanged();
@@ -8784,35 +9064,16 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     private string PreviewTimeRangeValidationMessage(
-        PreviewTimeRangeValidationIssue issue) =>
-        PreviewTimeRangeValidationMessage(issue, IsSpanish);
-
-    private static string PreviewTimeRangeValidationMessage(
-        PreviewTimeRangeValidationIssue issue,
-        bool useSpanish) => issue switch
+        PreviewTimeRangeValidationIssue issue) => issue switch
         {
             PreviewTimeRangeValidationIssue.None => string.Empty,
-            PreviewTimeRangeValidationIssue.MissingSourceDuration => useSpanish
-                ? "Analiza la duracion del video antes de generar una vista previa."
-                : "Analyze the video duration before generating a preview.",
-            PreviewTimeRangeValidationIssue.MissingValue => useSpanish
-                ? "Ingresa Desde y Hasta en formato HH:MM:SS."
-                : "Enter From and To in HH:MM:SS format.",
-            PreviewTimeRangeValidationIssue.InvalidFormat => useSpanish
-                ? "Usa el formato HH:MM:SS para Desde y Hasta."
-                : "Use HH:MM:SS format for From and To.",
-            PreviewTimeRangeValidationIssue.FromMustBeBeforeTo => useSpanish
-                ? "Desde debe ser anterior a Hasta."
-                : "From must be before To.",
-            PreviewTimeRangeValidationIssue.ExceedsMaximumDuration => useSpanish
-                ? "La duracion maxima de la vista previa es de 1 minuto 30 segundos."
-                : "Maximum preview duration is 1 minute 30 seconds.",
-            PreviewTimeRangeValidationIssue.ToBeyondSourceDuration => useSpanish
-                ? "Hasta no puede superar la duracion analizada del video."
-                : "To cannot exceed the analyzed video duration.",
-            _ => useSpanish
-                ? "El rango de vista previa no es valido."
-                : "The preview time range is not valid.",
+            PreviewTimeRangeValidationIssue.MissingSourceDuration => T(LocalizationKeys.VideoPreviewValidationMissingSourceDuration),
+            PreviewTimeRangeValidationIssue.MissingValue => T(LocalizationKeys.VideoPreviewValidationMissingValue),
+            PreviewTimeRangeValidationIssue.InvalidFormat => T(LocalizationKeys.VideoPreviewValidationInvalidFormat),
+            PreviewTimeRangeValidationIssue.FromMustBeBeforeTo => T(LocalizationKeys.VideoPreviewValidationFromMustBeBeforeTo),
+            PreviewTimeRangeValidationIssue.ExceedsMaximumDuration => T(LocalizationKeys.VideoPreviewValidationExceedsMaximumDuration),
+            PreviewTimeRangeValidationIssue.ToBeyondSourceDuration => T(LocalizationKeys.VideoPreviewValidationToBeyondSourceDuration),
+            _ => T(LocalizationKeys.VideoPreviewValidationInvalid),
         };
 
     private void ApplyPreviewProgressUpdate(
@@ -8829,7 +9090,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            RecordRecoverablePreviewWarning("Preview progress update", exception);
+            RecordRecoverablePreviewWarning(LocalizationKeys.VideoPreviewOperationProgressUpdate, exception);
         }
     }
 
@@ -8878,9 +9139,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (IsPreviewGenerating)
         {
-            AddLog(
-                "Cancel the active preview before starting final conversion.",
-                "Cancela la vista previa activa antes de iniciar la conversion final.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogCancelActivePreviewBeforeConversion));
             return;
         }
 
@@ -8896,9 +9155,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (!HasEnteredPreviewConversionStage)
         {
-            AddLog(
-                "Open the conversion plan and continue before starting final conversion.",
-                "Abre el plan de conversion y continua antes de iniciar la conversion final.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoConversionOpenPlanBeforeFinal));
             return;
         }
 
@@ -8939,12 +9196,10 @@ public sealed class MainWindowViewModel : ObservableObject
             StartedAt: startedAt);
         RaiseConversionExecutionPropertiesChanged();
         RaiseConversionRunningModePropertiesChanged();
-        AddLog(
-            "Starting local iw3 conversion.",
-            "Iniciando conversion local iw3.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionStarted));
         AddConversionLog(
-            "Starting local iw3 conversion.",
-            "Iniciando conversion local iw3.");
+            T(LocalizationKeys.VideoLogConversionStarted),
+            T(LocalizationKeys.VideoLogConversionStarted));
 
         try
         {
@@ -8961,7 +9216,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
             foreach (var log in GetConversionResultLogsForLivePanel(result))
             {
-                AddConversionLog(log.EnglishMessage, log.SpanishMessage);
+                AddConversionLog(
+                    LocalizeConversionExecutionLog(log),
+                    LocalizeConversionExecutionLog(log),
+                    log.Timestamp.LocalDateTime);
             }
 
             AddConversionResultActivityLogs(result);
@@ -8981,12 +9239,10 @@ public sealed class MainWindowViewModel : ObservableObject
             _conversionExecutionState = CreateCanceledConversionState(
                 startedAt,
                 DateTimeOffset.UtcNow);
-            AddLog(
-                "Local iw3 conversion was canceled.",
-                "La conversi\u00f3n local iw3 fue cancelada.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionCanceled));
             AddConversionLog(
-                "Local iw3 conversion was canceled.",
-                "La conversi\u00f3n local iw3 fue cancelada.");
+                T(LocalizationKeys.VideoLogConversionCanceled),
+                T(LocalizationKeys.VideoLogConversionCanceled));
         }
         catch (Exception exception)
         {
@@ -8995,12 +9251,12 @@ public sealed class MainWindowViewModel : ObservableObject
                 DateTimeOffset.UtcNow,
                 $"Local iw3 conversion failed unexpectedly: {exception.Message}",
                 $"La conversion local iw3 fallo inesperadamente: {exception.Message}");
-            AddLog(
-                $"Local iw3 conversion failed. {exception.Message}",
-                $"La conversion local iw3 fallo. {exception.Message}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoLogConversionFailedFormat,
+                ("message", exception.Message)));
             AddConversionLog(
-                $"Local iw3 conversion failed. {exception.Message}",
-                $"La conversion local iw3 fallo. {exception.Message}");
+                T(LocalizationKeys.VideoLogConversionFailedFormat, ("message", exception.Message)),
+                T(LocalizationKeys.VideoLogConversionFailedFormat, ("message", exception.Message)));
         }
         finally
         {
@@ -9016,7 +9272,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         _conversionExecutionState = ConversionExecutionState.Blocked(startGate);
         RaiseConversionExecutionPropertiesChanged();
-        AddLog(startGate.EnglishLogMessage, startGate.SpanishLogMessage);
+        AddVideoLogResolved(LocalizeConversionStartGateLog(startGate));
     }
 
     private void ApplyConversionProgressUpdate(
@@ -9095,8 +9351,8 @@ public sealed class MainWindowViewModel : ObservableObject
 
         _hasLoggedConversionOfflineDependencyWarning = true;
         AddConversionLog(
-            Iw3RuntimeDownloadDetector.EnglishWarning,
-            Iw3RuntimeDownloadDetector.SpanishWarning);
+            T(LocalizationKeys.VideoLogRuntimeDownloadWarning),
+            T(LocalizationKeys.VideoLogRuntimeDownloadWarning));
     }
 
     private static string FormatOutputLine(ProcessOutputLine outputLine)
@@ -9129,28 +9385,26 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         AddStaleConversionPartialCleanupActivityLogs(result);
         AddCurrentAttemptConversionPartialCleanupActivityLogs(result);
-        AddLog(result.EnglishSummary, result.SpanishSummary);
+        AddVideoLogResolved(LocalizeConversionSummaryText(result.EnglishSummary));
         if (result.Success)
         {
             if (!string.IsNullOrWhiteSpace(result.PrimaryOutputPath))
             {
-                AddLog(
-                    $"Primary output was generated successfully: {result.PrimaryOutputPath}",
-                    $"La salida principal se genero correctamente: {result.PrimaryOutputPath}");
+                AddVideoLogResolved(T(
+                    LocalizationKeys.VideoLogConversionPrimaryOutputGeneratedFormat,
+                    ("path", result.PrimaryOutputPath)));
             }
 
             if (result.CompatibilityCopySucceeded &&
                 !string.IsNullOrWhiteSpace(result.CompatibilityOutputPath))
             {
-                AddLog(
-                    $"LG-compatible copy was generated successfully: {result.CompatibilityOutputPath}",
-                    $"La copia compatible LG se genero correctamente: {result.CompatibilityOutputPath}");
+                AddVideoLogResolved(T(
+                    LocalizationKeys.VideoLogConversionLgCopyGeneratedFormat,
+                    ("path", result.CompatibilityOutputPath)));
             }
             else if (CreateLgCompatibilityCopy)
             {
-                AddLog(
-                    "LG-compatible copy was not generated. The primary output remains available.",
-                    "La copia compatible LG no se genero. La salida principal sigue disponible.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionLgCopyMissing));
             }
 
             return;
@@ -9185,18 +9439,14 @@ public sealed class MainWindowViewModel : ObservableObject
                 "Conversion partial file was cleaned.",
                 StringComparison.Ordinal)))
         {
-            AddLog(
-                "Conversion partial file was cleaned.",
-                "El archivo parcial de conversi\u00f3n fue limpiado.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionPartialFileCleaned));
         }
 
         if (result.Logs.Any(log => log.EnglishMessage.StartsWith(
                 "Could not delete conversion partial file.",
                 StringComparison.Ordinal)))
         {
-            AddLog(
-                "Could not delete conversion partial file.",
-                "No se pudo eliminar el archivo parcial de conversi\u00f3n.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionPartialFileDeleteFailed));
         }
     }
 
@@ -9207,18 +9457,14 @@ public sealed class MainWindowViewModel : ObservableObject
                 "Stale conversion partial file was cleaned.",
                 StringComparison.Ordinal)))
         {
-            AddLog(
-                "Stale conversion partial file was cleaned.",
-                "Se limpi\u00f3 un archivo parcial anterior de conversi\u00f3n.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionStalePartialFileCleaned));
         }
 
         if (result.Logs.Any(log => log.EnglishMessage.StartsWith(
                 "Could not delete stale partial file.",
                 StringComparison.Ordinal)))
         {
-            AddLog(
-                "Could not delete stale partial file.",
-                "No se pudo eliminar un archivo parcial anterior.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionStalePartialFileDeleteFailed));
         }
     }
 
@@ -9240,7 +9486,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void UpdateMetricText(ProcessMetricSample metrics)
     {
         _lastProcessMetricSample = metrics;
-        var displayText = ProcessMetricDisplayFormatter.Format(metrics, IsSpanish);
+        var displayText = ProcessMetricDisplayFormatter.Format(metrics, LocalizeCore);
         _cpuUsageText = displayText.Cpu;
         _ramUsageText = displayText.Ram;
         _gpuUsageText = displayText.Gpu;
@@ -9254,7 +9500,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ResetMetricText()
     {
         _lastProcessMetricSample = null;
-        var displayText = ProcessMetricDisplayFormatter.Detecting(IsSpanish);
+        var displayText = ProcessMetricDisplayFormatter.Detecting(LocalizeCore);
         _cpuUsageText = displayText.Cpu;
         _ramUsageText = displayText.Ram;
         _gpuUsageText = displayText.Gpu;
@@ -9290,23 +9536,27 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (step.EnglishText.Contains("source clip", StringComparison.OrdinalIgnoreCase))
         {
-            _previewStageEnglishText = "FFmpeg source clip";
-            _previewStageSpanishText = "clip fuente FFmpeg";
+            _previewStageKey = LocalizationKeys.VideoPreviewStageSourceClip;
+            _previewStageEnglishText = string.Empty;
+            _previewStageSpanishText = string.Empty;
         }
         else if (step.EnglishText.Contains("iw3", StringComparison.OrdinalIgnoreCase))
         {
-            _previewStageEnglishText = "Bundled Python/iw3";
-            _previewStageSpanishText = "Python/iw3 incluido";
+            _previewStageKey = LocalizationKeys.VideoPreviewStageIw3;
+            _previewStageEnglishText = string.Empty;
+            _previewStageSpanishText = string.Empty;
         }
         else if (step.EnglishText.Contains("completed", StringComparison.OrdinalIgnoreCase))
         {
-            _previewStageEnglishText = "Preview completed";
-            _previewStageSpanishText = "Vista previa completada";
+            _previewStageKey = LocalizationKeys.VideoPreviewStageCompleted;
+            _previewStageEnglishText = string.Empty;
+            _previewStageSpanishText = string.Empty;
         }
         else
         {
-            _previewStageEnglishText = "Preparing preview";
-            _previewStageSpanishText = "Preparando vista previa";
+            _previewStageKey = LocalizationKeys.VideoPreviewStagePreparing;
+            _previewStageEnglishText = string.Empty;
+            _previewStageSpanishText = string.Empty;
         }
 
         OnPropertyChanged(nameof(PreviewStageText));
@@ -9316,7 +9566,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         _lastPreviewMetricSample = metrics;
         _previewCpuUsageText = metrics.CpuUsagePercent is null
-            ? Text("CPU: Detecting...", "CPU: Detectando...")
+            ? T(LocalizationKeys.VideoPreviewCpuDetecting)
             : $"CPU: {metrics.CpuUsagePercent.Value:0.0}%";
         _previewRamUsageText = FormatPreviewMemory(metrics.PrivateMemoryBytes ?? metrics.WorkingSetBytes);
         _previewGpuUsageText = FormatPreviewGpu(metrics);
@@ -9328,13 +9578,14 @@ public sealed class MainWindowViewModel : ObservableObject
     private void ResetPreviewMetricText()
     {
         _lastPreviewMetricSample = null;
-        _previewCpuUsageText = Text("CPU: Detecting...", "CPU: Detectando...");
-        _previewRamUsageText = Text("RAM: Detecting...", "RAM: Detectando...");
-        _previewGpuUsageText = Text("GPU: Detecting...", "GPU: Detectando...");
-        _previewVramUsageText = Text("VRAM: Detecting...", "VRAM: Detectando...");
-        _previewGpuMetricsStatusText = Text("GPU metrics: Detecting...", "Metricas GPU: Detectando...");
-        _previewStageEnglishText = "Preparing preview";
-        _previewStageSpanishText = "Preparando vista previa";
+        _previewCpuUsageText = T(LocalizationKeys.VideoPreviewCpuDetecting);
+        _previewRamUsageText = T(LocalizationKeys.VideoPreviewRamDetecting);
+        _previewGpuUsageText = T(LocalizationKeys.VideoPreviewGpuDetecting);
+        _previewVramUsageText = T(LocalizationKeys.VideoPreviewVramDetecting);
+        _previewGpuMetricsStatusText = T(LocalizationKeys.VideoPreviewGpuMetricsDetecting);
+        _previewStageKey = LocalizationKeys.VideoPreviewStagePreparing;
+        _previewStageEnglishText = string.Empty;
+        _previewStageSpanishText = string.Empty;
         RaisePreviewMetricPropertiesChanged();
         OnPropertyChanged(nameof(PreviewStageText));
     }
@@ -9350,7 +9601,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private string FormatPreviewMemory(long? bytes) =>
         bytes is null
-            ? Text("RAM: Detecting...", "RAM: Detectando...")
+            ? T(LocalizationKeys.VideoPreviewRamDetecting)
             : $"RAM: {FormatMetricBytes(bytes.Value)}";
 
     private string FormatPreviewGpu(ProcessMetricSample metrics)
@@ -9364,17 +9615,17 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         return string.IsNullOrWhiteSpace(metrics.GpuStatus)
-            ? Text("GPU: Detecting...", "GPU: Detectando...")
-            : Text(
-                $"GPU: Unavailable ({metrics.GpuStatus})",
-                $"GPU: No disponible ({LocalizePreviewGpuStatus(metrics.GpuStatus)})");
+            ? T(LocalizationKeys.VideoPreviewGpuDetecting)
+            : T(
+                LocalizationKeys.VideoPreviewGpuUnavailableFormat,
+                ("status", LocalizePreviewGpuStatus(metrics.GpuStatus)));
     }
 
     private string FormatPreviewVram(ProcessMetricSample metrics)
     {
         if (metrics.GpuDedicatedMemoryBytes is not { } bytes)
         {
-            return Text("VRAM: Detecting...", "VRAM: Detectando...");
+            return T(LocalizationKeys.VideoPreviewVramDetecting);
         }
 
         var label = metrics.GpuScope == ProcessGpuMetricScope.Adapter
@@ -9388,37 +9639,34 @@ public sealed class MainWindowViewModel : ObservableObject
         if (metrics.GpuUsagePercent is not null)
         {
             return metrics.GpuScope == ProcessGpuMetricScope.Adapter
-                ? Text(
-                    "GPU metrics: Windows adapter/global counters",
-                    "Metricas GPU: contadores globales del adaptador Windows")
-                : Text(
-                    "GPU metrics: process counters",
-                    "Metricas GPU: contadores del proceso");
+                ? T(LocalizationKeys.VideoPreviewGpuMetricsGlobal)
+                : T(LocalizationKeys.VideoPreviewGpuMetricsProcess);
         }
 
         return string.IsNullOrWhiteSpace(metrics.GpuStatus)
-            ? Text("GPU metrics: Detecting...", "Metricas GPU: Detectando...")
-            : Text(
-                $"GPU metrics: Unavailable ({metrics.GpuStatus})",
-                $"Metricas GPU: No disponible ({LocalizePreviewGpuStatus(metrics.GpuStatus)})");
+            ? T(LocalizationKeys.VideoPreviewGpuMetricsDetecting)
+            : T(
+                LocalizationKeys.VideoPreviewGpuMetricsUnavailableFormat,
+                ("status", LocalizePreviewGpuStatus(metrics.GpuStatus)));
     }
 
     private string LocalizePreviewGpuStatus(string status) => status switch
     {
-        ProcessGpuMetricReading.DetectingStatus => "Detectando...",
+        ProcessGpuMetricReading.DetectingStatus => T(LocalizationKeys.ProcessMetricsStatusDetecting),
         ProcessGpuMetricReading.NoProcessGpuEngineCounterStatus =>
-            "No se encontro contador GPU Engine para este proceso",
-        ProcessGpuMetricReading.PermissionUnavailableStatus => "Permiso no disponible",
+            T(LocalizationKeys.ProcessMetricsStatusNoProcessGpuEngineCounter),
+        ProcessGpuMetricReading.PermissionUnavailableStatus =>
+            T(LocalizationKeys.ProcessMetricsStatusPermissionUnavailable),
         ProcessGpuMetricReading.WindowsMetricsUnavailableStatus =>
-            "Metricas no disponibles en esta version/controlador de Windows",
+            T(LocalizationKeys.ProcessMetricsStatusWindowsMetricsUnavailable),
         ProcessGpuMetricReading.NvidiaMetricsUnavailableStatus =>
-            "Metricas NVIDIA no disponibles",
+            T(LocalizationKeys.ProcessMetricsStatusNvidiaMetricsUnavailable),
         ProcessGpuMetricReading.AdapterGpuUsageStatus =>
-            "Uso global del adaptador GPU",
+            T(LocalizationKeys.ProcessMetricsStatusAdapterGpuUsage),
         ProcessGpuMetricReading.ProcessGpuEngineCounterStatus =>
-            "Uso GPU del proceso",
+            T(LocalizationKeys.ProcessMetricsStatusProcessGpuEngineCounter),
         ProcessGpuMetricReading.NvidiaAdapterMetricsStatus =>
-            "Metricas globales del adaptador NVIDIA",
+            T(LocalizationKeys.ProcessMetricsStatusNvidiaAdapterMetrics),
         _ => status,
     };
 
@@ -9469,8 +9717,9 @@ public sealed class MainWindowViewModel : ObservableObject
         if (openResult.EnglishWarning is not null &&
             openResult.SpanishWarning is not null)
         {
-            AddLog(openResult.EnglishWarning, openResult.SpanishWarning);
-            AddConversionLog(openResult.EnglishWarning, openResult.SpanishWarning);
+            var message = LocalizeConversionOutputOpenWarning(openResult.EnglishWarning);
+            AddVideoLogResolved(message);
+            AddConversionLog(message, message);
         }
     }
 
@@ -9598,9 +9847,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         if (!CanCancelConversion)
         {
-            AddLog(
-                "There is no active conversion to cancel.",
-                "No hay una conversión activa para cancelar.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogNoActiveConversionToCancel));
             return;
         }
 
@@ -9616,12 +9863,10 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionExecutionPropertiesChanged();
         RaiseConversionRunningModePropertiesChanged();
         _conversionCancellationTokenSource?.Cancel();
-        AddLog(
-            "Canceling local iw3 conversion.",
-            "Cancelando conversion local iw3.");
+        AddVideoLogResolved(T(LocalizationKeys.VideoLogConversionCanceling));
         AddConversionLog(
-            "Canceling local iw3 conversion.",
-            "Cancelando conversion local iw3.");
+            T(LocalizationKeys.VideoLogConversionCanceling),
+            T(LocalizationKeys.VideoLogConversionCanceling));
     }
 
     private static bool IsSupportedVideoFile(string path) =>
@@ -9682,8 +9927,7 @@ public sealed class MainWindowViewModel : ObservableObject
     }
 
     private void PlanOptionChanged(
-        string englishMessage,
-        string spanishMessage,
+        string message,
         bool affectsPreview = true)
     {
         ResetConversionExecutionState();
@@ -9699,7 +9943,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 MarkPreviewOutdatedIfNeeded();
             }
 
-            AddLog(englishMessage, spanishMessage);
+            AddVideoLogResolved(message);
         }
     }
 
@@ -9717,15 +9961,13 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (normalizedPath is null)
             {
-                AddLog(
-                    "Output path reset to automatic suggestion.",
-                    "Ruta de salida restablecida a la sugerencia automática.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoLogOutputPathReset));
             }
             else
             {
-                AddLog(
-                    $"Output path changed to {normalizedPath}.",
-                    $"Ruta de salida cambiada a {normalizedPath}.");
+                AddVideoLogResolved(T(
+                    LocalizationKeys.VideoLogOutputPathChangedFormat,
+                    ("path", normalizedPath)));
             }
         }
     }
@@ -9740,15 +9982,13 @@ public sealed class MainWindowViewModel : ObservableObject
         var automaticPath = GetAutomaticOutputPath();
         if (automaticPath is null)
         {
-            AddLog(
-                "Select a video before choosing an output folder.",
-                "Selecciona un video antes de elegir una carpeta de salida.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogSelectVideoBeforeOutputFolder));
             return;
         }
 
         using var dialog = new Forms.FolderBrowserDialog
         {
-            Description = Text("Choose output folder", "Elige la carpeta de salida"),
+            Description = T(LocalizationKeys.VideoOutputChooseFolder),
             UseDescriptionForTitle = true,
             SelectedPath = GetInitialOutputDirectory() ?? string.Empty,
         };
@@ -9780,9 +10020,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (RegenerateConversionPlan())
         {
-            AddLog(
-                "Output path reset to automatic suggestion.",
-                "Ruta de salida restablecida a la sugerencia automática.");
+            AddVideoLogResolved(T(LocalizationKeys.VideoLogOutputPathReset));
         }
         else
         {
@@ -9803,9 +10041,9 @@ public sealed class MainWindowViewModel : ObservableObject
 
         if (RegenerateConversionPlan() && logChange)
         {
-            AddLog(
-                $"Output path changed to {outputPath}.",
-                $"Ruta de salida cambiada a {outputPath}.");
+            AddVideoLogResolved(T(
+                LocalizationKeys.VideoLogOutputPathChangedFormat,
+                ("path", outputPath)));
         }
     }
 
@@ -9915,30 +10153,84 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseConversionExecutionPropertiesChanged();
     }
 
-    private static string QualityPresetText(AiQualityPreset value, bool useSpanish) => value switch
+    private string QualityPresetText(AiQualityPreset value) => value switch
     {
-        AiQualityPreset.Fast => useSpanish ? "Rápida" : "Fast",
-        AiQualityPreset.Balanced => useSpanish ? "Equilibrada" : "Balanced",
-        AiQualityPreset.HighQuality => useSpanish ? "Alta calidad" : "High quality",
+        AiQualityPreset.Fast => T(LocalizationKeys.VideoOptionQualityFast),
+        AiQualityPreset.Balanced => T(LocalizationKeys.VideoOptionQualityBalanced),
+        AiQualityPreset.HighQuality => T(LocalizationKeys.VideoOptionQualityHighQuality),
         _ => value.ToString(),
     };
 
-    private static string ThreeDIntensityText(ThreeDIntensity value, bool useSpanish) => value switch
+    private string ThreeDIntensityText(ThreeDIntensity value) => value switch
     {
-        ThreeDIntensity.Low => useSpanish ? "Baja" : "Low",
-        ThreeDIntensity.Medium => useSpanish ? "Media" : "Medium",
-        ThreeDIntensity.High => useSpanish ? "Alta" : "High",
-        ThreeDIntensity.Custom => useSpanish ? "Personalizada" : "Custom",
+        ThreeDIntensity.Low => T(LocalizationKeys.VideoOptionIntensityLow),
+        ThreeDIntensity.Medium => T(LocalizationKeys.VideoOptionIntensityMedium),
+        ThreeDIntensity.High => T(LocalizationKeys.VideoOptionIntensityHigh),
+        ThreeDIntensity.Custom => T(LocalizationKeys.VideoOptionIntensityCustom),
         _ => value.ToString(),
     };
 
-    private static string ThreeDOutputFormatText(ThreeDOutputFormat value, bool useSpanish) => value switch
+    private string ThreeDOutputFormatText(ThreeDOutputFormat value) => value switch
     {
-        ThreeDOutputFormat.HalfTopBottom => useSpanish ? "Medio arriba-abajo" : "Half Top-Bottom",
-        ThreeDOutputFormat.HalfSideBySide => useSpanish ? "Medio lado a lado" : "Half Side-by-Side",
-        ThreeDOutputFormat.FullSideBySide => useSpanish ? "Completo lado a lado" : "Full Side-by-Side",
-        ThreeDOutputFormat.Anaglyph => useSpanish ? "Anaglifo" : "Anaglyph",
+        ThreeDOutputFormat.HalfTopBottom => T(LocalizationKeys.VideoOptionOutputFormatHalfTopBottom),
+        ThreeDOutputFormat.HalfSideBySide => T(LocalizationKeys.VideoOptionOutputFormatHalfSideBySide),
+        ThreeDOutputFormat.FullSideBySide => T(LocalizationKeys.VideoOptionOutputFormatFullSideBySide),
+        ThreeDOutputFormat.Anaglyph => T(LocalizationKeys.VideoOptionOutputFormatAnaglyph),
         _ => value.ToString(),
+    };
+
+    private string TargetPresetName(TargetDevicePreset preset) => preset.Id switch
+    {
+        "recommended-3d-tv" => T(LocalizationKeys.VideoOptionOutputProfileRecommended),
+        "maximum-compatibility" => T(LocalizationKeys.VideoOptionOutputProfileMaximumCompatibility),
+        "high-quality-master" => T(LocalizationKeys.VideoOptionOutputProfileHighQualityMaster),
+        "legacy-lg-3d-tv-2012" => T(LocalizationKeys.VideoOptionOutputProfileLegacyLg2012),
+        _ => preset.Name,
+    };
+
+    private string TargetPresetDescription(TargetDevicePreset preset) => preset.Id switch
+    {
+        "recommended-3d-tv" => T(LocalizationKeys.VideoProfileDescriptionRecommended),
+        "maximum-compatibility" => T(LocalizationKeys.VideoProfileDescriptionMaximumCompatibility),
+        "high-quality-master" => T(LocalizationKeys.VideoProfileDescriptionHighQualityMaster),
+        "legacy-lg-3d-tv-2012" => T(LocalizationKeys.VideoProfileDescriptionLegacyLg2012),
+        _ => preset.Description,
+    };
+
+    private string TargetPresetBestFor(TargetDevicePreset preset) => preset.Id switch
+    {
+        "recommended-3d-tv" => T(LocalizationKeys.VideoProfileBestForRecommended),
+        "maximum-compatibility" => T(LocalizationKeys.VideoProfileBestForMaximumCompatibility),
+        "high-quality-master" => T(LocalizationKeys.VideoProfileBestForHighQualityMaster),
+        "legacy-lg-3d-tv-2012" => T(LocalizationKeys.VideoProfileBestForLegacyLg2012),
+        _ => preset.BestFor,
+    };
+
+    private string TargetPresetCompatibilityNote(TargetDevicePreset preset) => preset.Id switch
+    {
+        "recommended-3d-tv" => T(LocalizationKeys.VideoProfileCompatibilityRecommended),
+        "maximum-compatibility" => T(LocalizationKeys.VideoProfileCompatibilityMaximumCompatibility),
+        "high-quality-master" => T(LocalizationKeys.VideoProfileCompatibilityHighQualityMaster),
+        "legacy-lg-3d-tv-2012" => T(LocalizationKeys.VideoProfileCompatibilityLegacyLg2012),
+        _ => preset.CompatibilityNote,
+    };
+
+    private string TargetPresetPlaybackTitle(TargetDevicePreset preset) => preset.Id switch
+    {
+        "recommended-3d-tv" => T(LocalizationKeys.VideoProfilePlaybackTitleRecommended),
+        "maximum-compatibility" => T(LocalizationKeys.VideoProfilePlaybackTitleMaximumCompatibility),
+        "high-quality-master" => T(LocalizationKeys.VideoProfilePlaybackTitleHighQualityMaster),
+        "legacy-lg-3d-tv-2012" => T(LocalizationKeys.VideoProfilePlaybackTitleLegacyLg2012),
+        _ => preset.PlaybackTitle,
+    };
+
+    private string TargetPresetPlaybackInstructions(TargetDevicePreset preset) => preset.Id switch
+    {
+        "recommended-3d-tv" => T(LocalizationKeys.VideoProfilePlaybackInstructionsRecommended),
+        "maximum-compatibility" => T(LocalizationKeys.VideoProfilePlaybackInstructionsMaximumCompatibility),
+        "high-quality-master" => T(LocalizationKeys.VideoProfilePlaybackInstructionsHighQualityMaster),
+        "legacy-lg-3d-tv-2012" => T(LocalizationKeys.VideoProfilePlaybackInstructionsLegacyLg2012),
+        _ => preset.PlaybackInstructions,
     };
 
     private static string GetSpanishModelDisplayName(LocalModelPlanSelection selectedModel) =>
@@ -9959,10 +10251,165 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    private string Text(string english, string spanish) => IsSpanish ? spanish : english;
+    private static ILocalizationService CreateLocalizationService() =>
+        JsonLocalizationService.LoadFromDirectory(
+            Path.Combine(AppContext.BaseDirectory, "Localization"),
+            LocalizationCatalog.EnglishLanguageCode);
 
-    private string LabelValue(string englishLabel, string spanishLabel, string? value) =>
-        $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
+    private static IReadOnlyList<AppLanguageOptionViewModel> CreateLanguageOptions(
+        IReadOnlyList<LocalizationLanguageMetadata> languages)
+    {
+        var options = languages
+            .Select(AppLanguageOptionViewModel.FromMetadata)
+            .ToArray();
+
+        return options.Length > 0
+            ? options
+            : [new AppLanguageOptionViewModel(
+                LocalizationCatalog.EnglishLanguageCode,
+                "English",
+                "English",
+                "en")];
+    }
+
+    private string GetSelectedLanguageLogDisplayName(string languageCode) =>
+        LanguageOptions.FirstOrDefault(language =>
+            string.Equals(language.Code, languageCode, StringComparison.OrdinalIgnoreCase))?.Label ??
+        languageCode;
+
+    private string GetSelectedThemeLogDisplayName(string theme) =>
+        theme switch
+        {
+            "Dark" => T(LocalizationKeys.SettingsThemeDark),
+            "Light" => T(LocalizationKeys.SettingsThemeLight),
+            _ => theme,
+        };
+
+    private IReadOnlyList<LocalizedOptionViewModel<string>> CreateLocalizedStringOptions(
+        IEnumerable<(string Value, string Key)> options) =>
+        options
+            .Select(option => new LocalizedOptionViewModel<string>(
+                option.Value,
+                option.Key,
+                _localizationService))
+            .ToArray();
+
+    private string T(string key) => _localizationService.GetString(key);
+
+    private string T(
+        string key,
+        params (string Key, object? Value)[] placeholders) =>
+        ApplyPlaceholders(T(key), placeholders);
+
+    private string LocalizeCore(
+        string key,
+        params (string Key, object? Value)[] placeholders) =>
+        T(key, placeholders);
+
+    private static string ApplyPlaceholders(
+        string format,
+        params (string Key, object? Value)[] placeholders)
+    {
+        var result = format;
+        foreach (var placeholder in placeholders)
+        {
+            result = result.Replace(
+                "{" + placeholder.Key + "}",
+                Convert.ToString(placeholder.Value, CultureInfo.CurrentCulture) ?? string.Empty,
+                StringComparison.Ordinal);
+        }
+
+        return result;
+    }
+
+    private string LabelValue(string labelKey, string? value) =>
+        $"{T(labelKey)}: {value ?? "-"}";
+
+    private static bool TrySplitAfterPrefix(string value, string prefix, out string result)
+    {
+        if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            result = value[prefix.Length..].Trim();
+            return true;
+        }
+
+        result = string.Empty;
+        return false;
+    }
+
+    private static bool TryExtractAfter(string value, string marker, out string result)
+    {
+        var markerIndex = value.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex >= 0)
+        {
+            result = value[(markerIndex + marker.Length)..].Trim();
+            return true;
+        }
+
+        result = string.Empty;
+        return false;
+    }
+
+    private static bool TryBetween(string value, string start, string end, out string result)
+    {
+        var startIndex = value.IndexOf(start, StringComparison.OrdinalIgnoreCase);
+        if (startIndex < 0)
+        {
+            result = string.Empty;
+            return false;
+        }
+
+        var valueStart = startIndex + start.Length;
+        var endIndex = value.IndexOf(end, valueStart, StringComparison.OrdinalIgnoreCase);
+        if (endIndex < 0)
+        {
+            result = string.Empty;
+            return false;
+        }
+
+        result = value[valueStart..endIndex].Trim();
+        return true;
+    }
+
+    private static bool TrySplitPrefixedLabelPath(
+        string value,
+        string prefix,
+        out string label,
+        out string path)
+    {
+        label = string.Empty;
+        path = string.Empty;
+        if (!TrySplitAfterPrefix(value, prefix, out var remainder))
+        {
+            return false;
+        }
+
+        var separatorIndex = remainder.IndexOf(": ", StringComparison.Ordinal);
+        if (separatorIndex < 0)
+        {
+            return false;
+        }
+
+        label = remainder[..separatorIndex].Trim();
+        path = remainder[(separatorIndex + 2)..].Trim();
+        return label.Length > 0 && path.Length > 0;
+    }
+
+    private static string GetOptionDisplayName(
+        IEnumerable<LocalizedOptionViewModel<string>> options,
+        string value) =>
+        options.FirstOrDefault(option => string.Equals(
+            option.Value,
+            value,
+            StringComparison.Ordinal))?.DisplayName ?? value;
+
+    private LocalizedOptionViewModel<SettingsSection> CreateSettingsSectionOption(
+        SettingsSection section,
+        string key)
+    {
+        var label = T(key);
+        return new LocalizedOptionViewModel<SettingsSection>(section, label, label);
+    }
 
     private void AddLog(string englishMessage, string spanishMessage)
     {
@@ -9977,6 +10424,12 @@ public sealed class MainWindowViewModel : ObservableObject
             ActivityLogModalText = CreateFullActivityLogText();
         }
     }
+
+    private void AddLogResolved(string message) =>
+        AddLog(message, message);
+
+    private void AddVideoLogResolved(string message) =>
+        AddLogResolved(message);
 
     private void AddImageLog(string englishMessage, string spanishMessage)
     {
@@ -9994,15 +10447,18 @@ public sealed class MainWindowViewModel : ObservableObject
         ClearImageLogCommand.RaiseCanExecuteChanged();
     }
 
+    private void AddImageLogResolved(string message) =>
+        AddImageLog(message, message);
+
     private void LoadPerformanceHistory()
     {
         var result = _performanceHistoryStore.Load();
         _performanceHistory = result.Records;
         if (!string.IsNullOrWhiteSpace(result.Warning))
         {
-            AddLog(
-                result.Warning,
-                $"El historial de rendimiento no se pudo cargar y se ignorara: {result.Warning}");
+            AddVideoLogResolved(T(
+                LocalizationKeys.DiagnosticsPerformanceHistoryLoadWarningFormat,
+                ("warning", result.Warning)));
         }
     }
 
@@ -10038,9 +10494,9 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (!string.IsNullOrWhiteSpace(saveResult.Warning))
             {
-                AddLog(
-                    saveResult.Warning,
-                    $"El historial de rendimiento no se pudo guardar: {saveResult.Warning}");
+                AddVideoLogResolved(T(
+                    LocalizationKeys.DiagnosticsPerformanceHistorySaveWarningFormat,
+                    ("warning", saveResult.Warning)));
             }
 
             return;
@@ -10088,12 +10544,14 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ShowLogCopySuccessNotification()
     {
-        ShowLogCopyNotification("Log copied", "Log copiado");
+        var message = T(LocalizationKeys.CommonLogCopied);
+        ShowLogCopyNotification(message, message);
     }
 
     private void ShowLogCopyFailureNotification()
     {
-        ShowLogCopyNotification("Could not copy log", "No se pudo copiar el log");
+        var message = T(LocalizationKeys.CommonCouldNotCopyLog);
+        ShowLogCopyNotification(message, message);
     }
 
     private void ShowLogCopyNotification(string englishText, string spanishText)
@@ -10191,7 +10649,7 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        AppendPreviewLogLine(Text(log.EnglishMessage, log.SpanishMessage));
+        AppendPreviewLogLine(LocalizeConversionExecutionLog(log));
         if (string.Equals(
                 log.EnglishMessage,
                 Iw3RuntimeDownloadDetector.EnglishWarning,
@@ -10211,9 +10669,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         _hasLoggedPreviewOfflineDependencyWarning = true;
-        AppendPreviewLogLine(Text(
-            Iw3RuntimeDownloadDetector.EnglishWarning,
-            Iw3RuntimeDownloadDetector.SpanishWarning));
+        AppendPreviewLogLine(T(LocalizationKeys.VideoLogRuntimeDownloadWarning));
     }
 
     private static bool IsRuntimeDownloadWarning(
@@ -10253,12 +10709,15 @@ public sealed class MainWindowViewModel : ObservableObject
         return true;
     }
 
-    private void RecordRecoverablePreviewWarning(string operation, Exception exception)
+    private void RecordRecoverablePreviewWarning(string operationKey, Exception exception)
     {
+        var operation = T(operationKey);
         var errorLogPath = AppErrorLogService.LogRecoverableException(operation, exception);
-        AddLog(
-            $"{operation} warning. Details were written to {errorLogPath}. {exception.Message}",
-            $"Advertencia de {operation}. Los detalles se escribieron en {errorLogPath}. {exception.Message}");
+        AddVideoLogResolved(T(
+            LocalizationKeys.DiagnosticsOperationWarningFormat,
+            ("operation", operation),
+            ("path", errorLogPath),
+            ("message", exception.Message)));
     }
 
     private string CreateFullActivityLogText() =>
@@ -10324,6 +10783,51 @@ public sealed class MainWindowViewModel : ObservableObject
         }
 
         foreach (var option in _allStereoOutputFormatOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _parallaxDepthIntensityOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _parallaxMotionDirectionOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _parallaxZoomAmplitudeOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _parallaxDurationOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _parallaxSmoothingOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _parallaxLayerBehaviorOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _stereoEyeSeparationOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _stereoConvergenceOptions)
+        {
+            option.SetLanguage(IsSpanish);
+        }
+
+        foreach (var option in _stereoAnaglyphModeOptions)
         {
             option.SetLanguage(IsSpanish);
         }
@@ -10675,6 +11179,9 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(ImageGeneratedFilesTitleText));
         OnPropertyChanged(nameof(ImageOutputPanelTitleText));
         OnPropertyChanged(nameof(ImageComparisonTitleText));
+        OnPropertyChanged(nameof(ImageMp41080pBadgeText));
+        OnPropertyChanged(nameof(ImageLoopFriendlyMotionBadgeText));
+        OnPropertyChanged(nameof(ImageProjectMetadataBadgeText));
         OnPropertyChanged(nameof(ImageModeSourceStepTitleText));
         OnPropertyChanged(nameof(ImageSetupStepTitleText));
         OnPropertyChanged(nameof(ImagePreviewExportStepTitleText));
@@ -10782,6 +11289,8 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseModelHelpPropertiesChanged();
         OnPropertyChanged(nameof(ActivityLogTitle));
         OnPropertyChanged(nameof(ViewLogText));
+        OnPropertyChanged(nameof(CommonCopyText));
+        OnPropertyChanged(nameof(CommonSelectAllText));
         OnPropertyChanged(nameof(CopyFullLogText));
         OnPropertyChanged(nameof(CopyPreviewLogText));
         OnPropertyChanged(nameof(LogCopiedText));
@@ -10867,9 +11376,6 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(RecommendedNotesText));
         RaisePreflightEstimatePropertiesChanged();
     }
-
-    private string RecommendationLabelValue(string englishLabel, string spanishLabel, string? value) =>
-        $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
 
     private void RaisePlanOptionSelectionPropertiesChanged()
     {
@@ -11513,49 +12019,32 @@ public sealed class MainWindowViewModel : ObservableObject
         StartConversionCommand.RaiseCanExecuteChanged();
     }
 
-    private string ConversionPlanLabelValue(string englishLabel, string spanishLabel, string? value) =>
-        $"{Text(englishLabel, spanishLabel)}: {value ?? "-"}";
-
     private void LogAnalysisFailure(VideoAnalysisFailure? failure)
     {
         switch (failure?.Kind)
         {
             case VideoAnalysisFailureKind.MissingFfprobe:
-                AddLog(
-                    "Bundled FFprobe is not available yet. Add " +
-                    "tools/ffmpeg/win-x64/ffprobe.exe to enable video analysis.",
-                    "FFprobe incluido aún no está disponible. Agrega " +
-                    "tools/ffmpeg/win-x64/ffprobe.exe para habilitar el análisis de video.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoErrorAnalysisMissingFfprobe));
                 break;
             case VideoAnalysisFailureKind.ProcessFailed:
-                AddLog(
-                    $"FFprobe analysis failed. {failure.StandardError}",
-                    $"El análisis con FFprobe falló. {failure.StandardError}");
+                AddVideoLogResolved(T(
+                    LocalizationKeys.VideoErrorAnalysisProcessFailedFormat,
+                    ("detail", failure.StandardError)));
                 break;
             case VideoAnalysisFailureKind.EmptyOutput:
-                AddLog(
-                    "FFprobe returned no analysis data.",
-                    "FFprobe no devolvió datos de análisis.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoErrorAnalysisEmptyOutput));
                 break;
             case VideoAnalysisFailureKind.InvalidJson:
-                AddLog(
-                    "FFprobe returned invalid analysis data.",
-                    "FFprobe devolvió datos de análisis no válidos.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoErrorAnalysisInvalidJson));
                 break;
             case VideoAnalysisFailureKind.TimedOut:
-                AddLog(
-                    "FFprobe analysis timed out.",
-                    "El análisis con FFprobe agotó el tiempo de espera.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoErrorAnalysisTimedOut));
                 break;
             case VideoAnalysisFailureKind.Canceled:
-                AddLog(
-                    "FFprobe analysis was canceled.",
-                    "El análisis con FFprobe fue cancelado.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoErrorAnalysisCanceled));
                 break;
             default:
-                AddLog(
-                    "Video analysis failed.",
-                    "El análisis de video falló.");
+                AddVideoLogResolved(T(LocalizationKeys.VideoErrorAnalysisFailed));
                 break;
         }
     }

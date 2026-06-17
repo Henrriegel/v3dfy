@@ -191,6 +191,16 @@ function Read-JsonFile {
     }
 }
 
+function Get-JsonObjectPropertyNames {
+    param([object]$JsonObject)
+
+    if ($null -eq $JsonObject) {
+        return @()
+    }
+
+    return @($JsonObject.PSObject.Properties | ForEach-Object { $_.Name })
+}
+
 function Test-RequiredFile {
     param(
         [string]$Path,
@@ -204,6 +214,122 @@ function Test-RequiredFile {
 
     Write-Failure "$Description is missing: $Path"
     return $false
+}
+
+function Get-PublishRootFromBundleRoot {
+    param([string]$EngineRoot)
+
+    $engineDirectory = Split-Path -Parent $EngineRoot
+    $publishRoot = Split-Path -Parent $engineDirectory
+    if ([string]::IsNullOrWhiteSpace($engineDirectory) -or
+        [string]::IsNullOrWhiteSpace($publishRoot)) {
+        return $null
+    }
+
+    if ((Split-Path -Leaf $EngineRoot) -ne 'iw3' -or
+        (Split-Path -Leaf $engineDirectory) -ne 'engine') {
+        return $null
+    }
+
+    return $publishRoot
+}
+
+function Test-LocalizationFileShape {
+    param(
+        [object]$Localization,
+        [string]$Description
+    )
+
+    $meta = Get-JsonPropertyValue $Localization 'meta'
+    if ($null -eq $meta) {
+        Write-Failure "$Description metadata is missing."
+        return $false
+    }
+
+    $code = Get-JsonString $meta 'code'
+    if ([string]::IsNullOrWhiteSpace($code)) {
+        Write-Failure "$Description meta.code is missing."
+        return $false
+    }
+
+    $strings = Get-JsonPropertyValue $Localization 'strings'
+    if ($null -eq $strings -or $strings -is [System.Array]) {
+        Write-Failure "$Description strings object is missing or invalid."
+        return $false
+    }
+
+    $keys = Get-JsonObjectPropertyNames $strings
+    if ($keys.Count -eq 0) {
+        Write-Failure "$Description strings object is empty."
+        return $false
+    }
+
+    Write-Check OK "$Description metadata and string table are valid: $code ($($keys.Count) key(s))"
+    return $true
+}
+
+function Test-LocalizationFiles {
+    param([string]$PublishRoot)
+
+    $localizationRoot = Join-Path $PublishRoot 'Localization'
+    if (-not (Test-Path -LiteralPath $localizationRoot -PathType Container)) {
+        Write-Failure "Localization directory is missing from published app output: $localizationRoot"
+        return
+    }
+
+    $englishPath = Join-Path $localizationRoot 'en.json'
+    $spanishPath = Join-Path $localizationRoot 'es.json'
+    if (-not (Test-RequiredFile $englishPath 'Localization\en.json')) {
+        return
+    }
+
+    if (-not (Test-RequiredFile $spanishPath 'Localization\es.json')) {
+        return
+    }
+
+    $english = Read-JsonFile $englishPath 'Localization\en.json'
+    $spanish = Read-JsonFile $spanishPath 'Localization\es.json'
+    if ($null -eq $english -or $null -eq $spanish) {
+        return
+    }
+
+    if (-not (Test-LocalizationFileShape $english 'Localization\en.json') -or
+        -not (Test-LocalizationFileShape $spanish 'Localization\es.json')) {
+        return
+    }
+
+    $englishKeys = Get-JsonObjectPropertyNames (Get-JsonPropertyValue $english 'strings')
+    $spanishKeys = Get-JsonObjectPropertyNames (Get-JsonPropertyValue $spanish 'strings')
+    $missingInSpanish = @($englishKeys | Where-Object { $_ -notin $spanishKeys })
+    $missingInEnglish = @($spanishKeys | Where-Object { $_ -notin $englishKeys })
+    if ($missingInSpanish.Count -gt 0) {
+        Write-Failure "Localization\es.json is missing key(s): $($missingInSpanish -join ', ')"
+    }
+
+    if ($missingInEnglish.Count -gt 0) {
+        Write-Failure "Localization\en.json is missing key(s): $($missingInEnglish -join ', ')"
+    }
+
+    if ($missingInSpanish.Count -eq 0 -and $missingInEnglish.Count -eq 0) {
+        Write-Check OK "Localization en/es key sets match: $($englishKeys.Count) key(s)"
+    }
+
+    $allLocalizationFiles = @(Get-ChildItem -LiteralPath $localizationRoot -Filter '*.json' -File)
+    foreach ($file in $allLocalizationFiles) {
+        $catalog = Read-JsonFile $file.FullName "Localization\$($file.Name)"
+        if ($null -eq $catalog) {
+            continue
+        }
+
+        Test-LocalizationFileShape $catalog "Localization\$($file.Name)" | Out-Null
+        $meta = Get-JsonPropertyValue $catalog 'meta'
+        $fallback = Get-JsonString $meta 'fallback'
+        if ($file.Name -ne 'en.json' -and [string]::IsNullOrWhiteSpace($fallback)) {
+            Write-WarningOrFailure `
+                -Fail:$false `
+                -Message "Localization\$($file.Name) does not declare a fallback language."
+        }
+    }
 }
 
 function Test-EngineManifest {
@@ -384,6 +510,14 @@ else {
     Test-ModelsDirectory $bundlePath
     Test-Iw3RuntimeDependencies $bundlePath
     Test-CliCapabilities $bundlePath
+}
+
+$publishRoot = Get-PublishRootFromBundleRoot $bundlePath
+if ($null -eq $publishRoot -or -not (Test-Path -LiteralPath (Join-Path $publishRoot 'V3dfy.App.exe') -PathType Leaf)) {
+    Write-Check WARN 'Localization publish validation skipped because BundleRoot is not inside a published app layout.'
+}
+else {
+    Test-LocalizationFiles $publishRoot
 }
 
 if ($script:failureCount -gt 0) {

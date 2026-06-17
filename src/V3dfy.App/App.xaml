@@ -15,6 +15,15 @@
         <SolidColorBrush x:Key="DestructiveHoverBrush" Color="#B91C1C" />
         <SolidColorBrush x:Key="DestructivePressedBrush" Color="#991B1B" />
         <SolidColorBrush x:Key="ButtonForegroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="SecondaryButtonBackgroundBrush" Color="#00FFFFFF" />
+        <SolidColorBrush x:Key="SecondaryButtonBorderBrush" Color="#2B3A4B" />
+        <SolidColorBrush x:Key="SecondaryButtonForegroundBrush" Color="#F4F7FA" />
+        <SolidColorBrush x:Key="SecondaryButtonHoverBackgroundBrush" Color="#3385D6" />
+        <SolidColorBrush x:Key="SecondaryButtonHoverBorderBrush" Color="#3385D6" />
+        <SolidColorBrush x:Key="SecondaryButtonHoverForegroundBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="SecondaryButtonPressedBackgroundBrush" Color="#286BAE" />
+        <SolidColorBrush x:Key="SecondaryButtonPressedBorderBrush" Color="#286BAE" />
+        <SolidColorBrush x:Key="SecondaryButtonPressedForegroundBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="DisabledBackgroundBrush" Color="#344150" />
         <SolidColorBrush x:Key="DisabledTextBrush" Color="#8794A3" />
         <SolidColorBrush x:Key="InputBackgroundBrush" Color="#111922" />
@@ -184,22 +193,42 @@
                                               Content="{TemplateBinding Content}"
                                               RecognizesAccessKey="True"
                                               TextElement.FontWeight="{TemplateBinding FontWeight}"
-                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                                              TextElement.Foreground="{TemplateBinding Foreground}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground"
+                                                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ButtonBorder"
                                         Property="Background"
                                         Value="{DynamicResource AccentHoverBrush}" />
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource AccentHoverBrush}" />
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource ButtonForegroundBrush}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="ButtonBorder"
                                         Property="Background"
                                         Value="{DynamicResource AccentPressedBrush}" />
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource AccentPressedBrush}" />
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource ButtonForegroundBrush}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="ButtonBorder"
                                         Property="Background"
+                                        Value="{DynamicResource DisabledBackgroundBrush}" />
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
                                         Value="{DynamicResource DisabledBackgroundBrush}" />
                                 <Setter Property="Foreground"
                                         Value="{DynamicResource DisabledTextBrush}" />
@@ -212,11 +241,69 @@
         <Style x:Key="SecondaryButtonStyle"
                BasedOn="{StaticResource {x:Type Button}}"
                TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryButtonBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryButtonForegroundBrush}" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinWidth" Value="72" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"
+                                              RecognizesAccessKey="True"
+                                              TextElement.FontWeight="{TemplateBinding FontWeight}"
+                                              TextElement.Foreground="{TemplateBinding Foreground}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground"
+                                                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="{DynamicResource SecondaryButtonHoverBackgroundBrush}" />
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource SecondaryButtonHoverBorderBrush}" />
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource SecondaryButtonHoverForegroundBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="{DynamicResource SecondaryButtonPressedBackgroundBrush}" />
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource SecondaryButtonPressedBorderBrush}" />
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource SecondaryButtonPressedForegroundBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="{DynamicResource DisabledBackgroundBrush}" />
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource DisabledBackgroundBrush}" />
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource DisabledTextBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="DestructiveButtonStyle"
                BasedOn="{StaticResource {x:Type Button}}"
@@ -240,7 +327,14 @@
                                               Content="{TemplateBinding Content}"
                                               RecognizesAccessKey="True"
                                               TextElement.FontWeight="{TemplateBinding FontWeight}"
-                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                                              TextElement.Foreground="{TemplateBinding Foreground}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground"
+                                                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -277,6 +371,7 @@
         <Style x:Key="PrimaryCtaButtonStyle"
                BasedOn="{StaticResource {x:Type Button}}"
                TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundBrush}" />
             <Setter Property="MinHeight" Value="44" />
             <Setter Property="Padding" Value="16,11" />
             <Setter Property="FontSize" Value="15" />
@@ -287,8 +382,8 @@
             <Setter Property="Height" Value="34" />
             <Setter Property="MinWidth" Value="36" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryButtonBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="Cursor" Value="Hand" />
@@ -308,7 +403,14 @@
                                               Content="{TemplateBinding Content}"
                                               TextElement.FontFamily="{TemplateBinding FontFamily}"
                                               TextElement.FontSize="{TemplateBinding FontSize}"
-                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                                              TextElement.Foreground="{TemplateBinding Foreground}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground"
+                                                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -354,8 +456,8 @@
             <Setter Property="Height" Value="34" />
             <Setter Property="MinWidth" Value="36" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource SecondaryButtonBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SecondaryButtonBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="Cursor" Value="Hand" />
@@ -375,7 +477,14 @@
                                               Content="{TemplateBinding Content}"
                                               TextElement.FontFamily="{TemplateBinding FontFamily}"
                                               TextElement.FontSize="{TemplateBinding FontSize}"
-                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                                              TextElement.Foreground="{TemplateBinding Foreground}">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground"
+                                                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">

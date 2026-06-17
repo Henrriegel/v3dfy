@@ -68,8 +68,8 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.Contains("IsImageSetupValid", canExport);
         Assert.Contains("ImageStereoExportReadinessCanExport", canExport);
         Assert.Contains("CreateImageStereoExportReadinessText()", source);
-        Assert.Contains("Text(firstIssue.EnglishMessage, firstIssue.SpanishMessage)", source);
-        Assert.Contains("Prepare image conversion before converting.", source);
+        Assert.Contains("LocalizeImageExportReadinessIssue(firstIssue.EnglishMessage)", source);
+        Assert.Contains("LocalizationKeys.ImageReadinessNotPrepared", source);
     }
 
     [Fact]
@@ -189,10 +189,9 @@ public sealed class MainWindowImageStereoExportSourceTests
 
         Assert.Contains("public string ImageConvertActionText => IsImageExportRunning", source);
         Assert.Contains("public string ImageStereoExportActionText => ImageConvertActionText", source);
-        Assert.Contains("? Text(\"Converting...\", \"Convirtiendo...\")", source);
-        Assert.Contains(": Text(\"Convert\", \"Convertir\")", source);
-        Assert.Contains("public string ImageExportOverlayText => Text(\"Converting...\", \"Convirtiendo...\")", source);
-        Assert.Contains("? Text(\"Converting...\", \"Convirtiendo...\")", source);
+        Assert.Contains("? T(LocalizationKeys.ImageProgressConverting)", source);
+        Assert.Contains(": T(LocalizationKeys.CommonConvert)", source);
+        Assert.Contains("public string ImageExportOverlayText => T(LocalizationKeys.ImageProgressConverting);", source);
         Assert.DoesNotContain("Export with bundled iw3", source);
         Assert.DoesNotContain("Exporting...\", \"Exportando...", source);
         Assert.DoesNotContain("Export completed:", source);
@@ -212,14 +211,15 @@ public sealed class MainWindowImageStereoExportSourceTests
             "private void ApplyImageExportProgress",
             "private void OpenImageOutputFolder()");
 
-        Assert.Contains("public string ImageExportOverlayText => Text(\"Converting...\"", source);
+        Assert.Contains("public string ImageExportOverlayText => T(LocalizationKeys.ImageProgressConverting);", source);
         Assert.Contains("public string ImageExportStatusText => IsImageExportRunning", source);
-        Assert.Contains("Text(\"Converting...\"", source);
+        Assert.Contains("T(LocalizationKeys.ImageProgressConverting)", source);
         Assert.Contains("Text=\"{Binding ImageExportOverlayText}\"", stereoResult);
         Assert.DoesNotContain("Text=\"{Binding ImageExportProgressText}\"", stereoResult);
         Assert.DoesNotContain("CommandPreview", stereoResult);
         Assert.DoesNotContain("iw3 command:", stereoResult);
-        Assert.Contains("AddImageLog(progress.EnglishMessage, progress.SpanishMessage);", progressMethod);
+        Assert.Contains("LocalizeImageStereoExportProgress(progress)", progressMethod);
+        Assert.DoesNotContain("AddImageLog(progress.EnglishMessage, progress.SpanishMessage);", progressMethod);
     }
 
     [Fact]
@@ -237,15 +237,15 @@ public sealed class MainWindowImageStereoExportSourceTests
 
         Assert.Contains("GetDefaultImageExportDirectory(SelectedImagePath)", exportMethod);
         Assert.Contains("CreateImageStereoExportRequest(outputDirectory)", exportMethod);
-        Assert.Contains("Bundled iw3 image stereo export started.", exportMethod);
-        Assert.Contains("Selected model:", exportMethod);
-        Assert.Contains("iw3 depth model:", exportMethod);
-        Assert.Contains("Output path:", exportMethod);
-        Assert.Contains("Bundled Python:", exportMethod);
-        Assert.Contains("Bundled iw3 package:", exportMethod);
-        Assert.Contains("iw3 process exit code:", exportMethod);
-        Assert.Contains("Generated image file:", exportMethod);
-        Assert.Contains("Technical detail:", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogStereoStarted", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogSelectedModelFormat", exportMethod);
+        Assert.Contains("iw3Model", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogOutputPathFormat", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogBundledPythonFormat", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogBundledIw3PackageFormat", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogProcessExitCodeFormat", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogGeneratedImageFileFormat", exportMethod);
+        Assert.Contains("LocalizationKeys.ImageLogTechnicalDetailFormat", exportMethod);
         Assert.Contains("return sourceDirectory;", outputDirectoryMethod);
         Assert.DoesNotContain("v3dfy-image-exports", outputDirectoryMethod);
         Assert.DoesNotContain("Directory.CreateDirectory(outputDirectory);", exportMethod);
@@ -283,8 +283,8 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.Contains("MarkImageExportOutputOutdated();", setupChangedMethod);
         Assert.Contains("MarkImageExportOutputOutdated();", selectedModelMethod);
         Assert.Contains("_hasEnteredImagePreviewExportStage = false;", selectedModelMethod);
-        Assert.Contains("Previous image conversion output is outdated", setupChangedMethod);
-        Assert.Contains("Previous image conversion output is outdated", selectedModelMethod);
+        Assert.Contains("LocalizationKeys.ImageLogSetupChangedOutdated", setupChangedMethod);
+        Assert.Contains("LocalizationKeys.ImageLogModelChangedOutdated", selectedModelMethod);
         Assert.DoesNotContain("ResetImageExportState();", localizedRefresh);
     }
 
@@ -305,7 +305,7 @@ public sealed class MainWindowImageStereoExportSourceTests
             "private void StartNewImageConversion()",
             "private void ResetImageExportState()");
 
-        Assert.Contains("public string AnalyzeImageText => Text(\"Reanalyze image\"", source);
+        Assert.Contains("public string AnalyzeImageText => T(LocalizationKeys.ImageSourceReanalyzeButton);", source);
         Assert.Contains("AnalyzeImageCommand = new RelayCommand(AnalyzeImage, () => CanAnalyzeImage);", source);
         Assert.Contains("AnalyzeImage();", selectImageMethod);
         Assert.DoesNotContain("Analyze image to read metadata", selectImageMethod);
@@ -363,11 +363,11 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.Contains("IsImageExportRunning || HasCurrentImageConversionOutput ? Visibility.Collapsed : Visibility.Visible", visibilityProperties);
         Assert.Contains("!IsImageExportRunning && HasCurrentImageConversionOutput", visibilityProperties);
         Assert.Contains("IsImageExportOutputOutdated", visibilityProperties);
-        Assert.Contains("Configuration changed. Convert again.", source);
+        Assert.Contains("LocalizationKeys.ImageOutputOutdated", source);
         Assert.Contains("_isImageExportOutputOutdated = false;", resetState);
         Assert.Contains("MarkImageExportOutputOutdated", resetState);
         Assert.Contains("return ImageExportOutdatedText;", statusMethod);
-        Assert.Contains("Conversion completed:", statusMethod);
+        Assert.Contains("LocalizationKeys.ImageOutputCompletedFormat", statusMethod);
         Assert.Contains("SelectedImageConversionStep != ImageConversionStep.ModeAndSource", outputPanelVisibility);
         Assert.Contains("_hasEnteredImagePreviewExportStage", outputPanelVisibility);
         Assert.Contains("HasCurrentImageConversionOutput", outputPanelVisibility);
@@ -425,7 +425,8 @@ public sealed class MainWindowImageStereoExportSourceTests
         Assert.Contains("SelectedItem=\"{Binding SelectedStereoOutputFormatOption,", stereoSetup);
         Assert.DoesNotContain("SelectedValue=\"{Binding SelectedStereoOutputFormat}\"", stereoSetup);
         Assert.Contains("ItemsSource=\"{Binding StereoAnaglyphModeOptions}\"", stereoSetup);
-        Assert.Contains("SelectedItem=\"{Binding SelectedStereoAnaglyphMode}\"", stereoSetup);
+        Assert.Contains("SelectedValuePath=\"Value\"", stereoSetup);
+        Assert.Contains("SelectedValue=\"{Binding SelectedStereoAnaglyphMode}\"", stereoSetup);
         Assert.Contains("Visibility=\"{Binding ImageStereoAnaglyphModeVisibility}\"", wideControls);
         Assert.Contains("Visibility=\"{Binding ImageStereoAnaglyphModeVisibility}\"", narrowControls);
         Assert.Contains("public bool IsAnaglyphOutputSelected", source);
@@ -463,11 +464,12 @@ public sealed class MainWindowImageStereoExportSourceTests
             "private void SetImageSetupString(");
 
         Assert.Contains("private const string SupportedStereoAnaglyphMode = \"Red/Cyan\";", source);
-        Assert.Contains("public IReadOnlyList<string> StereoAnaglyphModeOptions { get; } = [SupportedStereoAnaglyphMode];", optionsRange);
+        Assert.Contains("public IReadOnlyList<LocalizedOptionViewModel<string>> StereoAnaglyphModeOptions", optionsRange);
+        Assert.Contains("(SupportedStereoAnaglyphMode, LocalizationKeys.ImageStereoAnaglyphModeRedCyan)", source);
         Assert.DoesNotContain("\"Green/Magenta\"", optionsRange);
         Assert.DoesNotContain("\"Amber/Blue\"", optionsRange);
         Assert.Contains("NormalizeStereoAnaglyphMode(value)", anaglyphSetter);
-        Assert.Contains("Anaglyph mode changed:", anaglyphSetter);
+        Assert.Contains("LocalizationKeys.ImageLogAnaglyphModeChangedFormat", anaglyphSetter);
         Assert.Contains("ApplyImageSetupChanged(", anaglyphSetter);
         Assert.Contains("NormalizeSelectedStereoAnaglyphMode();", source);
         Assert.Contains("AnaglyphMode: NormalizeStereoAnaglyphMode(SelectedStereoAnaglyphMode)", createRequest);
@@ -479,10 +481,10 @@ public sealed class MainWindowImageStereoExportSourceTests
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
 
-        Assert.Contains("Prepare image conversion", source);
-        Assert.Contains("Image conversion prepared.", source);
-        Assert.Contains("Prepare conversion in Step 3", source);
-        Assert.Contains("Prepare conversion again.", source);
+        Assert.Contains("LocalizationKeys.ImageActionPrepareConversion", source);
+        Assert.Contains("LocalizationKeys.ImageLogPreparedToast", source);
+        Assert.Contains("LocalizationKeys.ImageOutputStatusPrompt", source);
+        Assert.Contains("LocalizationKeys.ImageLogSetupChangedOutdatedPrepareFormat", source);
         Assert.DoesNotContain("Prepare image preview/export plan", source);
         Assert.DoesNotContain("Image preview/export plan prepared", source);
         Assert.DoesNotContain("preview/export plan", source);

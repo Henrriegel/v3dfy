@@ -16,9 +16,9 @@ public sealed class MainWindowImageConversionParitySourceTests
             "AutomationProperties.AutomationId=\"ImageSourceSelectionPanel\"",
             "AutomationProperties.AutomationId=\"ImageMetadataPanel\"");
 
-        Assert.Contains("public string ImageSourceAnalysisTitleText => Text(\"Source image\"", source);
-        Assert.Contains("Drop one image file here or browse for a file.", source);
-        Assert.Contains("\".jpg, .jpeg, .png, .bmp, .tif, .tiff, .webp\"", source);
+        Assert.Contains("public string ImageSourceAnalysisTitleText => T(LocalizationKeys.ImageSourceTitle);", source);
+        Assert.Contains("public string DropImageText => T(LocalizationKeys.ImageSourceDrop);", source);
+        Assert.Contains("public string ImageSupportedExtensionsText => T(LocalizationKeys.ImageSourceSupportedExtensions);", source);
         Assert.Contains("Padding=\"16\"", imageSourceCard);
         Assert.Contains("Background=\"{DynamicResource InputBackgroundBrush}\"", imageSourceCard);
         Assert.Contains("BorderBrush=\"{DynamicResource CardBorderBrush}\"", imageSourceCard);
@@ -97,7 +97,7 @@ public sealed class MainWindowImageConversionParitySourceTests
         var constructor = ExtractSourceRange(
             source,
             "public MainWindowViewModel()",
-            "public string AppTitle => \"v3dfy\";");
+            "public string AppTitle =>");
         var setupStep = ExtractSourceRange(
             xaml,
             "AutomationProperties.AutomationId=\"ImageSetupStepContent\"",
@@ -151,7 +151,7 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"ImageNoModeSetupHint\"", setupStep);
         Assert.Contains("Visibility=\"{Binding ImageNoModeSetupHintVisibility}\"", setupStep);
         Assert.Contains("Text=\"{Binding ImageNoModeSetupHintText}\"", setupStep);
-        Assert.Contains("Choose a workflow to configure image setup.", source);
+        Assert.Contains("public string ImageNoModeSetupHintText => T(LocalizationKeys.ImageSetupNoWorkflowHint);", source);
         Assert.Contains("SelectedImageConversionStep == ImageConversionStep.Setup && !HasSelectedImageMode", noModeVisibility);
         Assert.Contains("SelectedImageConversionStep == ImageConversionStep.Setup && IsImageParallaxModeSelected", parallaxVisibility);
         Assert.Contains("SelectedImageConversionStep == ImageConversionStep.Setup && IsImageStereoModeSelected", stereoVisibility);
@@ -210,7 +210,7 @@ public sealed class MainWindowImageConversionParitySourceTests
         var constructor = ExtractSourceRange(
             source,
             "public MainWindowViewModel()",
-            "public string AppTitle => \"v3dfy\";");
+            "public string AppTitle =>");
         var setupStep = ExtractSourceRange(
             xaml,
             "AutomationProperties.AutomationId=\"ImageSetupStepContent\"",
@@ -611,7 +611,8 @@ public sealed class MainWindowImageConversionParitySourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"ImageActivityLogText\"", rightPanel);
         Assert.Contains("Text=\"{Binding ImageActivityLogText, Mode=OneWay}\"", rightPanel);
         Assert.Contains("CreateFullImageActivityLogText()", copyFullLogMethod);
-        Assert.Contains("image activity log", copyFullLogMethod);
+        Assert.Contains("LocalizationKeys.ActivityLogImageName", copyFullLogMethod);
+        AssertLocalizationKeyPairExists("ActivityLog.ImageName");
         Assert.DoesNotContain("Text=\"{Binding SelectedImageFileName}\"", rightPanel);
         Assert.DoesNotContain("Text=\"{Binding ImageMetadataSummaryText}\"", rightPanel);
     }
@@ -721,6 +722,12 @@ public sealed class MainWindowImageConversionParitySourceTests
         }
 
         throw new FileNotFoundException($"Could not locate {Path.Combine(relativeParts)}.");
+    }
+
+    private static void AssertLocalizationKeyPairExists(string key)
+    {
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "en.json"));
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "es.json"));
     }
 
     private static string ExtractSourceRange(string source, string startMarker, string endMarker)

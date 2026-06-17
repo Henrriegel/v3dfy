@@ -1,94 +1,108 @@
+using System.Globalization;
+using V3dfy.Core.Localization;
+
 namespace V3dfy.Core.Processes;
 
 public static class ProcessMetricDisplayFormatter
 {
-    public static ProcessMetricDisplayText Detecting(bool useSpanish) => new(
-        Cpu: useSpanish ? "CPU: Detectando..." : "CPU: Detecting...",
-        Ram: useSpanish ? "RAM: Detectando..." : "RAM: Detecting...",
-        Gpu: useSpanish ? "GPU: Detectando..." : "GPU: Detecting...");
+    public static ProcessMetricDisplayText Detecting(LocalizedTextProvider localize)
+    {
+        ArgumentNullException.ThrowIfNull(localize);
+
+        return new(
+            Cpu: localize(LocalizationKeys.ProcessMetricsCpuDetecting),
+            Ram: localize(LocalizationKeys.ProcessMetricsRamDetecting),
+            Gpu: localize(LocalizationKeys.ProcessMetricsGpuDetecting));
+    }
 
     public static ProcessMetricDisplayText Format(
         ProcessMetricSample metrics,
-        bool useSpanish)
+        LocalizedTextProvider localize)
     {
         ArgumentNullException.ThrowIfNull(metrics);
+        ArgumentNullException.ThrowIfNull(localize);
 
         return new(
-            Cpu: FormatCpu(metrics.CpuUsagePercent, useSpanish),
-            Ram: FormatMemory(metrics.PrivateMemoryBytes ?? metrics.WorkingSetBytes, useSpanish),
-            Gpu: FormatGpu(metrics, useSpanish),
-            Vram: FormatVram(metrics, useSpanish));
+            Cpu: FormatCpu(metrics.CpuUsagePercent, localize),
+            Ram: FormatMemory(metrics.PrivateMemoryBytes ?? metrics.WorkingSetBytes, localize),
+            Gpu: FormatGpu(metrics, localize),
+            Vram: FormatVram(metrics, localize));
     }
 
-    private static string FormatCpu(double? cpuUsagePercent, bool useSpanish) =>
+    private static string FormatCpu(
+        double? cpuUsagePercent,
+        LocalizedTextProvider localize) =>
         cpuUsagePercent is null
-            ? useSpanish ? "CPU: Detectando..." : "CPU: Detecting..."
-            : $"CPU: {cpuUsagePercent.Value:0.0}%";
+            ? localize(LocalizationKeys.ProcessMetricsCpuDetecting)
+            : $"CPU: {FormatPercent(cpuUsagePercent.Value)}%";
 
-    private static string FormatMemory(long? bytes, bool useSpanish) =>
+    private static string FormatMemory(
+        long? bytes,
+        LocalizedTextProvider localize) =>
         bytes is null
-            ? useSpanish ? "RAM: Detectando..." : "RAM: Detecting..."
+            ? localize(LocalizationKeys.ProcessMetricsRamDetecting)
             : $"RAM: {FormatBytes(bytes.Value)}";
 
-    private static string FormatGpu(ProcessMetricSample metrics, bool useSpanish)
+    private static string FormatGpu(
+        ProcessMetricSample metrics,
+        LocalizedTextProvider localize)
     {
         if (metrics.GpuUsagePercent is { } gpuUsagePercent)
         {
-            var scopeSuffix = metrics.GpuScope == ProcessGpuMetricScope.Adapter
-                ? useSpanish ? " global" : " global"
-                : string.Empty;
-            return $"GPU: {gpuUsagePercent:0.0}%{scopeSuffix}";
+            var value = FormatPercent(gpuUsagePercent);
+            return metrics.GpuScope == ProcessGpuMetricScope.Adapter
+                ? localize(LocalizationKeys.ProcessMetricsGpuGlobalFormat, ("value", value))
+                : $"GPU: {value}%";
         }
 
         if (string.IsNullOrWhiteSpace(metrics.GpuStatus))
         {
-            return useSpanish ? "GPU: Detectando..." : "GPU: Detecting...";
+            return localize(LocalizationKeys.ProcessMetricsGpuDetecting);
         }
 
-        return $"GPU: {LocalizeGpuStatus(metrics.GpuStatus, useSpanish)}";
+        return localize(
+            LocalizationKeys.ProcessMetricsGpuUnavailableFormat,
+            ("status", LocalizeGpuStatus(metrics.GpuStatus, localize)));
     }
 
-    private static string FormatVram(ProcessMetricSample metrics, bool useSpanish)
+    private static string FormatVram(
+        ProcessMetricSample metrics,
+        LocalizedTextProvider localize)
     {
         if (metrics.GpuDedicatedMemoryBytes is null)
         {
             return string.Empty;
         }
 
-        var scopeSuffix = metrics.GpuScope == ProcessGpuMetricScope.Adapter
-            ? useSpanish ? " global" : " global"
-            : string.Empty;
+        var value = FormatBytes(metrics.GpuDedicatedMemoryBytes.Value);
 
-        return $"VRAM: {FormatBytes(metrics.GpuDedicatedMemoryBytes.Value)}{scopeSuffix}";
+        return metrics.GpuScope == ProcessGpuMetricScope.Adapter
+            ? localize(LocalizationKeys.ProcessMetricsVramGlobalFormat, ("value", value))
+            : $"VRAM: {value}";
     }
 
-    private static string LocalizeGpuStatus(string status, bool useSpanish)
-    {
-        if (!useSpanish)
+    private static string LocalizeGpuStatus(
+        string status,
+        LocalizedTextProvider localize) =>
+        status switch
         {
-            return status;
-        }
-
-        return status switch
-        {
-            ProcessGpuMetricReading.DetectingStatus => "Detectando...",
+            ProcessGpuMetricReading.DetectingStatus => localize(LocalizationKeys.ProcessMetricsStatusDetecting),
             ProcessGpuMetricReading.NoProcessGpuEngineCounterStatus =>
-                "No se encontro contador GPU Engine para este proceso",
+                localize(LocalizationKeys.ProcessMetricsStatusNoProcessGpuEngineCounter),
             ProcessGpuMetricReading.PermissionUnavailableStatus =>
-                "Permiso no disponible",
+                localize(LocalizationKeys.ProcessMetricsStatusPermissionUnavailable),
             ProcessGpuMetricReading.WindowsMetricsUnavailableStatus =>
-                "Metricas no disponibles en esta version/controlador de Windows",
+                localize(LocalizationKeys.ProcessMetricsStatusWindowsMetricsUnavailable),
             ProcessGpuMetricReading.NvidiaMetricsUnavailableStatus =>
-                "Metricas NVIDIA no disponibles",
+                localize(LocalizationKeys.ProcessMetricsStatusNvidiaMetricsUnavailable),
             ProcessGpuMetricReading.AdapterGpuUsageStatus =>
-                "Uso global del adaptador GPU",
+                localize(LocalizationKeys.ProcessMetricsStatusAdapterGpuUsage),
             ProcessGpuMetricReading.ProcessGpuEngineCounterStatus =>
-                "Uso GPU del proceso",
+                localize(LocalizationKeys.ProcessMetricsStatusProcessGpuEngineCounter),
             ProcessGpuMetricReading.NvidiaAdapterMetricsStatus =>
-                "Metricas globales del adaptador NVIDIA",
+                localize(LocalizationKeys.ProcessMetricsStatusNvidiaAdapterMetrics),
             _ => status,
         };
-    }
 
     private static string FormatBytes(long bytes)
     {
@@ -99,4 +113,7 @@ public static class ProcessMetricDisplayFormatter
             ? $"{bytes / gibibyte:0.00} GB"
             : $"{bytes / mebibyte:0.0} MB";
     }
+
+    private static string FormatPercent(double value) =>
+        value.ToString("0.0", CultureInfo.InvariantCulture);
 }

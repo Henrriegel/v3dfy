@@ -113,11 +113,11 @@ public sealed class MainWindowModelSelectionUiSourceTests
 
         Assert.Contains("public sealed record SelectableModelInventoryRow(", source);
         Assert.Contains("public IReadOnlyList<SelectableModelInventoryRow> SelectableModelInventoryRows", source);
-        Assert.Contains("public string SelectableModelNameHeaderText => Text(\"Model\", \"Modelo\")", source);
-        Assert.Contains("public string SelectableModelIw3HeaderText => Text(\"iw3 depth model\", \"Modelo iw3\")", source);
-        Assert.Contains("public string SelectableModelCheckpointHeaderText => Text(\"Checkpoint\", \"Checkpoint\")", source);
-        Assert.Contains("public string SelectableModelTypeHeaderText => Text(\"Type\", \"Tipo\")", source);
-        Assert.Contains("public string SelectableModelSourceHeaderText => Text(\"Source\", \"Origen\")", source);
+        Assert.Contains("public string SelectableModelNameHeaderText => T(LocalizationKeys.ModelInventoryHeaderModel);", source);
+        Assert.Contains("public string SelectableModelIw3HeaderText => T(LocalizationKeys.ModelInventoryHeaderIw3DepthModel);", source);
+        Assert.Contains("public string SelectableModelCheckpointHeaderText => T(LocalizationKeys.ModelInventoryHeaderCheckpoint);", source);
+        Assert.Contains("public string SelectableModelTypeHeaderText => T(LocalizationKeys.ModelInventoryHeaderType);", source);
+        Assert.Contains("public string SelectableModelSourceHeaderText => T(LocalizationKeys.ModelInventoryHeaderSource);", source);
     }
 
     [Fact]
@@ -129,13 +129,12 @@ public sealed class MainWindowModelSelectionUiSourceTests
             "public sealed record ModelHelpRow(",
             "public sealed class MainWindowViewModel");
 
-        Assert.Contains("public string ModelHelpModelHeaderText => Text(\"Model\", \"Modelo\")", source);
-        Assert.Contains("public string ModelHelpPurposeHeaderText => Text(\"Purpose\", \"Propósito\")", source);
-        Assert.Contains("public string ModelHelpUseHeaderText => Text(\"Use\", \"Uso\")", source);
-        Assert.Contains("public string ModelHelpSceneHeaderText => Text(\"Scene\", \"Escena\")", source);
-        Assert.Contains("public string ModelHelpDepthHeaderText => Text(\"Depth\", \"Profundidad\")", source);
-        Assert.Contains("\"Size/performance\"", source);
-        Assert.Contains("\"Tamaño/rendimiento\"", source);
+        Assert.Contains("public string ModelHelpModelHeaderText => T(LocalizationKeys.VideoModelHelpModel);", source);
+        Assert.Contains("public string ModelHelpPurposeHeaderText => T(LocalizationKeys.VideoModelHelpPurpose);", source);
+        Assert.Contains("public string ModelHelpUseHeaderText => T(LocalizationKeys.VideoModelHelpUse);", source);
+        Assert.Contains("public string ModelHelpSceneHeaderText => T(LocalizationKeys.VideoModelHelpScene);", source);
+        Assert.Contains("public string ModelHelpDepthHeaderText => T(LocalizationKeys.VideoModelHelpDepth);", source);
+        Assert.Contains("public string ModelHelpSizePerformanceHeaderText => T(LocalizationKeys.VideoModelHelpSizePerformance);", source);
         Assert.Contains("public IReadOnlyList<ModelHelpRow> ModelHelpRows => _isImageParallaxModelHelpContext", source);
         Assert.Contains("? CreateImageParallaxModelHelpRows()", source);
         Assert.Contains(": CreateModelHelpRows();", source);
@@ -243,20 +242,27 @@ public sealed class MainWindowModelSelectionUiSourceTests
     public void ModelHelpUseColumn_IncludesPracticalExamples()
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
+        var englishLocalization = ReadRepoFile("src", "V3dfy.App", "Localization", "en.json");
+        var spanishLocalization = ReadRepoFile("src", "V3dfy.App", "Localization", "es.json");
         var method = ExtractSourceRange(
             source,
-            "private static string GetModelUseExample",
-            "private static string GetModelBestUse");
+            "private string GetModelUseExample(",
+            "private string GetSceneScopeText");
 
-        Assert.Contains("Use: GetModelUseExample(candidate, entry, IsSpanish)", source);
-        Assert.Contains("anime", method, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("sea, boats", method);
-        Assert.Contains("rooms", method, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("quick tests", method);
-        Assert.Contains("TV playback tests", method);
-        Assert.Contains("habitaciones", method, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("mar, barcos", method);
-        Assert.Contains("pruebas rapidas", method);
+        Assert.Contains("Use: GetModelUseExample(candidate, entry),", source);
+        Assert.Contains("LocalizationKeys.ModelInventoryHelpUseMetricIndoor", method);
+        Assert.Contains("LocalizationKeys.ModelInventoryHelpUseMetricOutdoor", method);
+        Assert.Contains("LocalizationKeys.ModelInventoryHelpUseV2Small", method);
+        Assert.Contains("LocalizationKeys.ModelInventoryHelpUseDepthAnything3MonoLarge3dTv", method);
+        Assert.Contains("LocalizationKeys.ModelInventoryHelpUseDefault", method);
+        Assert.Contains("anime", englishLocalization, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("sea, boats", englishLocalization);
+        Assert.Contains("rooms", englishLocalization, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("quick tests", englishLocalization);
+        Assert.Contains("TV playback tests", englishLocalization);
+        Assert.Contains("habitaciones", spanishLocalization, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("mar, barcos", spanishLocalization);
+        Assert.Contains("pruebas rapidas", spanishLocalization);
         Assert.DoesNotContain("Status", method);
         Assert.DoesNotContain("download", method, StringComparison.OrdinalIgnoreCase);
     }
@@ -271,10 +277,9 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.Contains("SelectedModelGuidanceText", xaml);
         Assert.Contains("private readonly ModelGuidanceService _modelGuidanceService", source);
         Assert.Contains("Recommended first optional model", guidanceService);
-        Assert.Contains("v3dfy includes a usable base model", source);
-        Assert.Contains("Good for:", source);
-        Assert.Contains("Speed:", source);
-        Assert.Contains("Quality:", source);
+        Assert.Contains("LocalizationKeys.VideoModelGuidanceDefault", source);
+        Assert.Contains("LocalizationKeys.VideoModelGuidanceFormat", source);
+        Assert.Contains("LocalizationKeys.VideoEstimateCompactModelFormat", source);
     }
 
     [Fact]
@@ -289,8 +294,10 @@ public sealed class MainWindowModelSelectionUiSourceTests
         Assert.DoesNotContain("Known iw3 depth model mappings", method);
         Assert.DoesNotContain("Mapeos conocidos de modelos de profundidad iw3", method);
         Assert.DoesNotContain("foreach (var entry in Iw3DepthModelMapper.RegistryEntries)", method);
-        Assert.Contains("Mapped selectable local models", method);
-        Assert.Contains("Unmapped model files were found", method);
+        Assert.Contains("LocalizationKeys.TechnicalDetailsMappedSelectableModels", method);
+        Assert.Contains("LocalizationKeys.TechnicalDetailsUnmappedModelFilesFound", method);
+        AssertLocalizationKeyPairExists("TechnicalDetails.MappedSelectableModels");
+        AssertLocalizationKeyPairExists("TechnicalDetails.UnmappedModelFilesFound");
     }
 
     [Fact]
@@ -328,6 +335,12 @@ public sealed class MainWindowModelSelectionUiSourceTests
     {
         var candidate = FindRepoPath(relativePath);
         return File.ReadAllText(candidate);
+    }
+
+    private static void AssertLocalizationKeyPairExists(string key)
+    {
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "en.json"));
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "es.json"));
     }
 
     private static string ExtractSourceRange(

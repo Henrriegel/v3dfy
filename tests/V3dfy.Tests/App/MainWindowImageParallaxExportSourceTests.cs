@@ -210,22 +210,22 @@ public sealed class MainWindowImageParallaxExportSourceTests
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
 
-        Assert.Contains("{englishLabel} changed: {previous} -> {field}.", source);
-        Assert.Contains("\"Depth intensity\"", source);
-        Assert.Contains("Motion direction", source);
-        Assert.Contains("Zoom/amplitude", source);
-        Assert.Contains("Duration", source);
-        Assert.Contains("Smoothing", source);
-        Assert.Contains("Layer/depth behavior", source);
-        Assert.Contains("Stereo output format changed:", source);
-        Assert.Contains("Eye separation", source);
-        Assert.Contains("Convergence", source);
-        Assert.Contains("Swap eyes changed:", source);
-        Assert.Contains("Anaglyph mode changed:", source);
-        Assert.Contains("Image workflow mode changed:", source);
-        Assert.Contains("Model changed:", source);
+        Assert.Contains("LocalizationKeys.ImageLogSetupStringChangedFormat", source);
+        Assert.Contains("LocalizationKeys.ImageParallaxDepthIntensityLabel", source);
+        Assert.Contains("LocalizationKeys.ImageParallaxMotionDirectionLabel", source);
+        Assert.Contains("LocalizationKeys.ImageParallaxZoomAmplitudeLabel", source);
+        Assert.Contains("LocalizationKeys.ImageParallaxDurationLabel", source);
+        Assert.Contains("LocalizationKeys.ImageParallaxSmoothingLabel", source);
+        Assert.Contains("LocalizationKeys.ImageParallaxLayerBehaviorLabel", source);
+        Assert.Contains("LocalizationKeys.ImageLogStereoOutputFormatChangedFormat", source);
+        Assert.Contains("LocalizationKeys.ImageStereoEyeSeparationLabel", source);
+        Assert.Contains("LocalizationKeys.ImageStereoConvergenceLabel", source);
+        Assert.Contains("LocalizationKeys.ImageLogSwapEyesChangedFormat", source);
+        Assert.Contains("LocalizationKeys.ImageLogAnaglyphModeChangedFormat", source);
+        Assert.Contains("LocalizationKeys.ImageLogWorkflowChangedFormat", source);
+        Assert.Contains("LocalizationKeys.ImageLogModelChangedFormat", source);
         Assert.Contains("if (SetProperty(ref field, value, propertyName))", source);
-        Assert.Contains("EnsureSentence(englishChange)", source);
+        Assert.Contains("EnsureSentence(change)", source);
         Assert.DoesNotContain("Image setup changed; previous image conversion output is outdated. Prepare conversion again.", source);
     }
 
@@ -245,7 +245,7 @@ public sealed class MainWindowImageParallaxExportSourceTests
         Assert.Contains("Iw3DepthModelMediaCapability.ImageOnly", source);
         Assert.Contains("private IReadOnlyList<ModelHelpRow> CreateImageParallaxModelHelpRows()", source);
         Assert.Contains("var candidates = ImageParallaxLocalModelCandidates;", source);
-        Assert.Contains("Compatible with image depth for 2.5D Parallax", source);
+        Assert.Contains("LocalizationKeys.ImageModelHelpPurposeSuffix", source);
         Assert.Contains("ShowImageParallaxModelHelpCommand", source);
         Assert.Contains("AutomationProperties.AutomationId=\"ImageParallaxModelHelpButton\"", parallaxSetup);
         Assert.Contains("ItemsSource=\"{Binding ImageParallaxLocalModelCandidates}\"", parallaxSetup);
@@ -319,7 +319,7 @@ public sealed class MainWindowImageParallaxExportSourceTests
 
         Assert.Contains("private string _selectedParallaxDepthIntensity = \"Low\";", source);
         Assert.Contains("_selectedParallaxDepthIntensity = \"Low\";", source);
-        Assert.Contains("Use Low or Medium depth and Subtle motion", source);
+        Assert.Contains("LocalizationKeys.ImageParallaxQualityGuidance", source);
         Assert.Contains("SelectedLocalModelCandidate.DisplayName", source);
         Assert.Contains("Text=\"{Binding ImageParallaxQualityGuidanceText}\"", xaml);
         Assert.Contains("Text=\"{Binding ImageParallaxModelGuidanceText}\"", xaml);
@@ -349,7 +349,7 @@ public sealed class MainWindowImageParallaxExportSourceTests
         Assert.Contains("Starting bundled FFmpeg MP4 encoding", exporter);
         Assert.Contains("FFmpeg output path", exporter);
         Assert.Contains("FFmpeg encoding completed in", exporter);
-        Assert.Contains("High-resolution 2.5D conversion can take a while", viewModel);
+        Assert.Contains("LocalizationKeys.ImageLogHighResolutionParallaxWarning", viewModel);
     }
 
     [Fact]
@@ -376,7 +376,8 @@ public sealed class MainWindowImageParallaxExportSourceTests
         Assert.Contains("AppErrorLogService.LogRecoverableException(\"Image conversion progress dispatch\", exception)", inlineProgress);
         Assert.Contains("AppErrorLogService.LogRecoverableException(\"Image conversion progress update\", exception)", inlineProgress);
         Assert.Contains("new InlineProgress<ImageParallaxExportProgress>(ApplyImageParallaxExportProgress)", parallaxConversion);
-        Assert.Contains("AddImageLog(progress.EnglishMessage, progress.SpanishMessage);", parallaxProgressMethod);
+        Assert.Contains("LocalizeImageParallaxExportProgress(progress)", parallaxProgressMethod);
+        Assert.DoesNotContain("AddImageLog(progress.EnglishMessage, progress.SpanishMessage);", parallaxProgressMethod);
         Assert.Contains("RaiseImageExportPropertiesChanged();", parallaxProgressMethod);
     }
 

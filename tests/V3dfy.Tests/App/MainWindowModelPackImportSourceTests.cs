@@ -70,15 +70,15 @@ public sealed class MainWindowModelPackImportSourceTests
         Assert.Contains("public bool IsGlobalBusyOverlayVisible", source);
         Assert.Contains("public Visibility GlobalBusyOverlayVisibility", source);
         Assert.Contains("public string GlobalBusyText", source);
-        Assert.Contains("\"Loading...\"", source);
-        Assert.Contains("\"Cargando...\"", source);
-        Assert.Contains("\"Validating model pack...\"", importMethod);
-        Assert.Contains("\"Validando paquete de modelos...\"", importMethod);
+        Assert.Contains("T(LocalizationKeys.CommonLoading)", source);
+        Assert.Contains("ShowGlobalBusyOverlay(LocalizationKeys.BusyValidatingModelPack);", importMethod);
         Assert.Contains("HideGlobalBusyOverlay();", requestFactory);
-        Assert.Contains("\"Refreshing model inventory...\"", requestFactory);
-        Assert.Contains("\"Actualizando inventario de modelos...\"", requestFactory);
-        Assert.Contains("\"Importing model pack...\"", confirmMethod);
-        Assert.Contains("\"Importando paquete de modelos...\"", confirmMethod);
+        Assert.Contains("ShowGlobalBusyOverlay(LocalizationKeys.BusyRefreshingModelInventory);", requestFactory);
+        Assert.Contains("ShowGlobalBusyOverlay(LocalizationKeys.BusyImportingModelPack);", confirmMethod);
+        AssertLocalizationKeyPairExists("Common.Loading");
+        AssertLocalizationKeyPairExists("Busy.ValidatingModelPack");
+        AssertLocalizationKeyPairExists("Busy.RefreshingModelInventory");
+        AssertLocalizationKeyPairExists("Busy.ImportingModelPack");
     }
 
     [Fact]
@@ -144,11 +144,18 @@ public sealed class MainWindowModelPackImportSourceTests
 
         Assert.Contains("ModelPackAppImportStatus.Invalid", applyResult);
         Assert.Contains("RecordInvalidModelPackPreparation(result);", applyResult);
-        Assert.Contains("Model pack validation failed.", invalidHandler);
-        Assert.Contains("Helper was not launched.", invalidHandler);
-        Assert.Contains("Model pack import failed.", failedHandler);
-        Assert.DoesNotContain("Model pack import completed.", invalidHandler);
-        Assert.DoesNotContain("Model pack import completed.", failedHandler);
+        Assert.Contains("LocalizationKeys.ModelPackStatusValidationFailed", invalidHandler);
+        Assert.Contains("LocalizationKeys.ModelPackSummaryValidationFailedHeading", invalidHandler);
+        Assert.Contains("LocalizationKeys.ModelPackSummaryPreparationMissingRequest", invalidHandler);
+        Assert.Contains("LocalizationKeys.ModelPackSummaryHelperFailed", failedHandler);
+        Assert.Contains("LocalizationKeys.ModelPackStatusImportFailed", failedHandler);
+        Assert.DoesNotContain("LocalizationKeys.ModelPackStatusCompleted", invalidHandler);
+        Assert.DoesNotContain("LocalizationKeys.ModelPackStatusCompleted", failedHandler);
+        AssertLocalizationKeyPairExists("ModelPack.Status.ValidationFailed");
+        AssertLocalizationKeyPairExists("ModelPack.Summary.ValidationFailed.Heading");
+        AssertLocalizationKeyPairExists("ModelPack.Summary.PreparationMissingRequest");
+        AssertLocalizationKeyPairExists("ModelPack.Summary.HelperFailed");
+        AssertLocalizationKeyPairExists("ModelPack.Status.ImportFailed");
     }
 
     [Fact]
@@ -166,9 +173,14 @@ public sealed class MainWindowModelPackImportSourceTests
 
         Assert.Contains("result.ConfirmationCanceled", applyResult);
         Assert.Contains("RecordCanceledModelPackImport(result);", applyResult);
-        Assert.Contains("canceled before Windows administrator permission", canceledHandler);
-        Assert.Contains("No files were installed.", canceledHandler);
-        Assert.DoesNotContain("failed", canceledHandler, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LocalizationKeys.ModelPackStatusCanceledBeforeAdmin", canceledHandler);
+        Assert.Contains("LocalizationKeys.ModelPackSummaryCanceledNoFiles", canceledHandler);
+        Assert.Contains("LocalizationKeys.ModelPackLogCanceledBeforeHelperFormat", canceledHandler);
+        Assert.DoesNotContain("LocalizationKeys.ModelPackStatusImportFailed", canceledHandler);
+        Assert.DoesNotContain("LocalizationKeys.ModelPackLogImportFailed", canceledHandler);
+        AssertLocalizationKeyPairExists("ModelPack.Status.CanceledBeforeAdmin");
+        AssertLocalizationKeyPairExists("ModelPack.Summary.CanceledNoFiles");
+        AssertLocalizationKeyPairExists("ModelPack.Log.CanceledBeforeHelper.Format");
     }
 
     [Fact]
@@ -183,13 +195,24 @@ public sealed class MainWindowModelPackImportSourceTests
             source,
             "private void RecordFailedModelPackImport",
             "private void RecordSuccessfulModelPackImport");
+        var confirmationMessage = ExtractSourceRange(
+            source,
+            "private string CreateModelPackConfirmationMessage",
+            "private string CreateModelPackSuccessSummary");
         var coordinator = ReadRepoFile("src", "V3dfy.Infrastructure", "ModelPacks", "ModelPackAppImportCoordinator.cs");
 
-        Assert.Contains("ModelPackImportConfirmationFormatter.CreatePrompt(preparation)", validHandler);
-        Assert.Contains("administrator permission", validHandler, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("CreateModelPackConfirmationMessage(preparation)", validHandler);
+        Assert.Contains("LocalizationKeys.ModelPackConfirmationAdminRequired", confirmationMessage);
+        Assert.Contains("LocalizationKeys.ModelPackConfirmationAdminNotExpected", confirmationMessage);
         Assert.Contains("helperWasNotStarted", failedHandler);
-        Assert.Contains("Windows administrator permission may have been canceled", failedHandler);
+        Assert.Contains("LocalizationKeys.ModelPackStatusImportDidNotStart", failedHandler);
+        Assert.Contains("LocalizationKeys.ModelPackSummaryImportDidNotStartNoFiles", failedHandler);
+        Assert.Contains("LocalizationKeys.ModelPackSummaryHelperFailed", failedHandler);
         Assert.Contains("helper executable was not found", coordinator, StringComparison.OrdinalIgnoreCase);
+        AssertLocalizationKeyPairExists("ModelPack.Confirmation.AdminRequired");
+        AssertLocalizationKeyPairExists("ModelPack.Confirmation.AdminNotExpected");
+        AssertLocalizationKeyPairExists("ModelPack.Status.ImportDidNotStart");
+        AssertLocalizationKeyPairExists("ModelPack.Summary.ImportDidNotStartNoFiles");
     }
 
     [Fact]
@@ -252,7 +275,7 @@ public sealed class MainWindowModelPackImportSourceTests
         Assert.Contains("ShowModelInventoryCommand", createToolStatus);
         Assert.Contains("ICommand? ContextActionCommand", rowViewModel);
         Assert.Contains("Command=\"{Binding ContextActionCommand}\"", xaml);
-        Assert.Contains("public string ViewModelsText => Text(\"View models\", \"Ver modelos\")", source);
+        Assert.Contains("public string ViewModelsText => T(LocalizationKeys.ModalViewModels)", source);
     }
 
     [Fact]
@@ -340,9 +363,10 @@ public sealed class MainWindowModelPackImportSourceTests
         Assert.Contains("Style=\"{StaticResource SecondaryButtonStyle}\"", footer);
         Assert.Contains("Command=\"{Binding ConfirmModelPackImportCommand}\"", footer);
         Assert.Contains("Content=\"{Binding ModelPackImportConfirmationContinueText}\"", footer);
-        Assert.Contains("public string ModelPackImportConfirmationTitleText => Text(", source);
-        Assert.Contains("public string ModelPackImportConfirmationMessageText => Text(", source);
-        Assert.Contains("public string ModelPackImportConfirmationContinueText => Text(\"Continue\", \"Continuar\")", source);
+        Assert.Contains("public string ModelPackImportConfirmationTitleText => T(LocalizationKeys.ModelPackConfirmationTitle);", source);
+        Assert.Contains("public string ModelPackImportConfirmationMessageText =>", source);
+        Assert.Contains("CreateModelPackConfirmationMessage(_modelPackImportConfirmationPrompt.Preparation)", source);
+        Assert.Contains("public string ModelPackImportConfirmationContinueText => T(LocalizationKeys.CommonContinue);", source);
         Assert.Contains("return ModelPackImportConfirmationTitleText;", source);
     }
 
@@ -451,18 +475,12 @@ public sealed class MainWindowModelPackImportSourceTests
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
 
-        Assert.Contains("public string ModelInventoryTitleText => Text(\"3D models\", \"Modelos 3D\")", source);
-        Assert.Contains("public string SelectableModelsSectionTitleText => Text(", source);
-        Assert.Contains("\"Selectable models\"", source);
-        Assert.Contains("\"Modelos seleccionables\"", source);
-        Assert.Contains("\"Detected but not selectable\"", source);
-        Assert.Contains("\"Detectados no seleccionables\"", source);
-        Assert.Contains("\"Runtime dependencies\"", source);
-        Assert.Contains("\"Dependencias de runtime\"", source);
-        Assert.Contains("Reason: no verified v3dfy mapping / diagnostic only", source);
-        Assert.Contains("Motivo: sin mapeo verificado de v3dfy / solo diagnostico", source);
-        Assert.Contains("runtime dependency, not a selectable model", source);
-        Assert.Contains("dependencia de runtime, no es un modelo seleccionable", source);
+        Assert.Contains("public string ModelInventoryTitleText => T(LocalizationKeys.ModelInventoryTitle);", source);
+        Assert.Contains("public string SelectableModelsSectionTitleText => T(LocalizationKeys.ModelInventorySelectableSectionTitle);", source);
+        Assert.Contains("LocalizationKeys.ModelInventoryDiagnosticSectionTitle", source);
+        Assert.Contains("LocalizationKeys.ModelInventoryRuntimeDependenciesTitle", source);
+        Assert.Contains("LocalizationKeys.ModelInventoryDiagnosticReason", source);
+        Assert.Contains("LocalizationKeys.ModelInventoryRuntimeDependencyNote", source);
     }
 
     [Fact]
@@ -548,6 +566,12 @@ public sealed class MainWindowModelPackImportSourceTests
     {
         var candidate = FindRepoPath(relativePath);
         return File.ReadAllText(candidate);
+    }
+
+    private static void AssertLocalizationKeyPairExists(string key)
+    {
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "en.json"));
+        Assert.Contains($"\"{key}\"", ReadRepoFile("src", "V3dfy.App", "Localization", "es.json"));
     }
 
     private static string ReadRepoFiles(params string[] relativePathAndPattern)
