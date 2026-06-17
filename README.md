@@ -1,221 +1,101 @@
 # v3dfy
 
-**v3dfy** is a Windows desktop app for converting regular 2D videos into 3D videos using a local conversion engine.
+v3dfy is a Windows desktop app for local/offline 2D-to-3D media conversion. It converts existing video and image sources into 3D outputs using bundled local tools and local AI/depth models.
 
-It is designed for users who want to create 3D video files from their own videos and play them on compatible 3D displays, TVs, or media players.
+This is a preview release. The app is built for local workflows, large media files, and review-before-export conversion rather than cloud processing.
 
-> Preview release for Windows x64.
+![v3dfy Home](docs/images/readme/home.png)
 
-![v3dfy main window](docs/images/readme/main-window.png)
+## What It Supports
 
----
+- Video conversion with source analysis, recommended setup, preview review, final conversion, progress, logs, and technical details.
+- Image conversion for stereoscopic image export.
+- Image conversion for 2.5D / parallax photo-to-video export.
+- Local/offline execution with bundled FFmpeg/FFprobe, engine runtime, and model files.
+- English and Spanish localization.
+- Light and dark themes.
+- Activity logs and diagnostic details for troubleshooting.
 
-## Download
+## Video Conversion
 
-Download v3dfy from the GitHub Releases page:
+The Video workflow guides an existing 2D video through source selection, analysis, preview generation, review, and final 3D export.
 
-**[Download v3dfy](https://github.com/Henrriegel/v3dfy/releases)**
+![Video conversion setup](docs/images/readme/video-conversion.png)
 
-For preview releases, use the newest release shown on the Releases page. In the
-file names below, `vX.Y.Z-preview.N` means the newest preview version shown
-there.
+Before running a full conversion, v3dfy can generate a short preview so the setup can be reviewed first.
 
-### Recommended installer
+![Video preview review](docs/images/readme/video-preview.png)
 
-For most users, download only:
+## Image Conversion
 
-```text
-v3dfy-vX.Y.Z-preview.N-web-setup.exe
-```
+The Image workflow supports both still stereoscopic output and 2.5D / parallax motion output from a 2D image.
 
-Run the installer and follow the setup wizard.
+![Stereoscopic image workflow](docs/images/readme/image-stereoscopic.png)
 
-This installer requires internet during installation. After installation, v3dfy can run locally/offline.
+![2.5D parallax image workflow](docs/images/readme/image-parallax-2-5d.png)
 
-### Offline installer
+## 3D Output Modes
 
-Use this option if the computer where v3dfy will be installed does not have internet access.
+v3dfy exposes common 3D output forms, including:
 
-Download all of these files into the same folder:
+- SBS / Side-by-Side
+- Half Top-Bottom
+- Anaglyph
 
-```text
-v3dfy-vX.Y.Z-preview.N-offline-setup.exe
-v3dfy-vX.Y.Z-preview.N-win-x64-portable.zip.part01
-v3dfy-vX.Y.Z-preview.N-win-x64-portable.zip.part02
-v3dfy-vX.Y.Z-preview.N-win-x64-portable.zip.part03
-```
+The exact labels and availability are workflow-specific. Video conversion currently focuses on TV-friendly 3D video formats, while Image conversion exposes stereoscopic image and parallax-specific controls.
 
-Keep the `.part01`, `.part02`, and `.part03` files in the same folder as the
-offline setup executable. Do not rename the split payload files.
+## Local Models And Offline Tools
 
-Then run:
+Model availability is detected at runtime. The in-app Models view is the authoritative inventory for the current machine because models can come from the reference release payload, imported model packs, or local catalog entries.
 
-```text
-v3dfy-vX.Y.Z-preview.N-offline-setup.exe
-```
+![Models inventory](docs/images/readme/models-inventory.png)
 
-No PowerShell, manual extraction, or command-line setup is required.
+The table below is derived from the reference model-pack catalog in this repository. It should be read as the current reference release/catalog set, not as a promise that every installation has every model installed.
 
----
+| Reference model pack | iw3 depth model | Type | Video | Image | Best use |
+| --- | --- | --- | --- | --- | --- |
+| Depth Anything V2 Small | `Any_V2_S` | Model pack | Yes | Yes | General movies, animation, quick tests |
+| Depth Anything Small | `Any_S` | Model pack | Yes | Yes | Lightweight conversions |
+| Distill Any Depth Small | `Distill_Any_S` | Model pack | Yes | Yes | Small distilled model comparisons |
+| Depth Anything V2 Metric Hypersim Small | `Any_V2_N_S` | Model pack | Yes | Yes | Indoor metric scenes |
+| Depth Anything V2 Metric VKITTI Small | `Any_V2_K_S` | Model pack | Yes | Yes | Outdoor metric scenes |
+| Depth Anything Base | `Any_B` | Model pack | Yes | Yes | Balanced v1 conversions |
+| Depth Anything V2 Metric Hypersim Base | `Any_V2_N_B` | Model pack | Yes | Yes | Detailed interiors |
+| Depth Anything V2 Metric VKITTI Base | `Any_V2_K_B` | Model pack | Yes | Yes | Outdoor base scenes |
+| Depth Anything 3 Mono Large | `Any_V3_Mono` / `Any_V3_Mono_01` | Model pack | Yes | Yes | Experimental large model |
+| Depth Anything Large | `Any_L` | Model pack | Yes | Yes | Quality-focused v1 output |
+| Depth Anything Metric Indoor | `ZoeD_Any_N` | Model pack | Yes | Yes | Rooms, interiors, dialogue scenes |
+| Depth Anything Metric Outdoor | `ZoeD_Any_K` | Model pack | Yes | Yes | Streets, landscapes, outdoor footage |
 
-## What v3dfy does
+The installed app does not require system Python, system FFmpeg, pip, or first-run model downloads when the offline payload is used. Bundled tools and models are resolved relative to the installation folder.
 
-v3dfy guides you through a simple 2D to 3D conversion workflow:
+## Downloads
 
-1. Select a source video.
-2. Analyze the video.
-3. Review the recommended 3D setup.
-4. Adjust the output options if needed.
-5. Generate and review a short preview.
-6. Start the final conversion.
+Releases are published from GitHub Releases. GitHub has a 2 GB per-file asset limit, while the full v3dfy payload is close to 6 GB, so the release payload is split into three parts.
 
-Your videos are processed locally on your computer. v3dfy does not upload your videos to a cloud conversion service.
+That split is already handled by the installers:
 
----
+- The web installer downloads the three release payload parts, verifies them, reconstructs the payload, and installs the app.
+- The offline installer is intended to be used with the three split payload parts placed beside it.
 
-## Screenshots
+Use the release assets for the matching preview version, for example `vX.Y.Z-preview.N`. The installed app runs locally after installation.
 
-### Analyze your video
+## Requirements
 
-v3dfy reads the selected video and shows useful details such as duration, resolution, FPS, codec, audio streams, and container format.
+- Windows 10/11 x64.
+- Enough disk space for the app payload, model files, temporary working files, and generated outputs.
+- Output files can be large, especially video conversions.
+- GPU acceleration depends on the bundled engine and the system's available hardware/driver capabilities.
 
-![Video analysis](docs/images/readme/video-analysis.png)
+## Project Docs
 
-### Review the recommended 3D setup
+Technical and packaging details live in the repository docs:
 
-After analysis, v3dfy prepares a recommended 3D setup for the selected video.
+- [Development workflow](docs/development-workflow.md)
+- [Packaging](docs/packaging.md)
+- [Engine layout](docs/engine.md)
+- [Model pack catalog](docs/model-pack-catalog.md)
 
-![Recommended 3D setup](docs/images/readme/recommended-setup.png)
+## AI Assistance Disclosure
 
-### Adjust the conversion plan
-
-Before converting, you can review the output profile, container, quality, 3D layout, intensity, model, and output location.
-
-![Conversion plan](docs/images/readme/conversion-plan.png)
-
-### Convert locally
-
-During conversion, v3dfy shows the current progress and status while the video is processed on your computer.
-
-![Live conversion](docs/images/readme/live-conversion.png)
-
-### Installer options
-
-v3dfy provides a recommended web installer and an offline installer option.
-
-![Web installer](docs/images/readme/web-installer.png)
-
-![Offline installer](docs/images/readme/offline-installer.png)
-
----
-
-## Main features
-
-* Local 2D to 3D video conversion
-* Guided desktop workflow
-* Required preview before final conversion
-* MP4 and MKV output options
-* Adjustable 3D layout, quality, and intensity
-* Video analysis before conversion
-* 3D model inventory and model-pack import status
-* English and Spanish interface
-* Light and dark themes
-* Live conversion status
-* Cancelable conversion
-* Installer and uninstaller support
-
----
-
-## System requirements
-
-* Windows 10 or Windows 11
-* 64-bit system
-* Enough free disk space for installation and converted videos
-* A compatible GPU and updated graphics driver are recommended for better performance
-
-Conversion time depends on your computer, the source video, and the selected settings.
-
----
-
-## Basic usage
-
-1. Open v3dfy.
-2. Click **Select video**.
-3. Click **Analyze**.
-4. Review the recommended 3D setup.
-5. Generate a short preview.
-6. Review the preview.
-7. Continue to final conversion.
-8. Start the conversion.
-9. Play the generated 3D video with your preferred compatible player or device.
-
----
-
-## Output files
-
-v3dfy creates a new 3D video file and does not overwrite your source video.
-
-Example output name:
-
-```text
-sample_video.v3dfy.3d.htab.mp4
-```
-
-MP4 is recommended for broad playback compatibility. MKV is also available for users who prefer that container.
-
----
-
-## Privacy
-
-v3dfy is designed to process videos locally on your computer.
-
-Your videos are not uploaded to a cloud conversion service by v3dfy.
-
-The recommended web installer only needs internet during installation so it can download the app package.
-
----
-
-## Preview release notes
-
-This is an early preview release.
-
-Some videos may convert better than others depending on the source material, motion, lighting, resolution, and selected settings. 3D playback compatibility can also vary by player, display, TV model, firmware, and media format.
-
-For best results, test with a short video first before converting longer videos.
-
----
-
-## For developers
-
-v3dfy is built with .NET, WPF, C#, and a local conversion runtime.
-
-From the repository root:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test.ps1
-```
-
-Packaging details are available in:
-
-```text
-docs/packaging.md
-```
-
-Release installer payloads must be built from the current publish output in
-order: publish `artifacts\publish\v3dfy-win-x64`, run
-`scripts\package-release-payload.ps1`, then run
-`scripts\package-release-installers.ps1`.
-
----
-
-## AI assistance disclosure
-
-v3dfy is developed by the maintainer with assistance from OpenAI Codex, under
-human supervision, review, and manual validation.
-
----
-
-## License
-
-License information will be provided with the project release and included third-party notices.
+This project is developed with AI/Codex assistance under human supervision. Design decisions, code review, validation, and release approval remain human-controlled.
