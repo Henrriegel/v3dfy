@@ -78,6 +78,8 @@ That split is already handled by the installers:
 - The web installer downloads the three release payload parts, verifies them, reconstructs the payload, and installs the app.
 - The offline installer is intended to be used with the three split payload parts placed beside it.
 
+Release assets are generated in order: publish `artifacts\publish\v3dfy-win-x64`, run `scripts\package-release-payload.ps1`, then run `scripts\package-release-installers.ps1`.
+
 Use the release assets for the matching preview version, for example `vX.Y.Z-preview.N`. The installed app runs locally after installation.
 
 ## Requirements

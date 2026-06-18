@@ -278,10 +278,17 @@ function New-PayloadManifest {
         parts = @($partEntries)
         requiredInstalledPaths = @(
             'V3dfy.App.exe',
+            'Localization\en.json',
+            'Localization\es.json',
             'engine\iw3',
+            'engine\iw3\ENGINE_MANIFEST.json',
             'engine\iw3\python\python.exe',
+            'engine\iw3\python\python312._pth',
             'engine\iw3\nunif',
+            'engine\iw3\nunif\iw3\__main__.py',
             'engine\iw3\nunif\iw3\pretrained_models',
+            'engine\iw3\nunif\iw3\pretrained_models\hub\checkpoints\depth_anything_metric_depth_indoor.pt',
+            'engine\iw3\nunif\iw3\pretrained_models\hub\checkpoints\iw3_row_flow_v3_20250627.pth',
             'tools\ffmpeg\win-x64\ffmpeg.exe',
             'tools\ffmpeg\win-x64\ffprobe.exe',
             'licenses'

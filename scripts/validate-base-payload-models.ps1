@@ -42,6 +42,20 @@ $allowedBasePayloadModelFileNames = @(
     'iw3_depth_aa_20250530.pth'
 )
 
+$requiredBasePayloadModelFileNames = @(
+    'depth_anything_metric_depth_indoor.pt',
+    'iw3_row_flow_v3_20250627.pth'
+)
+
+$supportedModelExtensions = @(
+    '.pth',
+    '.pt',
+    '.onnx',
+    '.safetensors',
+    '.ckpt',
+    '.bin'
+)
+
 function ConvertTo-RelativePath {
     param(
         [string]$Root,
@@ -68,11 +82,23 @@ if (-not (Test-Path -LiteralPath $publishDirectory -PathType Container)) {
     throw "Publish directory is missing: $publishDirectory"
 }
 
+$modelsDirectory = Join-Path $publishDirectory 'engine\iw3\nunif\iw3\pretrained_models'
+if (-not (Test-Path -LiteralPath $modelsDirectory -PathType Container)) {
+    throw "Base payload pretrained models directory is missing: $modelsDirectory"
+}
+
 $optionalFileNameSet = [System.Collections.Generic.HashSet[string]]::new(
     [string[]]$optionalModelPackCheckpointFileNames,
     [System.StringComparer]::OrdinalIgnoreCase)
 
-$blockedFiles = @(Get-ChildItem -LiteralPath $publishDirectory -File -Recurse |
+$allowedFileNameSet = [System.Collections.Generic.HashSet[string]]::new(
+    [string[]]$allowedBasePayloadModelFileNames,
+    [System.StringComparer]::OrdinalIgnoreCase)
+
+$modelFiles = @(Get-ChildItem -LiteralPath $modelsDirectory -File -Recurse |
+    Where-Object { $supportedModelExtensions -contains $_.Extension.ToLowerInvariant() })
+
+$blockedFiles = @($modelFiles |
     Where-Object { $optionalFileNameSet.Contains($_.Name) })
 
 if ($blockedFiles.Count -gt 0) {
@@ -83,5 +109,27 @@ if ($blockedFiles.Count -gt 0) {
     throw $message
 }
 
+$unexpectedFiles = @($modelFiles |
+    Where-Object { -not $allowedFileNameSet.Contains($_.Name) })
+
+if ($unexpectedFiles.Count -gt 0) {
+    $relativePaths = $unexpectedFiles |
+        Sort-Object FullName |
+        ForEach-Object { ConvertTo-RelativePath -Root $publishDirectory -Path $_.FullName }
+    $message = "Unexpected model file found in base payload: $($relativePaths -join ', '). Allowed base/runtime model files are: $($allowedBasePayloadModelFileNames -join ', ')."
+    throw $message
+}
+
+$presentModelFileNameSet = [System.Collections.Generic.HashSet[string]]::new(
+    [string[]]($modelFiles | ForEach-Object { $_.Name }),
+    [System.StringComparer]::OrdinalIgnoreCase)
+$missingRequiredFiles = @($requiredBasePayloadModelFileNames |
+    Where-Object { -not $presentModelFileNameSet.Contains($_) })
+
+if ($missingRequiredFiles.Count -gt 0) {
+    throw "Required base/runtime model file(s) missing from base payload: $($missingRequiredFiles -join ', ')."
+}
+
 Write-Host "[OK] Base payload model-file guard passed: $publishDirectory"
 Write-Host "[OK] Allowed base/runtime model files: $($allowedBasePayloadModelFileNames -join ', ')"
+Write-Host "[OK] Required base/runtime model files found: $($requiredBasePayloadModelFileNames -join ', ')"

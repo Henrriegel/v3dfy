@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $portableZipFileName = "v3dfy-v$Version-win-x64-portable.zip"
+$iw3BundleValidatorScript = Join-Path $PSScriptRoot 'validate-iw3-bundle.ps1'
 $basePayloadModelValidatorScript = Join-Path $PSScriptRoot 'validate-base-payload-models.ps1'
 
 function Write-PayloadMessage {
@@ -100,6 +101,28 @@ function Invoke-BasePayloadModelValidation {
 
     if ($LASTEXITCODE -ne 0) {
         throw "Base payload model validation failed with exit code $LASTEXITCODE."
+    }
+}
+
+function Invoke-Iw3BundleValidation {
+    param([string]$PublishDirectory)
+
+    Get-RequiredFile $iw3BundleValidatorScript 'iw3 bundle validator' | Out-Null
+
+    $bundleRoot = Join-Path $PublishDirectory 'engine\iw3'
+    $validationOutput = & powershell `
+        -NoProfile `
+        -ExecutionPolicy Bypass `
+        -File $iw3BundleValidatorScript `
+        -BundleRoot $bundleRoot `
+        -StrictModels `
+        -RequireCapabilities 2>&1
+    foreach ($line in $validationOutput) {
+        Write-Host $line
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Strict iw3 bundle validation failed with exit code $LASTEXITCODE."
     }
 }
 
@@ -202,6 +225,7 @@ Assert-RepositoryChildPath $splitDirectory 'Release payload split directory'
 Get-RequiredDirectory $publishDirectory 'Windows x64 publish output' | Out-Null
 Get-RequiredFile (Join-Path $publishDirectory 'V3dfy.App.exe') 'Published app executable' | Out-Null
 Get-RequiredFile (Join-Path $publishDirectory 'V3dfy.SetupHelper.exe') 'Published setup helper executable' | Out-Null
+Invoke-Iw3BundleValidation $publishDirectory
 Invoke-BasePayloadModelValidation $publishDirectory
 
 New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
