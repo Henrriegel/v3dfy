@@ -339,47 +339,6 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-        <Style x:Key="SidebarToggleStripButtonStyle" TargetType="Button">
-            <Setter Property="MinWidth" Value="0" />
-            <Setter Property="MinHeight" Value="36" />
-            <Setter Property="Padding" Value="10,7" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="SidebarToggleStripBorder"
-                                Padding="{TemplateBinding Padding}"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="Center"
-                                              Content="{TemplateBinding Content}"
-                                              TextElement.Foreground="{TemplateBinding Foreground}" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="SidebarToggleStripBorder"
-                                        Property="Background"
-                                        Value="{DynamicResource ComboBoxHoverBrush}" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="SidebarToggleStripBorder"
-                                        Property="Background"
-                                        Value="{DynamicResource AccentBrush}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
         <Style x:Key="HomeActionCardButtonStyle" TargetType="Button">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="MinHeight" Value="172" />
@@ -830,25 +789,7 @@
 
                 <StackPanel Grid.Row="2"
                             AutomationProperties.AutomationId="SidebarBottomActions">
-                    <Button AutomationProperties.AutomationId="SidebarToggleStripButton"
-                            AutomationProperties.Name="{Binding SidebarToggleToolTipText}"
-                            Command="{Binding ToggleSidebarCommand}"
-                            IsEnabled="{Binding CanUseShellNavigation}"
-                            Style="{StaticResource SidebarToggleStripButtonStyle}"
-                            ToolTip="{Binding SidebarToggleToolTipText}"
-                            ToolTipService.IsEnabled="{Binding ShellToolTipsEnabled}">
-                        <StackPanel HorizontalAlignment="{Binding SidebarNavContentHorizontalAlignment}"
-                                    Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource ShellSidebarIconTextStyle}"
-                                       Text="{Binding SidebarToggleGlyphText}" />
-                            <TextBlock VerticalAlignment="Center"
-                                       Text="{Binding SidebarToggleText}"
-                                       TextTrimming="CharacterEllipsis"
-                                       Visibility="{Binding SidebarExpandedContentVisibility}" />
-                        </StackPanel>
-                    </Button>
-                    <Button Margin="0,8,0,0"
-                            AutomationProperties.AutomationId="SidebarSettingsButton"
+                    <Button AutomationProperties.AutomationId="SidebarSettingsButton"
                             AutomationProperties.Name="{Binding SettingsText}"
                             Command="{Binding OpenSettingsCommand}"
                             IsEnabled="{Binding CanOpenSettings}"
@@ -3996,6 +3937,12 @@
                                             <ComboBox ItemsSource="{Binding ThemeOptions}"
                                                       SelectedItem="{Binding SelectedTheme}" />
                                         </StackPanel>
+                                        <CheckBox Margin="0,12,0,0"
+                                                  AutomationProperties.AutomationId="SettingsCompactSidebarCheckBox"
+                                                  AutomationProperties.Name="{Binding CompactSidebarLabel}"
+                                                  Content="{Binding CompactSidebarLabel}"
+                                                  IsChecked="{Binding IsSidebarCompact,
+                                                                      Mode=TwoWay}" />
                                     </StackPanel>
                                 </StackPanel>
 

@@ -675,6 +675,21 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public bool IsSidebarPinnedExpanded => IsSidebarExpanded;
 
+    public bool IsSidebarCompact
+    {
+        get => !IsSidebarExpanded;
+        set
+        {
+            if (value == IsSidebarCompact)
+            {
+                return;
+            }
+
+            IsSidebarExpanded = !value;
+            IsSidebarHoverExpanded = false;
+        }
+    }
+
     public bool IsSidebarHoverExpanded
     {
         get => _isSidebarHoverExpanded;
@@ -706,13 +721,6 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public System.Windows.HorizontalAlignment SidebarNavContentHorizontalAlignment =>
         IsSidebarEffectivelyExpanded ? System.Windows.HorizontalAlignment.Left : System.Windows.HorizontalAlignment.Center;
-
-    public string SidebarToggleGlyphText => IsSidebarExpanded ? "\uE72B" : "\uE72A";
-
-    public string SidebarToggleText => T(
-        IsSidebarExpanded ? LocalizationKeys.SidebarToggleCollapse : LocalizationKeys.SidebarToggleExpand);
-
-    public string SidebarToggleToolTipText => SidebarToggleText;
 
     public AppSection SelectedAppSection
     {
@@ -1829,6 +1837,8 @@ public sealed class MainWindowViewModel : ObservableObject
     public string LanguageLabel => T(LocalizationKeys.SettingsLanguageLabel);
 
     public string ThemeLabel => T(LocalizationKeys.SettingsAppearanceTheme);
+
+    public string CompactSidebarLabel => T(LocalizationKeys.SettingsAppearanceSidebarCompact);
 
     public string SettingsText => T(LocalizationKeys.SidebarSettings);
 
@@ -10842,6 +10852,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsSidebarExpanded));
         OnPropertyChanged(nameof(IsSidebarPinnedExpanded));
+        OnPropertyChanged(nameof(IsSidebarCompact));
         OnPropertyChanged(nameof(IsSidebarHoverExpanded));
         OnPropertyChanged(nameof(IsSidebarEffectivelyExpanded));
         OnPropertyChanged(nameof(SidebarExpandedWidth));
@@ -10851,9 +10862,6 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(SidebarPadding));
         OnPropertyChanged(nameof(SidebarExpandedContentVisibility));
         OnPropertyChanged(nameof(SidebarNavContentHorizontalAlignment));
-        OnPropertyChanged(nameof(SidebarToggleGlyphText));
-        OnPropertyChanged(nameof(SidebarToggleText));
-        OnPropertyChanged(nameof(SidebarToggleToolTipText));
     }
 
     private void RaiseImageConversionPropertiesChanged()
@@ -11096,9 +11104,6 @@ public sealed class MainWindowViewModel : ObservableObject
     private void RaiseShellTextPropertiesChanged()
     {
         OnPropertyChanged(nameof(ShellTaglineText));
-        OnPropertyChanged(nameof(SidebarToggleGlyphText));
-        OnPropertyChanged(nameof(SidebarToggleText));
-        OnPropertyChanged(nameof(SidebarToggleToolTipText));
         OnPropertyChanged(nameof(HomeNavigationText));
         OnPropertyChanged(nameof(ImageConversionNavigationText));
         OnPropertyChanged(nameof(VideoConversionNavigationText));
@@ -11852,6 +11857,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LogsDiagnosticsSettingsSectionVisibility));
         OnPropertyChanged(nameof(AboutLicensesSettingsSectionVisibility));
         OnPropertyChanged(nameof(VisualSettingsTitleText));
+        OnPropertyChanged(nameof(CompactSidebarLabel));
         OnPropertyChanged(nameof(ModelsSettingsTitleText));
         OnPropertyChanged(nameof(ToolsEngineSettingsTitleText));
         OnPropertyChanged(nameof(LogsDiagnosticsSettingsTitleText));

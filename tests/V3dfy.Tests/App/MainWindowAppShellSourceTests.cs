@@ -173,17 +173,9 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("Text=\"{Binding AppTitle}\"", sidebar);
         Assert.Contains("Text=\"{Binding ShellTaglineText}\"", sidebar);
         Assert.DoesNotContain("AutomationProperties.AutomationId=\"SidebarToggleButton\"", sidebar);
-        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SidebarToggleStripButton\"", brand);
-        Assert.Contains("AutomationProperties.AutomationId=\"SidebarToggleStripButton\"", bottomActions);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SidebarToggleStripButton\"", sidebar);
+        Assert.DoesNotContain("Command=\"{Binding ToggleSidebarCommand}\"", sidebar);
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", bottomActions);
-        Assert.True(
-            bottomActions.IndexOf("AutomationProperties.AutomationId=\"SidebarToggleStripButton\"", StringComparison.Ordinal) <
-            bottomActions.IndexOf("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", StringComparison.Ordinal));
-        Assert.Contains("Command=\"{Binding ToggleSidebarCommand}\"", bottomActions);
-        Assert.Contains("Style=\"{StaticResource SidebarToggleStripButtonStyle}\"", bottomActions);
-        Assert.Contains("Text=\"{Binding SidebarToggleGlyphText}\"", bottomActions);
-        Assert.Contains("Text=\"{Binding SidebarToggleText}\"", bottomActions);
-        Assert.Contains("ToolTip=\"{Binding SidebarToggleToolTipText}\"", bottomActions);
         Assert.Contains("Visibility=\"{Binding SidebarExpandedContentVisibility}\"", sidebar);
         Assert.Contains("HorizontalAlignment=\"{Binding SidebarNavContentHorizontalAlignment}\"", sidebar);
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarHomeButton\"", sidebar);
@@ -218,7 +210,7 @@ public sealed class MainWindowAppShellSourceTests
         Assert.Contains("Command=\"{Binding OpenSettingsCommand}\"", sidebar);
         Assert.Contains("Text=\"{Binding SettingsText}\"", sidebar);
         Assert.Contains("ToolTipService.IsEnabled=\"{Binding ShellToolTipsEnabled}\"", bottomActions);
-        Assert.True(CountOccurrences(sidebar, "Style=\"{StaticResource ShellSidebarIconTextStyle}\"") >= 5);
+        Assert.True(CountOccurrences(sidebar, "Style=\"{StaticResource ShellSidebarIconTextStyle}\"") >= 4);
         Assert.DoesNotContain("TextBlock Width=\"24\"", sidebar);
         Assert.Contains("Style=\"{StaticResource ShellSidebarNavButtonStyle}\"", sidebar);
         var sidebarIconStyle = ExtractSourceRange(

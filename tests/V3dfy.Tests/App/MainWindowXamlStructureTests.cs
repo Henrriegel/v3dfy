@@ -319,7 +319,8 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarVideoConversionButton\"", sidebar);
         Assert.Contains("Command=\"{Binding SelectVideoConversionSectionCommand}\"", sidebar);
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarBottomActions\"", sidebar);
-        Assert.Contains("AutomationProperties.AutomationId=\"SidebarToggleStripButton\"", sidebar);
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"SidebarToggleStripButton\"", sidebar);
+        Assert.DoesNotContain("Command=\"{Binding ToggleSidebarCommand}\"", sidebar);
         Assert.Contains("AutomationProperties.AutomationId=\"SidebarSettingsButton\"", sidebar);
         Assert.Contains("Command=\"{Binding OpenSettingsCommand}\"", sidebar);
         Assert.Contains("ToolTip=\"{Binding SettingsText}\"", sidebar);
@@ -359,6 +360,11 @@ public sealed class MainWindowXamlStructureTests
         Assert.Contains("AutomationProperties.AutomationId=\"VisualSettingsRows\"", visual);
         Assert.Contains("ItemsSource=\"{Binding LanguageOptions}\"", settings);
         Assert.Contains("ItemsSource=\"{Binding ThemeOptions}\"", settings);
+        Assert.Contains("AutomationProperties.AutomationId=\"SettingsCompactSidebarCheckBox\"", visual);
+        Assert.Contains("Content=\"{Binding CompactSidebarLabel}\"", visual);
+        Assert.Contains("IsChecked=\"{Binding IsSidebarCompact,", visual);
+        Assert.DoesNotContain("Compact sidebar", visual);
+        Assert.DoesNotContain("Barra lateral compacta", visual);
         Assert.DoesNotContain("<Grid.ColumnDefinitions>", visual);
         Assert.DoesNotContain("Grid.Column=\"2\"", visual);
         Assert.DoesNotContain("PreviewConversionSettingsSection", settings);

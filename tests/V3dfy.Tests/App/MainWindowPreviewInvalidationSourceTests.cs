@@ -202,8 +202,10 @@ public sealed class MainWindowPreviewInvalidationSourceTests
         Assert.Contains("AutomationProperties.AutomationId=\"VisualSettingsSection\"", xaml);
         Assert.Contains("SelectedValue=\"{Binding SelectedLanguage}\"", xaml);
         Assert.Contains("SelectedItem=\"{Binding SelectedTheme}\"", xaml);
+        Assert.Contains("IsChecked=\"{Binding IsSidebarCompact,", xaml);
         Assert.DoesNotContain("SelectedLanguage", resetMethod);
         Assert.DoesNotContain("SelectedTheme", resetMethod);
+        Assert.DoesNotContain("IsSidebarCompact", resetMethod);
     }
 
     private static string ReadRepoFile(params string[] relativePath)

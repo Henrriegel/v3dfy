@@ -89,6 +89,7 @@ public sealed class MainWindowFileLocalizationIntegrationSourceTests
         Assert.Contains("\"Light\" => T(LocalizationKeys.SettingsThemeLight)", themeHelper);
         Assert.Contains("public const string SettingsThemeDark = \"Settings.Theme.Dark\";", localizationKeys);
         Assert.Contains("public const string SettingsThemeLight = \"Settings.Theme.Light\";", localizationKeys);
+        Assert.Contains("public const string SettingsAppearanceSidebarCompact = \"Settings.Appearance.SidebarCompact\";", localizationKeys);
 
         Assert.Contains("\"ActivityLog.LanguageSelected.Format\": \"Language selected: {language}.\"", english);
         Assert.Contains("\"ActivityLog.ThemeSelected.Format\": \"Theme selected: {theme}.\"", english);
@@ -96,8 +97,10 @@ public sealed class MainWindowFileLocalizationIntegrationSourceTests
         Assert.Contains("\"ActivityLog.ThemeSelected.Format\": \"Tema seleccionado: {theme}.\"", spanish);
         Assert.Contains("\"Settings.Theme.Dark\": \"Dark\"", english);
         Assert.Contains("\"Settings.Theme.Light\": \"Light\"", english);
+        Assert.Contains("\"Settings.Appearance.SidebarCompact\": \"Compact sidebar\"", english);
         Assert.Contains("\"Settings.Theme.Dark\": \"Oscuro\"", spanish);
         Assert.Contains("\"Settings.Theme.Light\": \"Claro\"", spanish);
+        Assert.Contains("\"Settings.Appearance.SidebarCompact\": \"Barra lateral compacta\"", spanish);
     }
 
     [Fact]
@@ -110,12 +113,11 @@ public sealed class MainWindowFileLocalizationIntegrationSourceTests
         Assert.Contains("public string HomeNavigationText => T(LocalizationKeys.SidebarHome);", source);
         Assert.Contains("public string ImageConversionNavigationText => T(LocalizationKeys.SidebarImageConversion);", source);
         Assert.Contains("public string VideoConversionNavigationText => T(LocalizationKeys.SidebarVideoConversion);", source);
-        Assert.Contains("LocalizationKeys.SidebarToggleCollapse", source);
-        Assert.Contains("LocalizationKeys.SidebarToggleExpand", source);
         Assert.Contains("public string SettingsText => T(LocalizationKeys.SidebarSettings);", source);
         Assert.Contains("public string SettingsTitleText => T(LocalizationKeys.SettingsTitle);", source);
         Assert.Contains("public string LanguageLabel => T(LocalizationKeys.SettingsLanguageLabel);", source);
         Assert.Contains("public string ThemeLabel => T(LocalizationKeys.SettingsAppearanceTheme);", source);
+        Assert.Contains("public string CompactSidebarLabel => T(LocalizationKeys.SettingsAppearanceSidebarCompact);", source);
         Assert.Contains("public string VisualSettingsTitleText => T(LocalizationKeys.SettingsAppearanceTitle);", source);
         Assert.Contains("public string ModelsSettingsTitleText => T(LocalizationKeys.SettingsModelsTitle);", source);
         Assert.Contains("public string ToolsEngineSettingsTitleText => T(LocalizationKeys.SettingsToolsEngineTitle);", source);
@@ -167,11 +169,10 @@ public sealed class MainWindowFileLocalizationIntegrationSourceTests
             "Common.Next",
             "Common.Convert",
             "Shell.Tagline",
-            "Sidebar.Toggle.Expand",
-            "Sidebar.Toggle.Collapse",
             "Sidebar.Settings",
             "Settings.Appearance.Title",
             "Settings.Appearance.Theme",
+            "Settings.Appearance.SidebarCompact",
             "Settings.Models.Title",
             "Settings.ToolsEngine.Title",
             "Settings.LogsDiagnostics.Title",

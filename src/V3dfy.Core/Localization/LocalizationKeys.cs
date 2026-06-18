@@ -26,13 +26,12 @@ public static class LocalizationKeys
     public const string SidebarHome = "Sidebar.Home";
     public const string SidebarImageConversion = "Sidebar.ImageConversion";
     public const string SidebarVideoConversion = "Sidebar.VideoConversion";
-    public const string SidebarToggleExpand = "Sidebar.Toggle.Expand";
-    public const string SidebarToggleCollapse = "Sidebar.Toggle.Collapse";
     public const string SidebarSettings = "Sidebar.Settings";
     public const string SettingsTitle = "Settings.Title";
     public const string SettingsAppearanceTitle = "Settings.Appearance.Title";
     public const string SettingsAppearanceTheme = "Settings.Appearance.Theme";
     public const string SettingsAppearanceLanguage = "Settings.Appearance.Language";
+    public const string SettingsAppearanceSidebarCompact = "Settings.Appearance.SidebarCompact";
     public const string SettingsThemeDark = "Settings.Theme.Dark";
     public const string SettingsThemeLight = "Settings.Theme.Light";
     public const string SettingsModelsTitle = "Settings.Models.Title";
