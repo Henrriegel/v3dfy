@@ -37,7 +37,7 @@ public sealed record SetupUiThemeDefinition(
         Border: "#C8D3DF",
         GridBackground: "#FFFFFF",
         GridAlternateBackground: "#F0F5FA",
-        LogBackground: "#111820");
+        LogBackground: "#F8FAFC");
 
     public static SetupUiThemeDefinition Dark { get; } = new(
         SetupUiThemeKind.Dark,

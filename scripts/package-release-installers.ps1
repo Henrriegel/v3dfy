@@ -383,6 +383,7 @@ function Publish-SetupHelper {
 
     Write-InstallerMessage INFO 'Publishing self-contained setup helper.'
     $publishOutput = & dotnet publish $helperProject `
+        --no-restore `
         --configuration Release `
         --framework net10.0-windows `
         --runtime win-x64 `

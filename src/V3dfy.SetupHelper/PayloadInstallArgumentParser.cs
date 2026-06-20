@@ -87,6 +87,7 @@ public static class PayloadInstallArgumentParser
             ModelPacksManifestPath = modelPacksManifestPath,
             ModelPacksSourceDirectory = modelPacksSourceDirectory,
             KeepWorkDirectory = flags.Contains("keep-work"),
+            AllowTargetReplacement = flags.Contains("replace-existing"),
         };
 
         return PayloadInstallArgumentParseResult.ForOptions(
@@ -97,6 +98,7 @@ public static class PayloadInstallArgumentParser
 
     private static bool IsFlag(string name) =>
         string.Equals(name, "keep-work", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "replace-existing", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(name, "ui", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsValueArgument(string name) =>

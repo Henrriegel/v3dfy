@@ -293,6 +293,7 @@ Options:
                             Optional local model-pack ZIP directory for offline mode.
   --log PATH                Optional helper log file.
   --keep-work               Keep temporary files for diagnostics.
+  --replace-existing        Allow replacing a non-empty target directory.
   --ui                      Show the classic setup progress and log window.
 
 Model pack options:

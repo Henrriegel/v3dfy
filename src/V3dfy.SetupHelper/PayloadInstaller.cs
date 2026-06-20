@@ -38,6 +38,7 @@ public sealed class PayloadInstaller
             throw new PayloadInstallException($"The install directory is invalid: {targetDirectory}");
         }
 
+        EnsureTargetCanBeInstalled(targetDirectory, options.AllowTargetReplacement);
         Directory.CreateDirectory(workDirectory);
         Directory.CreateDirectory(targetParent.FullName);
 
@@ -120,6 +121,34 @@ public sealed class PayloadInstaller
         overallProgress.Report(new SetupProgressEvent(
             SetupProgressPhase.Completed,
             "Payload installation completed successfully."));
+    }
+
+    public static bool TargetHasExistingContent(string targetDirectory)
+    {
+        var fullPath = NormalizeFullPath(targetDirectory);
+        return File.Exists(fullPath) ||
+            (Directory.Exists(fullPath) && Directory.EnumerateFileSystemEntries(fullPath).Any());
+    }
+
+    private static void EnsureTargetCanBeInstalled(string targetDirectory, bool allowTargetReplacement)
+    {
+        var fullPath = NormalizeFullPath(targetDirectory);
+        if (File.Exists(fullPath))
+        {
+            throw new PayloadInstallException(
+                $"The install path is an existing file, not a directory: {fullPath}");
+        }
+
+        if (!TargetHasExistingContent(fullPath))
+        {
+            return;
+        }
+
+        if (!allowTargetReplacement)
+        {
+            throw new PayloadInstallException(
+                $"The install directory already contains files. Confirm replacement before continuing: {fullPath}");
+        }
     }
 
     private static async Task<IReadOnlyList<string>> VerifyOfflinePartsAsync(

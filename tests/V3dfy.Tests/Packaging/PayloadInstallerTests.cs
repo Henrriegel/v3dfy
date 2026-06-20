@@ -114,6 +114,7 @@ public sealed class PayloadInstallerTests : IDisposable
                 PartsDirectory = fixture.PartsDirectory,
                 TargetDirectory = targetDirectory,
                 WorkDirectory = Path.Combine(root, "work-second"),
+                AllowTargetReplacement = true,
             },
             new TestSetupLog(),
             CancellationToken.None);
@@ -161,6 +162,62 @@ public sealed class PayloadInstallerTests : IDisposable
         Assert.Contains(progress.Events, e => e.Phase == SetupProgressPhase.CleaningUp &&
             e.Message.Contains("Cleaning temporary files", StringComparison.Ordinal));
         Assert.Contains(progress.Events, e => e.Percent is >= 0 and <= 100);
+    }
+
+    [Fact]
+    public async Task OfflineInstall_BlocksExistingTargetUnlessReplacementIsAllowed()
+    {
+        var fixture = CreatePayloadFixture();
+        var targetDirectory = Path.Combine(root, "install");
+        var workDirectory = Path.Combine(root, "work");
+        Directory.CreateDirectory(targetDirectory);
+        var sentinel = Path.Combine(targetDirectory, "existing.txt");
+        await File.WriteAllTextAsync(sentinel, "keep");
+
+        var exception = await Assert.ThrowsAsync<PayloadInstallException>(() =>
+            new PayloadInstaller().InstallAsync(
+                new PayloadInstallOptions
+                {
+                    Mode = PayloadInstallMode.Offline,
+                    ManifestPath = fixture.ManifestPath,
+                    PartsDirectory = fixture.PartsDirectory,
+                    TargetDirectory = targetDirectory,
+                    WorkDirectory = workDirectory,
+                },
+                new TestSetupLog(),
+                CancellationToken.None));
+
+        Assert.Contains("Confirm replacement before continuing", exception.Message);
+        Assert.Equal("keep", await File.ReadAllTextAsync(sentinel));
+        Assert.False(Directory.Exists(workDirectory));
+    }
+
+    [Fact]
+    public async Task OfflineInstall_CancelDuringExtractionCleansWorkAndStagingWithoutFinalTarget()
+    {
+        var fixture = CreatePayloadFixture();
+        var targetDirectory = Path.Combine(root, "install");
+        var workDirectory = Path.Combine(root, "work");
+        using var cancellation = new CancellationTokenSource();
+        var progress = new CancelOnPhaseProgress(SetupProgressPhase.ExtractingPayload, cancellation);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            new PayloadInstaller().InstallAsync(
+                new PayloadInstallOptions
+                {
+                    Mode = PayloadInstallMode.Offline,
+                    ManifestPath = fixture.ManifestPath,
+                    PartsDirectory = fixture.PartsDirectory,
+                    TargetDirectory = targetDirectory,
+                    WorkDirectory = workDirectory,
+                },
+                new TestSetupLog(),
+                cancellation.Token,
+                progress));
+
+        Assert.False(Directory.Exists(targetDirectory));
+        Assert.False(Directory.Exists(workDirectory));
+        Assert.Empty(Directory.EnumerateDirectories(root, "install.staging-*", SearchOption.TopDirectoryOnly));
     }
 
     [Fact]
@@ -460,5 +517,18 @@ public sealed class PayloadInstallerTests : IDisposable
         public List<SetupProgressEvent> Events { get; } = [];
 
         public void Report(SetupProgressEvent progress) => Events.Add(progress);
+    }
+
+    private sealed class CancelOnPhaseProgress(
+        SetupProgressPhase phase,
+        CancellationTokenSource cancellation) : ISetupProgress
+    {
+        public void Report(SetupProgressEvent progress)
+        {
+            if (progress.Phase == phase)
+            {
+                cancellation.Cancel();
+            }
+        }
     }
 }

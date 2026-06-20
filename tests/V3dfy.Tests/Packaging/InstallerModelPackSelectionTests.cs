@@ -28,6 +28,8 @@ public sealed class InstallerModelPackSelectionTests : IDisposable
         var pack = Assert.Single(manifest.Packs);
         Assert.Equal("depth-anything-v2-small", pack.PackId);
         Assert.Equal("v3dfy-modelpack-depth-anything-v2-small-v0.1.0-preview.1.zip", pack.AssetFileName);
+        Assert.Equal("General movies and quick tests.", pack.BestUseEnglish);
+        Assert.Equal("Peliculas generales y pruebas rapidas.", pack.BestUseSpanish);
         Assert.Equal(1234, pack.ZipSizeBytes);
         Assert.True(pack.InstallerSelectable);
     }
@@ -142,8 +144,56 @@ public sealed class InstallerModelPackSelectionTests : IDisposable
         var result = InstallerModelPackDiscovery.DiscoverWeb(manifest, useSpanish: true);
 
         var row = Assert.Single(result.Rows);
-        Assert.Equal("Peliculas generales y pruebas rapidas.", row.BestUse);
+        Assert.Equal("General movies and quick tests.", row.BestUseEnglish);
+        Assert.Equal("Peliculas generales y pruebas rapidas.", row.BestUseSpanish);
+        Assert.Equal("Peliculas generales y pruebas rapidas.", row.GetBestUse(SetupUiLanguage.Spanish));
         Assert.Equal("Disponible para descargar", row.StatusText);
+    }
+
+    [Fact]
+    public void Discovery_UsesEnglishBestUseWhenRequested()
+    {
+        var manifest = InstallerModelPackManifest.Parse(CreateManifestJson());
+        var result = InstallerModelPackDiscovery.DiscoverWeb(manifest);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal("General movies and quick tests.", row.GetBestUse(SetupUiLanguage.English));
+    }
+
+    [Fact]
+    public void Discovery_FallsBackToEnglishOnlyWhenSpanishBestUseIsMissing()
+    {
+        var pack = CreatePack(
+            "english-only",
+            "English Only",
+            "v3dfy-modelpack-english-only-v0.1.0-preview.1.zip");
+        pack["bestUseSpanish"] = string.Empty;
+        var manifest = InstallerModelPackManifest.Parse(CreateManifestJson(extraPacks: [pack]));
+
+        var row = InstallerModelPackDiscovery
+            .DiscoverWeb(manifest, useSpanish: true)
+            .Rows
+            .Single(row => row.PackId == "english-only");
+
+        Assert.Equal("General movies and quick tests.", row.GetBestUse(SetupUiLanguage.Spanish));
+    }
+
+    [Fact]
+    public void WebAndOfflineDiscoveryShareLocalizedBestUseRows()
+    {
+        var manifest = InstallerModelPackManifest.Parse(CreateManifestJson());
+        var sourceDirectory = Path.Combine(root, "offline-source");
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "v3dfy-modelpack-depth-anything-v2-small-v0.1.0-preview.1.zip"),
+            "synthetic local zip placeholder");
+
+        var webRow = Assert.Single(InstallerModelPackDiscovery.DiscoverWeb(manifest).Rows);
+        var offlineRow = Assert.Single(InstallerModelPackDiscovery.DiscoverOffline(manifest, sourceDirectory).Rows);
+
+        Assert.Equal(
+            webRow.GetBestUse(SetupUiLanguage.Spanish),
+            offlineRow.GetBestUse(SetupUiLanguage.Spanish));
     }
 
     [Fact]
@@ -303,6 +353,29 @@ public sealed class InstallerModelPackSelectionTests : IDisposable
         Assert.Null(result.Error);
         Assert.NotNull(result.Options);
         Assert.Equal("model-pack-source", result.Options.ModelPacksSourceDirectory);
+    }
+
+    [Fact]
+    public void PayloadArgumentParser_ReplacementFlagIsExplicit()
+    {
+        var result = PayloadInstallArgumentParser.Parse(
+        [
+            "--mode",
+            "offline",
+            "--manifest",
+            "payload.json",
+            "--target-dir",
+            "target",
+            "--work-dir",
+            "work",
+            "--parts-dir",
+            "source",
+            "--replace-existing",
+        ]);
+
+        Assert.Null(result.Error);
+        Assert.NotNull(result.Options);
+        Assert.True(result.Options.AllowTargetReplacement);
     }
 
     private static InstallerModelPackSelectionRow CreateRow(

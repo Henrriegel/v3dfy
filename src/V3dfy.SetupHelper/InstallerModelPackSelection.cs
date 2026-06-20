@@ -28,6 +28,37 @@ public sealed class InstallerModelPackSelectionRow
         bool isSelected,
         bool isAvailable,
         InstallerModelPackSourceKind sourceKind)
+        : this(
+            packId,
+            displayName,
+            bestUse,
+            string.Empty,
+            assetFileName,
+            sourcePath,
+            url,
+            zipSha256,
+            zipSizeBytes,
+            statusText,
+            isSelected,
+            isAvailable,
+            sourceKind)
+    {
+    }
+
+    public InstallerModelPackSelectionRow(
+        string packId,
+        string displayName,
+        string bestUseEnglish,
+        string bestUseSpanish,
+        string assetFileName,
+        string? sourcePath,
+        string url,
+        string zipSha256,
+        long zipSizeBytes,
+        string statusText,
+        bool isSelected,
+        bool isAvailable,
+        InstallerModelPackSourceKind sourceKind)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packId);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
@@ -40,7 +71,8 @@ public sealed class InstallerModelPackSelectionRow
 
         PackId = packId;
         DisplayName = displayName;
-        BestUse = bestUse;
+        BestUseEnglish = bestUseEnglish ?? string.Empty;
+        BestUseSpanish = bestUseSpanish ?? string.Empty;
         AssetFileName = assetFileName;
         SourcePath = sourcePath;
         Url = url;
@@ -57,7 +89,11 @@ public sealed class InstallerModelPackSelectionRow
 
     public string DisplayName { get; }
 
-    public string BestUse { get; }
+    public string BestUseEnglish { get; }
+
+    public string BestUseSpanish { get; }
+
+    public string BestUse => GetBestUse(SetupUiLanguage.English);
 
     public string AssetFileName { get; }
 
@@ -78,6 +114,18 @@ public sealed class InstallerModelPackSelectionRow
     public bool IsAvailable { get; }
 
     public InstallerModelPackSourceKind SourceKind { get; }
+
+    public string GetBestUse(SetupUiLanguage language)
+    {
+        if (language == SetupUiLanguage.Spanish && !string.IsNullOrWhiteSpace(BestUseSpanish))
+        {
+            return BestUseSpanish;
+        }
+
+        return !string.IsNullOrWhiteSpace(BestUseEnglish)
+            ? BestUseEnglish
+            : BestUseSpanish;
+    }
 }
 
 public sealed record InstallerModelPackDiscoveryResult(
@@ -107,8 +155,7 @@ public static class InstallerModelPackDiscovery
                 pack,
                 sourcePath: null,
                 useSpanish ? WebStatusTextSpanish : WebStatusText,
-                InstallerModelPackSourceKind.WebReleaseAsset,
-                useSpanish))
+                InstallerModelPackSourceKind.WebReleaseAsset))
             .ToArray();
 
         return new InstallerModelPackDiscoveryResult(rows, rows.Length == 0
@@ -144,8 +191,7 @@ public static class InstallerModelPackDiscovery
                 pack,
                 localZips[pack.AssetFileName],
                 useSpanish ? OfflineStatusTextSpanish : OfflineStatusText,
-                InstallerModelPackSourceKind.OfflineLocalZip,
-                useSpanish))
+                InstallerModelPackSourceKind.OfflineLocalZip))
             .ToArray();
 
         return new InstallerModelPackDiscoveryResult(rows, rows.Length == 0
@@ -157,16 +203,13 @@ public static class InstallerModelPackDiscovery
         InstallerModelPackEntry pack,
         string? sourcePath,
         string statusText,
-        InstallerModelPackSourceKind sourceKind,
-        bool useSpanish)
+        InstallerModelPackSourceKind sourceKind)
     {
-        var bestUse = useSpanish && !string.IsNullOrWhiteSpace(pack.BestUseSpanish)
-            ? pack.BestUseSpanish
-            : pack.BestUseEnglish;
         return new InstallerModelPackSelectionRow(
             pack.PackId,
             pack.DisplayName,
-            bestUse,
+            pack.BestUseEnglish,
+            pack.BestUseSpanish,
             pack.AssetFileName,
             sourcePath,
             pack.Url,

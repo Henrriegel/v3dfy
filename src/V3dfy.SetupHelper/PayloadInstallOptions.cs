@@ -25,4 +25,6 @@ public sealed class PayloadInstallOptions
     public string? ModelPacksSourceDirectory { get; init; }
 
     public bool KeepWorkDirectory { get; init; }
+
+    public bool AllowTargetReplacement { get; init; }
 }

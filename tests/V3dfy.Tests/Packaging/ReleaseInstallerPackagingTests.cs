@@ -139,6 +139,7 @@ public sealed class ReleaseInstallerPackagingTests
         var script = ReadRepoFile("scripts", "package-release-installers.ps1");
 
         Assert.Contains("$publishOutput = & dotnet publish $helperProject", script);
+        Assert.Contains("--no-restore", script);
         Assert.Contains("$publishExitCode = $LASTEXITCODE", script);
         Assert.Contains("foreach ($line in $publishOutput)", script);
         Assert.Contains("Write-Host $line", script);
@@ -319,13 +320,20 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("new RowStyle(SizeType.Percent, 100)", uiSource);
         Assert.Contains("buttonPanel", uiSource);
         Assert.Contains("AutoSize = true", uiSource);
-        Assert.Contains("Download:", uiSource);
-        Assert.Contains("Verify:", uiSource);
-        Assert.Contains("Rebuild package", uiSource);
-        Assert.Contains("Extract:", uiSource);
-        Assert.Contains("Install files", uiSource);
-        Assert.Contains("Clean temporary files", uiSource);
-        Assert.Contains("Complete", uiSource);
+        Assert.Contains("uiText.LogDownloadLabel", uiSource);
+        Assert.Contains("uiText.LogVerifyLabel", uiSource);
+        Assert.Contains("uiText.LogRebuildPackageLabel", uiSource);
+        Assert.Contains("uiText.LogExtractLabel", uiSource);
+        Assert.Contains("uiText.LogInstallFilesLabel", uiSource);
+        Assert.Contains("uiText.LogCleanTemporaryFilesLabel", uiSource);
+        Assert.Contains("uiText.LogCompleteLabel", uiSource);
+        Assert.Contains("ConfirmTargetReplacementBeforeInstall", uiSource);
+        Assert.Contains("PayloadInstaller.TargetHasExistingContent", uiSource);
+        Assert.Contains("CreatePayloadInstallOptions()", uiSource);
+        Assert.Contains("AllowTargetReplacement", uiSource);
+        Assert.Contains("TryDeleteInstalledPayloadAfterFailure", uiSource);
+        Assert.Contains("V3dfy.App.exe", uiSource);
+        Assert.Contains("payloadInstalled", uiSource);
         Assert.DoesNotContain("of 3", uiSource);
         Assert.DoesNotContain("All package parts verified", uiSource);
         Assert.Contains("SetupProgressPhase.DownloadingPart", installerSource);

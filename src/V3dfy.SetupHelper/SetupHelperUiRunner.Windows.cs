@@ -61,6 +61,8 @@ internal sealed class SetupProgressForm : Form
     private string? modelPackCatalogV3dfyVersion;
     private bool updatingModelPackControls;
     private bool payloadInstallStarted;
+    private bool payloadInstalled;
+    private bool replaceExistingTargetConfirmed;
     private bool running;
     private SetupUiLanguage selectedLanguage = SetupUiLanguage.English;
     private SetupUiThemeKind selectedThemeKind = SetupUiThemeKind.Dark;
@@ -484,6 +486,7 @@ internal sealed class SetupProgressForm : Form
         modelPackTopCheckBox.Text = uiText.SelectAllVisibleOptionalModelPacks;
         modelPackNoPacksLabel.Text = uiText.OfflineNoPacksText;
         UpdateModelPackGridHeaders();
+        UpdateModelPackBestUseCells();
         UpdateModelPackSourceStatusCells();
 
         continueButton.Text = uiText.ContinueButton;
@@ -556,13 +559,29 @@ internal sealed class SetupProgressForm : Form
                 continue;
             }
 
-            gridRow.Cells["SourceStatus"].Value = selectionRow.SourceKind switch
-            {
-                InstallerModelPackSourceKind.OfflineLocalZip => uiText.OfflineLocalZipStatus,
-                _ => uiText.WebReleaseAssetStatus,
-            };
+            gridRow.Cells["SourceStatus"].Value = GetModelPackSourceStatusText(selectionRow);
         }
     }
+
+    private void UpdateModelPackBestUseCells()
+    {
+        foreach (DataGridViewRow gridRow in modelPackGrid.Rows)
+        {
+            if (gridRow.Tag is not InstallerModelPackSelectionRow selectionRow)
+            {
+                continue;
+            }
+
+            gridRow.Cells["BestUse"].Value = selectionRow.GetBestUse(selectedLanguage);
+        }
+    }
+
+    private string GetModelPackSourceStatusText(InstallerModelPackSelectionRow selectionRow) =>
+        selectionRow.SourceKind switch
+        {
+            InstallerModelPackSourceKind.OfflineLocalZip => uiText.OfflineLocalZipStatus,
+            _ => uiText.WebReleaseAssetStatus,
+        };
 
     private void ApplyTheme()
     {
@@ -665,6 +684,11 @@ internal sealed class SetupProgressForm : Form
                 return;
             }
 
+            if (!ConfirmTargetReplacementBeforeInstall())
+            {
+                return;
+            }
+
             StartPayloadInstall();
         }
         catch (OperationCanceledException)
@@ -741,9 +765,9 @@ internal sealed class SetupProgressForm : Form
                 var index = modelPackGrid.Rows.Add(
                     row.IsSelected,
                     row.DisplayName,
-                    row.BestUse,
+                    row.GetBestUse(selectedLanguage),
                     row.SizeText,
-                    row.StatusText);
+                    GetModelPackSourceStatusText(row));
                 modelPackGrid.Rows[index].Tag = row;
             }
 
@@ -853,7 +877,54 @@ internal sealed class SetupProgressForm : Form
             }
         }
 
+        if (!ConfirmTargetReplacementBeforeInstall())
+        {
+            return;
+        }
+
         StartPayloadInstall();
+    }
+
+    private bool ConfirmTargetReplacementBeforeInstall()
+    {
+        bool hasExistingContent;
+        try
+        {
+            hasExistingContent = PayloadInstaller.TargetHasExistingContent(options.TargetDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ExitCode = 1;
+            running = false;
+            AppendLogLine($"{uiText.ErrorPrefix}: {ex.Message}");
+            Close();
+            return false;
+        }
+
+        if (options.AllowTargetReplacement || !hasExistingContent)
+        {
+            return true;
+        }
+
+        var result = MessageBox.Show(
+            this,
+            uiText.FormatExistingInstallPrompt(options.TargetDirectory),
+            uiText.ExistingInstallTitle,
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (result == DialogResult.Yes)
+        {
+            replaceExistingTargetConfirmed = true;
+            AppendLogLine(uiText.ExistingInstallReplacementAccepted);
+            return true;
+        }
+
+        ExitCode = 3;
+        running = false;
+        AppendLogLine(uiText.InstallationCanceled);
+        Close();
+        return false;
     }
 
     private void StartPayloadInstall()
@@ -901,6 +972,7 @@ internal sealed class SetupProgressForm : Form
 
         try
         {
+            payloadInstalled = false;
             foreach (var warning in pendingSetupWarningMessages)
             {
                 log.Warning(warning);
@@ -912,10 +984,11 @@ internal sealed class SetupProgressForm : Form
             }
 
             await new PayloadInstaller().InstallAsync(
-                options,
+                CreatePayloadInstallOptions(),
                 log,
                 cancellationTokenSource.Token,
                 progress);
+            payloadInstalled = true;
 
             var acquisitionResult = await AcquireSelectedModelPacksAsync(
                 log,
@@ -951,20 +1024,60 @@ internal sealed class SetupProgressForm : Form
         }
         catch (OperationCanceledException)
         {
+            TryDeleteInstalledPayloadAfterFailure(log);
             log.Error(uiText.InstallationCanceled);
             PostFailure(uiText.InstallationCanceled);
         }
         catch (PayloadInstallException ex)
         {
+            TryDeleteInstalledPayloadAfterFailure(log);
             log.Error(ex.Message);
             PostFailure(ex.Message);
         }
         catch (Exception ex)
         {
+            TryDeleteInstalledPayloadAfterFailure(log);
             log.Error($"Unexpected setup helper failure: {ex.Message}");
             PostFailure($"Unexpected setup helper failure: {ex.Message}");
         }
     }
+
+    private void TryDeleteInstalledPayloadAfterFailure(ISetupLog log)
+    {
+        var targetDirectory = Path.GetFullPath(options.TargetDirectory);
+        if (!payloadInstallStarted ||
+            !payloadInstalled ||
+            !File.Exists(Path.Combine(targetDirectory, "V3dfy.App.exe")) ||
+            !Directory.Exists(targetDirectory))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(targetDirectory, recursive: true);
+            payloadInstalled = false;
+            log.Warning(uiText.InstalledPayloadRemovedAfterFailure);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            log.Warning(uiText.FormatInstalledPayloadCleanupFailed(ex.Message));
+        }
+    }
+
+    private PayloadInstallOptions CreatePayloadInstallOptions() => new()
+    {
+        Mode = options.Mode,
+        ManifestPath = options.ManifestPath,
+        TargetDirectory = options.TargetDirectory,
+        WorkDirectory = options.WorkDirectory,
+        PartsDirectory = options.PartsDirectory,
+        ReleaseBaseUrlOverride = options.ReleaseBaseUrlOverride,
+        ModelPacksManifestPath = options.ModelPacksManifestPath,
+        ModelPacksSourceDirectory = options.ModelPacksSourceDirectory,
+        KeepWorkDirectory = options.KeepWorkDirectory,
+        AllowTargetReplacement = options.AllowTargetReplacement || replaceExistingTargetConfirmed,
+    };
 
     private async Task<InstallerModelPackAcquisitionResult?> AcquireSelectedModelPacksAsync(
         ISetupLog log,
@@ -1282,6 +1395,7 @@ internal sealed class SetupProgressForm : Form
             SetupProgressPhase.InstallingModelPack => uiText.InstallingOptionalModelPack,
             SetupProgressPhase.CleaningUp => uiText.CleaningTemporaryFiles,
             SetupProgressPhase.Completed => uiText.InstallationComplete,
+            SetupProgressPhase.Preparing => uiText.PreparingSetup,
             _ => progress.Message.TrimEnd('.'),
         };
     }
@@ -1325,34 +1439,34 @@ internal sealed class SetupProgressForm : Form
         return progress.Phase switch
         {
             SetupProgressPhase.DownloadingPart when progress.Percent is > 0 and < 100 =>
-                $"Download progress: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
-            SetupProgressPhase.DownloadingPart => $"Download: {fileName}",
-            SetupProgressPhase.FindingPart => $"Find: {fileName}",
+                $"{uiText.LogDownloadProgressLabel}: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
+            SetupProgressPhase.DownloadingPart => $"{uiText.LogDownloadLabel}: {fileName}",
+            SetupProgressPhase.FindingPart => $"{uiText.LogFindLabel}: {fileName}",
             SetupProgressPhase.VerifyingPart when progress.Percent is > 0 and < 100 =>
-                $"Verify progress: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
-            SetupProgressPhase.VerifyingPart => $"Verify: {fileName}",
+                $"{uiText.LogVerifyProgressLabel}: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
+            SetupProgressPhase.VerifyingPart => $"{uiText.LogVerifyLabel}: {fileName}",
             SetupProgressPhase.RebuildingZip when progress.Percent is > 0 and < 100 =>
-                $"Rebuild progress: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
-            SetupProgressPhase.RebuildingZip => "Rebuild package",
+                $"{uiText.LogRebuildProgressLabel}: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
+            SetupProgressPhase.RebuildingZip => uiText.LogRebuildPackageLabel,
             SetupProgressPhase.VerifyingZip when progress.Percent is > 0 and < 100 =>
-                $"Verify package progress: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
-            SetupProgressPhase.VerifyingZip => "Verify package",
+                $"{uiText.LogVerifyPackageProgressLabel}: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
+            SetupProgressPhase.VerifyingZip => uiText.LogVerifyPackageLabel,
             SetupProgressPhase.ExtractingPayload when !string.IsNullOrWhiteSpace(progress.CurrentFile) =>
-                $"Extract: {ShortenArchivePath(progress.CurrentFile)}",
-            SetupProgressPhase.ExtractingPayload => "Extract files",
-            SetupProgressPhase.InstallingPayload => "Install files",
+                $"{uiText.LogExtractLabel}: {ShortenArchivePath(progress.CurrentFile)}",
+            SetupProgressPhase.ExtractingPayload => uiText.LogExtractFilesLabel,
+            SetupProgressPhase.InstallingPayload => uiText.LogInstallFilesLabel,
             SetupProgressPhase.DownloadingModelPack when progress.Percent is > 0 and < 100 =>
-                $"Download optional model pack progress: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
-            SetupProgressPhase.DownloadingModelPack => $"Download optional model pack: {fileName}",
+                $"{uiText.LogDownloadOptionalModelPackProgressLabel}: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
+            SetupProgressPhase.DownloadingModelPack => $"{uiText.LogDownloadOptionalModelPackLabel}: {fileName}",
             SetupProgressPhase.VerifyingModelPack when progress.Percent is > 0 and < 100 =>
-                $"Verify optional model pack progress: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
-            SetupProgressPhase.VerifyingModelPack => $"Verify optional model pack: {fileName}",
-            SetupProgressPhase.ValidatingModelPack => $"Validate optional model pack: {fileName}",
+                $"{uiText.LogVerifyOptionalModelPackProgressLabel}: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
+            SetupProgressPhase.VerifyingModelPack => $"{uiText.LogVerifyOptionalModelPackLabel}: {fileName}",
+            SetupProgressPhase.ValidatingModelPack => $"{uiText.LogValidateOptionalModelPackLabel}: {fileName}",
             SetupProgressPhase.InstallingModelPack when progress.Percent is > 0 and < 100 =>
-                $"Install optional model pack progress: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
-            SetupProgressPhase.InstallingModelPack => $"Install optional model pack: {fileName}",
-            SetupProgressPhase.CleaningUp => "Clean temporary files",
-            SetupProgressPhase.Completed => "Complete",
+                $"{uiText.LogInstallOptionalModelPackProgressLabel}: {FormatBytes(progress.CurrentBytes ?? 0)} / {FormatBytes(progress.TotalBytes ?? 0)} ({progress.Percent:0.0}%)",
+            SetupProgressPhase.InstallingModelPack => $"{uiText.LogInstallOptionalModelPackLabel}: {fileName}",
+            SetupProgressPhase.CleaningUp => uiText.LogCleanTemporaryFilesLabel,
+            SetupProgressPhase.Completed => uiText.LogCompleteLabel,
             _ => progress.Message.TrimEnd('.'),
         };
     }

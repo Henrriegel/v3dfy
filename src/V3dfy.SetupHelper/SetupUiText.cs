@@ -167,6 +167,90 @@ public sealed class SetupUiText
 
     public string ErrorPrefix => Language == SetupUiLanguage.Spanish ? "ERROR" : "ERROR";
 
+    public string ExistingInstallTitle =>
+        Language == SetupUiLanguage.Spanish ? "Instalacion existente" : "Existing installation";
+
+    public string ExistingInstallReplacementAccepted =>
+        Language == SetupUiLanguage.Spanish
+            ? "Se reemplazara la instalacion existente."
+            : "Existing installation will be replaced.";
+
+    public string InstalledPayloadRemovedAfterFailure =>
+        Language == SetupUiLanguage.Spanish
+            ? "Se quitaron los archivos instalados por esta ejecucion cancelada o fallida."
+            : "Removed files installed by this cancelled or failed setup run.";
+
+    public string FormatInstalledPayloadCleanupFailed(string reason) =>
+        Language == SetupUiLanguage.Spanish
+            ? $"No se pudieron quitar los archivos instalados por esta ejecucion fallida: {reason}"
+            : $"Could not remove files installed by this failed setup run: {reason}";
+
+    public string LogDownloadLabel => Language == SetupUiLanguage.Spanish ? "Descargar" : "Download";
+
+    public string LogDownloadProgressLabel =>
+        Language == SetupUiLanguage.Spanish ? "Progreso de descarga" : "Download progress";
+
+    public string LogFindLabel => Language == SetupUiLanguage.Spanish ? "Buscar" : "Find";
+
+    public string LogVerifyLabel => Language == SetupUiLanguage.Spanish ? "Verificar" : "Verify";
+
+    public string LogVerifyProgressLabel =>
+        Language == SetupUiLanguage.Spanish ? "Progreso de verificacion" : "Verify progress";
+
+    public string LogRebuildPackageLabel =>
+        Language == SetupUiLanguage.Spanish ? "Reconstruir paquete" : "Rebuild package";
+
+    public string LogRebuildProgressLabel =>
+        Language == SetupUiLanguage.Spanish ? "Progreso de reconstruccion" : "Rebuild progress";
+
+    public string LogVerifyPackageLabel =>
+        Language == SetupUiLanguage.Spanish ? "Verificar paquete" : "Verify package";
+
+    public string LogVerifyPackageProgressLabel =>
+        Language == SetupUiLanguage.Spanish
+            ? "Progreso de verificacion del paquete"
+            : "Verify package progress";
+
+    public string LogExtractLabel => Language == SetupUiLanguage.Spanish ? "Extraer" : "Extract";
+
+    public string LogExtractFilesLabel =>
+        Language == SetupUiLanguage.Spanish ? "Extraer archivos" : "Extract files";
+
+    public string LogInstallFilesLabel =>
+        Language == SetupUiLanguage.Spanish ? "Instalar archivos" : "Install files";
+
+    public string LogCleanTemporaryFilesLabel =>
+        Language == SetupUiLanguage.Spanish ? "Limpiar archivos temporales" : "Clean temporary files";
+
+    public string LogCompleteLabel => Language == SetupUiLanguage.Spanish ? "Completo" : "Complete";
+
+    public string LogDownloadOptionalModelPackLabel =>
+        Language == SetupUiLanguage.Spanish ? "Descargar modelo opcional" : "Download optional model pack";
+
+    public string LogDownloadOptionalModelPackProgressLabel =>
+        Language == SetupUiLanguage.Spanish
+            ? "Progreso de descarga de modelo opcional"
+            : "Download optional model pack progress";
+
+    public string LogVerifyOptionalModelPackLabel =>
+        Language == SetupUiLanguage.Spanish ? "Verificar modelo opcional" : "Verify optional model pack";
+
+    public string LogVerifyOptionalModelPackProgressLabel =>
+        Language == SetupUiLanguage.Spanish
+            ? "Progreso de verificacion de modelo opcional"
+            : "Verify optional model pack progress";
+
+    public string LogValidateOptionalModelPackLabel =>
+        Language == SetupUiLanguage.Spanish ? "Validar modelo opcional" : "Validate optional model pack";
+
+    public string LogInstallOptionalModelPackLabel =>
+        Language == SetupUiLanguage.Spanish ? "Instalar modelo opcional" : "Install optional model pack";
+
+    public string LogInstallOptionalModelPackProgressLabel =>
+        Language == SetupUiLanguage.Spanish
+            ? "Progreso de instalacion de modelo opcional"
+            : "Install optional model pack progress";
+
     public string FormatSelectedSummary(int count, string sizeText)
     {
         if (Language == SetupUiLanguage.Spanish)
@@ -226,6 +310,11 @@ public sealed class SetupUiText
             : Language == SetupUiLanguage.Spanish
                 ? $"Modelos opcionales instalados: {successCount}."
                 : $"Optional model packs installed: {successCount}.";
+
+    public string FormatExistingInstallPrompt(string targetDirectory) =>
+        Language == SetupUiLanguage.Spanish
+            ? $"La carpeta de destino ya contiene archivos:{Environment.NewLine}{targetDirectory}{Environment.NewLine}{Environment.NewLine}v3dfy reemplazara esa carpeta por una instalacion nueva. No se mezclaran archivos antiguos y nuevos. ¿Continuar?"
+            : $"The destination folder already contains files:{Environment.NewLine}{targetDirectory}{Environment.NewLine}{Environment.NewLine}v3dfy will replace that folder with a fresh install. Old and new files will not be merged. Continue?";
 
     public string TranslateOverallMessage(string? message) =>
         message switch

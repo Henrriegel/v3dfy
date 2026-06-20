@@ -95,6 +95,27 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
     }
 
     [Fact]
+    public void SelectionPage_RefreshesLocalizedRowTextAfterLanguageChange()
+    {
+        var source = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
+        var selectionSource = ReadRepoFile("src", "V3dfy.SetupHelper", "InstallerModelPackSelection.cs");
+        var applyLocalizedText = ExtractSourceRange(
+            source,
+            "private void ApplyLocalizedText()",
+            "private void RefreshThemeComboBoxItems()");
+        var loadRows = ExtractSourceRange(
+            source,
+            "private void LoadModelPackRows(InstallerModelPackSelectionPageModel pageModel)",
+            "private void UpdateModelPackSelectionControls()");
+
+        Assert.Contains("UpdateModelPackBestUseCells();", applyLocalizedText);
+        Assert.Contains("row.GetBestUse(selectedLanguage)", loadRows);
+        Assert.Contains("selectionRow.GetBestUse(selectedLanguage)", source);
+        Assert.Contains("BestUseEnglish", selectionSource);
+        Assert.Contains("BestUseSpanish", selectionSource);
+    }
+
+    [Fact]
     public void SelectionPage_TopCheckboxAndRowsUpdateSharedSelectionState()
     {
         var source = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");

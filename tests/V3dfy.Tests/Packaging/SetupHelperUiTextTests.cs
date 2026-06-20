@@ -29,6 +29,24 @@ public sealed class SetupHelperUiTextTests
     }
 
     [Fact]
+    public void TextCatalog_ContainsSpanishSetupLogLabels()
+    {
+        var spanish = SetupUiText.For(SetupUiLanguage.Spanish);
+
+        Assert.Equal("Buscar", spanish.LogFindLabel);
+        Assert.Equal("Verificar", spanish.LogVerifyLabel);
+        Assert.Equal("Progreso de verificacion", spanish.LogVerifyProgressLabel);
+        Assert.Equal("Reconstruir paquete", spanish.LogRebuildPackageLabel);
+        Assert.Equal("Progreso de reconstruccion", spanish.LogRebuildProgressLabel);
+        Assert.Equal("Verificar paquete", spanish.LogVerifyPackageLabel);
+        Assert.Equal("Progreso de verificacion del paquete", spanish.LogVerifyPackageProgressLabel);
+        Assert.Equal("Limpiar archivos temporales", spanish.LogCleanTemporaryFilesLabel);
+        Assert.Contains("solicitada", spanish.CancelRequested);
+        Assert.Equal("ERROR", spanish.ErrorPrefix);
+        Assert.Contains("cancelada", spanish.InstallationCanceled);
+    }
+
+    [Fact]
     public void SelectionSummary_IsLocalized()
     {
         var english = SetupUiText.For(SetupUiLanguage.English);
