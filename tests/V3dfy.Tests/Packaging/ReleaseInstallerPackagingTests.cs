@@ -310,8 +310,11 @@ public sealed class ReleaseInstallerPackagingTests
         Assert.Contains("progressPanel.Controls.Add(overallProgressTextLabel, 0, 0)", uiSource);
         Assert.Contains("progressPanel.Controls.Add(overallProgressBar, 0, 1)", uiSource);
         Assert.Contains("progressPanel.Controls.Add(currentProgressHeaderLabel, 0, 2)", uiSource);
-        Assert.Contains("progressPanel.Controls.Add(statusLabel, 0, 3)", uiSource);
-        Assert.Contains("progressPanel.Controls.Add(progressBar, 0, 4)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(progressBar, 0, 3)", uiSource);
+        Assert.Contains("progressPanel.Controls.Add(statusLabel, 0, 4)", uiSource);
+        Assert.Contains("AutoSizeMode = AutoSizeMode.GrowAndShrink", uiSource);
+        Assert.Contains("new RowStyle(SizeType.Absolute, OverallProgressBarHeight)", uiSource);
+        Assert.Contains("new RowStyle(SizeType.Absolute, CurrentProgressBarHeight)", uiSource);
         Assert.Contains("ProgressBar", uiSource);
         Assert.Contains("progressTextLabel", uiSource);
         Assert.Contains("ListBox", uiSource);

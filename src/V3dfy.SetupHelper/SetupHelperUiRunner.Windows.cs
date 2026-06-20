@@ -22,6 +22,9 @@ public static partial class SetupHelperUiRunner
 
 internal sealed class SetupProgressForm : Form
 {
+    private const int OverallProgressBarHeight = 18;
+    private const int CurrentProgressBarHeight = 22;
+
     private readonly PayloadInstallOptions options;
     private readonly string? logPath;
     private readonly CancellationTokenSource cancellationTokenSource;
@@ -194,16 +197,19 @@ internal sealed class SetupProgressForm : Form
 
         progressPanel = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
             ColumnCount = 1,
             RowCount = 6,
             Margin = new Padding(0, 0, 0, 12),
             Padding = new Padding(14),
         };
+        progressPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, OverallProgressBarHeight));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, CurrentProgressBarHeight));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         progressPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
@@ -217,7 +223,8 @@ internal sealed class SetupProgressForm : Form
         overallProgressBar = new ProgressBar
         {
             Dock = DockStyle.Fill,
-            Height = 18,
+            Height = OverallProgressBarHeight,
+            MinimumSize = new Size(0, OverallProgressBarHeight),
             Style = ProgressBarStyle.Continuous,
             MarqueeAnimationSpeed = 0,
             Minimum = 0,
@@ -225,7 +232,7 @@ internal sealed class SetupProgressForm : Form
             Value = 0,
         };
 
-        statusLabel.Margin = new Padding(0, 10, 0, 4);
+        statusLabel.Margin = new Padding(0, 8, 0, 4);
 
         currentProgressHeaderLabel = new Label
         {
@@ -238,11 +245,13 @@ internal sealed class SetupProgressForm : Form
         progressBar = new ProgressBar
         {
             Dock = DockStyle.Fill,
-            Height = 22,
+            Height = CurrentProgressBarHeight,
+            MinimumSize = new Size(0, CurrentProgressBarHeight),
             Style = ProgressBarStyle.Marquee,
             MarqueeAnimationSpeed = 30,
             Minimum = 0,
             Maximum = 1000,
+            Value = 0,
         };
         progressTextLabel = new Label
         {
@@ -254,8 +263,8 @@ internal sealed class SetupProgressForm : Form
         progressPanel.Controls.Add(overallProgressTextLabel, 0, 0);
         progressPanel.Controls.Add(overallProgressBar, 0, 1);
         progressPanel.Controls.Add(currentProgressHeaderLabel, 0, 2);
-        progressPanel.Controls.Add(statusLabel, 0, 3);
-        progressPanel.Controls.Add(progressBar, 0, 4);
+        progressPanel.Controls.Add(progressBar, 0, 3);
+        progressPanel.Controls.Add(statusLabel, 0, 4);
         progressPanel.Controls.Add(progressTextLabel, 0, 5);
 
         logLabel = new Label
@@ -931,15 +940,26 @@ internal sealed class SetupProgressForm : Form
     {
         payloadInstallStarted = true;
         headingLabel.Text = uiText.InstallingTitle;
-        modelPackSelectionPanel.Visible = false;
-        progressPanel.Visible = true;
-        logLabel.Visible = true;
-        logListBox.Visible = true;
+        ShowInstallProgressLayout();
         continueButton.Visible = false;
         actionButton.Text = uiText.CancelButton;
         actionButton.Enabled = true;
 
         _ = Task.Run(RunInstallAsync);
+    }
+
+    private void ShowInstallProgressLayout()
+    {
+        modelPackSelectionPanel.Visible = false;
+        progressPanel.Visible = true;
+        overallProgressTextLabel.Visible = true;
+        overallProgressBar.Visible = true;
+        currentProgressHeaderLabel.Visible = true;
+        statusLabel.Visible = true;
+        progressBar.Visible = true;
+        progressTextLabel.Visible = true;
+        logLabel.Visible = true;
+        logListBox.Visible = true;
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

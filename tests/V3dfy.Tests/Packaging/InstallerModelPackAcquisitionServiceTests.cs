@@ -181,6 +181,43 @@ public sealed class InstallerModelPackAcquisitionServiceTests : IDisposable
         Assert.Equal(0, handler.RequestCount);
     }
 
+    [Theory]
+    [InlineData(InstallerModelPackSourceKind.WebReleaseAsset, SetupProgressPhase.DownloadingModelPack)]
+    [InlineData(InstallerModelPackSourceKind.OfflineLocalZip, SetupProgressPhase.VerifyingModelPack)]
+    public async Task Acquisition_WithOptionalOverallTrackerReportsCurrentAndOverallProgress(
+        InstallerModelPackSourceKind sourceKind,
+        SetupProgressPhase expectedPhase)
+    {
+        var bytes = "tracked optional model pack bytes"u8.ToArray();
+        var progress = new RecordingSetupProgress();
+        var row = sourceKind == InstallerModelPackSourceKind.WebReleaseAsset
+            ? CreateWebRow("tracked-web", bytes, selected: true)
+            : CreateOfflineRow("tracked-offline", bytes, WriteLocalFile("tracked-offline.zip", bytes), selected: true);
+        var trackedProgress = new SetupOptionalModelPackOverallProgressTracker(
+            progress,
+            [new SetupOptionalModelPackProgressItem(row.AssetFileName, row.ZipSizeBytes)]);
+        var handler = new RecordingHttpMessageHandler(_ => CreateResponse(bytes));
+        var service = new InstallerModelPackAcquisitionService(new HttpClient(handler));
+
+        var result = await service.AcquireAsync(
+            [row],
+            Path.Combine(root, "work"),
+            new RecordingSetupLog(),
+            CancellationToken.None,
+            trackedProgress);
+
+        Assert.Single(result.AcquiredFiles);
+        Assert.Empty(result.Failures);
+        var completeEvents = progress.Events.Where(e =>
+            e.Phase == expectedPhase &&
+            e.CurrentBytes == e.TotalBytes &&
+            e.Percent is not null &&
+            e.OverallPercent is not null).ToArray();
+        Assert.NotEmpty(completeEvents);
+        var progressEvent = completeEvents[^1];
+        Assert.Equal(row.AssetFileName, progressEvent.CurrentFile);
+    }
+
     [Fact]
     public async Task OfflineAcquisition_MissingLocalFileFailsPack()
     {

@@ -194,6 +194,66 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
     }
 
     [Fact]
+    public void UiRunner_InstallProgressLayoutAlwaysShowsBothProgressBars()
+    {
+        var source = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
+        var constructor = ExtractSourceRange(
+            source,
+            "public SetupProgressForm(",
+            "private TableLayoutPanel CreateModelPackSelectionPanel()");
+        var startMethod = ExtractSourceRange(
+            source,
+            "private void StartPayloadInstall()",
+            "protected override void OnFormClosing");
+        var layoutMethod = ExtractSourceRange(
+            source,
+            "private void ShowInstallProgressLayout()",
+            "protected override void OnFormClosing");
+
+        Assert.Contains("overallProgressBar = new ProgressBar", constructor);
+        Assert.Contains("progressBar = new ProgressBar", constructor);
+        Assert.Contains("AutoSizeMode = AutoSizeMode.GrowAndShrink", constructor);
+        Assert.Contains("Dock = DockStyle.Top", constructor);
+        Assert.Contains("new RowStyle(SizeType.Absolute, OverallProgressBarHeight)", constructor);
+        Assert.Contains("new RowStyle(SizeType.Absolute, CurrentProgressBarHeight)", constructor);
+        Assert.Contains("MinimumSize = new Size(0, OverallProgressBarHeight)", constructor);
+        Assert.Contains("MinimumSize = new Size(0, CurrentProgressBarHeight)", constructor);
+        Assert.Contains("progressPanel.Controls.Add(overallProgressTextLabel, 0, 0)", constructor);
+        Assert.Contains("progressPanel.Controls.Add(overallProgressBar, 0, 1)", constructor);
+        Assert.Contains("progressPanel.Controls.Add(currentProgressHeaderLabel, 0, 2)", constructor);
+        Assert.Contains("progressPanel.Controls.Add(progressBar, 0, 3)", constructor);
+        Assert.Contains("progressPanel.Controls.Add(statusLabel, 0, 4)", constructor);
+        Assert.Contains("ShowInstallProgressLayout();", startMethod);
+        Assert.Contains("progressPanel.Visible = true;", layoutMethod);
+        Assert.Contains("overallProgressBar.Visible = true;", layoutMethod);
+        Assert.Contains("progressBar.Visible = true;", layoutMethod);
+        Assert.DoesNotContain("progressBar.Visible = false", source);
+        Assert.DoesNotContain("options.Mode", layoutMethod);
+    }
+
+    [Fact]
+    public void UiRunner_WebPayloadDownloadKeepsCurrentProgressBarVisible()
+    {
+        var uiSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
+        var installerSource = ReadRepoFile("src", "V3dfy.SetupHelper", "PayloadInstaller.cs");
+        var reportProgress = ExtractSourceRange(
+            uiSource,
+            "public void ReportProgress(SetupProgressEvent progress)",
+            "public void AppendLogLine(string message)");
+        var layoutMethod = ExtractSourceRange(
+            uiSource,
+            "private void ShowInstallProgressLayout()",
+            "protected override void OnFormClosing");
+
+        Assert.Contains("[SetupProgressPhase.DownloadingPart] = new(200, 2700)", installerSource);
+        Assert.Contains("SetupProgressPhase.DownloadingPart", installerSource);
+        Assert.Contains("progressBar.Visible = true;", layoutMethod);
+        Assert.Contains("progressBar.Style = ProgressBarStyle.Continuous;", reportProgress);
+        Assert.Contains("progressBar.Value = Math.Clamp((int)Math.Round(percent * 10)", reportProgress);
+        Assert.DoesNotContain("progressBar.Visible = false", uiSource);
+    }
+
+    [Fact]
     public void SelectionPage_StoresSelectedRowsAndImportsOnlyAfterVerifiedAcquisition()
     {
         var uiSource = ReadRepoFile("src", "V3dfy.SetupHelper", "SetupHelperUiRunner.Windows.cs");
@@ -218,7 +278,7 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
         var installMethod = ExtractSourceRange(
             uiSource,
             "private async Task RunInstallAsync()",
-            "private async Task<InstallerModelPackAcquisitionResult?> AcquireSelectedModelPacksAsync(");
+            "private void TryDeleteInstalledPayloadAfterFailure");
         var payloadIndex = installMethod.IndexOf("PayloadInstaller().InstallAsync", StringComparison.Ordinal);
         var acquisitionIndex = installMethod.IndexOf("AcquireSelectedModelPacksAsync", StringComparison.Ordinal);
         var importIndex = installMethod.IndexOf("ImportAcquiredModelPacksAsync", StringComparison.Ordinal);
@@ -249,7 +309,7 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
         var installMethod = ExtractSourceRange(
             uiSource,
             "private async Task RunInstallAsync()",
-            "private async Task<InstallerModelPackAcquisitionResult?> AcquireSelectedModelPacksAsync(");
+            "private void TryDeleteInstalledPayloadAfterFailure");
 
         Assert.Contains("ISetupProgress progress = new UiSetupProgress(this);", installMethod);
         Assert.Contains("var hasSelectedModelPacks = selectedModelPackRows.Count > 0;", installMethod);
@@ -263,6 +323,7 @@ public sealed class SetupHelperModelPackSelectionUiSourceTests
         Assert.Contains("PayloadCompletedUnitsWhenModelPacksSelected = 8500", trackerSource);
         Assert.Contains("DownloadingModelPack => new OverallPhaseRange(8500, 9000)", trackerSource);
         Assert.Contains("OverallCompletedUnits = completedUnits", trackerSource);
+        Assert.DoesNotContain("options.Mode", installMethod);
 
         var wrapperIndex = installMethod.IndexOf(
             "new SetupOptionalModelPackOverallProgressTracker",

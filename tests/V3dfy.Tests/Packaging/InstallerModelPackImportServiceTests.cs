@@ -73,6 +73,40 @@ public sealed class InstallerModelPackImportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportAsync_WithOptionalOverallTrackerReportsCurrentAndOverallInstallProgress()
+    {
+        var manifest = CreateValidManifest("tracked-install", "hub/checkpoints/tracked-install.pt");
+        var zipPath = CreateModelPackZip(manifest);
+        var acquiredFile = CreateAcquiredFile("tracked-install", zipPath);
+        var progress = new RecordingSetupProgress();
+        var trackedProgress = new SetupOptionalModelPackOverallProgressTracker(
+            progress,
+            [new SetupOptionalModelPackProgressItem(acquiredFile.AssetFileName, acquiredFile.ZipSizeBytes)]);
+
+        var result = await new InstallerModelPackImportService().ImportAsync(
+            [acquiredFile],
+            InstallRoot(),
+            WorkRoot(),
+            CurrentIw3Version,
+            CurrentV3dfyVersion,
+            new RecordingSetupLog(),
+            CancellationToken.None,
+            trackedProgress);
+
+        Assert.Single(result.ImportedPacks);
+        Assert.Empty(result.Failures);
+        Assert.Contains(progress.Events, e =>
+            e.Phase == SetupProgressPhase.ValidatingModelPack &&
+            e.CurrentFile == acquiredFile.AssetFileName &&
+            e.OverallPercent is not null);
+        Assert.Contains(progress.Events, e =>
+            e.Phase == SetupProgressPhase.InstallingModelPack &&
+            e.CurrentFile == acquiredFile.AssetFileName &&
+            e.Percent is not null &&
+            e.OverallPercent is not null);
+    }
+
+    [Fact]
     public async Task ImportAsync_InvalidManifestFailsPackAndDoesNotCreateTarget()
     {
         var zipPath = CreateZipWithoutManifest();
@@ -397,6 +431,13 @@ public sealed class InstallerModelPackImportServiceTests : IDisposable
         public void Error(string message)
         {
         }
+    }
+
+    private sealed class RecordingSetupProgress : ISetupProgress
+    {
+        public List<SetupProgressEvent> Events { get; } = [];
+
+        public void Report(SetupProgressEvent progress) => Events.Add(progress);
     }
 
     private sealed class FailingCopyFileOperations(int failOnCopyCall) : IModelPackInstallFileOperations
