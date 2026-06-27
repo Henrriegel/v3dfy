@@ -78,7 +78,7 @@ public sealed class JsonLocalizationServiceTests
         using var temp = new TempLocalizationDirectory();
         WriteLanguage(temp.DirectoryPath, "en", new Dictionary<string, string>
         {
-            [LocalizationKeys.ImageWorkflowParallaxTitle] = "2.5D Parallax",
+            [LocalizationKeys.ImageWorkflowParallaxTitle] = "2.5D Photo / Parallax (Experimental)",
             [LocalizationKeys.ImageWorkflowStereoTitle] = "Stereoscopic image",
         });
         WriteLanguage(temp.DirectoryPath, "es", new Dictionary<string, string>
@@ -88,7 +88,7 @@ public sealed class JsonLocalizationServiceTests
 
         var service = JsonLocalizationService.LoadFromDirectory(temp.DirectoryPath, "es");
 
-        Assert.Equal("2.5D Parallax", service.GetString(LocalizationKeys.ImageWorkflowParallaxTitle));
+        Assert.Equal("2.5D Photo / Parallax (Experimental)", service.GetString(LocalizationKeys.ImageWorkflowParallaxTitle));
         Assert.Equal("es", service.ActiveLanguageCode);
         Assert.Equal("Imagen estereoscopica", service.GetString(LocalizationKeys.ImageWorkflowStereoTitle));
         Assert.Contains(service.MissingReporter.Entries, entry =>

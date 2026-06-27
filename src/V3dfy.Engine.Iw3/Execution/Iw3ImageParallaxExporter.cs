@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Diagnostics;
 using V3dfy.Core.Image;
@@ -164,6 +165,31 @@ public sealed class Iw3ImageParallaxExporter : IImageParallaxExporter
                 70,
                 $"Parallax frame generation completed: {generatedFrameCount} frame(s) in {FormatElapsed(framePhaseStartedAt.Elapsed)}.",
                 $"Generacion de cuadros parallax completada: {generatedFrameCount} cuadro(s) en {FormatElapsed(framePhaseStartedAt.Elapsed)}."));
+
+            var frameSize = TryReadFirstParallaxFrameSize(framesDirectory);
+            if (frameSize is { } size)
+            {
+                progress?.Report(new(
+                    72,
+                    $"Original parallax frame size: {size.Width}x{size.Height}.",
+                    $"Tamano original del cuadro parallax: {size.Width}x{size.Height}."));
+                var encodeWidth = ToEven(size.Width);
+                var encodeHeight = ToEven(size.Height);
+                if (encodeWidth != size.Width || encodeHeight != size.Height)
+                {
+                    progress?.Report(new(
+                        73,
+                        $"FFmpeg encode size adjusted to {encodeWidth}x{encodeHeight} using padding for H.264 yuv420p compatibility.",
+                        $"Tamano de codificacion FFmpeg ajustado a {encodeWidth}x{encodeHeight} con relleno para compatibilidad H.264 yuv420p."));
+                }
+
+                ffmpegCommand = _ffmpegCommandBuilder.Build(
+                    request,
+                    framesDirectory,
+                    outputPaths.PrimaryOutputPath,
+                    size.Width,
+                    size.Height);
+            }
 
             var ffmpegPhaseStartedAt = Stopwatch.StartNew();
             progress?.Report(new(
@@ -524,6 +550,12 @@ public sealed class Iw3ImageParallaxExporter : IImageParallaxExporter
             depthResult?.StandardError ?? string.Empty,
             frameResult?.StandardError ?? string.Empty,
             ffmpegResult?.StandardError ?? string.Empty);
+        var fullTechnicalDetail = CreateFailureTechnicalDetail(
+            technicalDetail,
+            stdout,
+            stderr,
+            ffmpegResult,
+            ffmpegCommand);
 
         return new(
             Success: false,
@@ -534,7 +566,7 @@ public sealed class Iw3ImageParallaxExporter : IImageParallaxExporter
             GeneratedFiles: [],
             PrimaryOutputPath: null,
             DepthMapPath: File.Exists(depthMapPath) ? depthMapPath : null,
-            TechnicalDetail: $"{technicalDetail} stdout: {stdout}. stderr: {stderr}",
+            TechnicalDetail: fullTechnicalDetail,
             DepthExportExitCode: depthResult?.ExitCode,
             FrameGenerationExitCode: frameResult?.ExitCode,
             FfmpegExitCode: ffmpegResult?.ExitCode,
@@ -543,6 +575,37 @@ public sealed class Iw3ImageParallaxExporter : IImageParallaxExporter
             FfmpegCommandPreview: ffmpegCommand.FullCommandPreview,
             StandardOutputSummary: stdout,
             StandardErrorSummary: stderr);
+    }
+
+    private static string CreateFailureTechnicalDetail(
+        string technicalDetail,
+        string stdoutSummary,
+        string stderrSummary,
+        ProcessExecutionResult? ffmpegResult,
+        Iw3Command ffmpegCommand)
+    {
+        if (ffmpegResult is null)
+        {
+            return $"{technicalDetail} stdout: {stdoutSummary}. stderr: {stderrSummary}";
+        }
+
+        var parts = new List<string>
+        {
+            technicalDetail,
+            $"FFmpeg status: {ffmpegResult.Status}. Exit code: {ffmpegResult.ExitCode}.",
+            $"FFmpeg command: {ffmpegCommand.FullCommandPreview}",
+        };
+        if (!string.IsNullOrWhiteSpace(ffmpegResult.StandardOutput))
+        {
+            parts.Add($"FFmpeg stdout: {ffmpegResult.StandardOutput}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ffmpegResult.StandardError))
+        {
+            parts.Add($"FFmpeg stderr: {ffmpegResult.StandardError}");
+        }
+
+        return string.Join(" ", parts);
     }
 
     private static int GetFrameCount(ImageParallaxExportRequest request)
@@ -577,6 +640,50 @@ public sealed class Iw3ImageParallaxExporter : IImageParallaxExporter
             return 0;
         }
     }
+
+    private static (int Width, int Height)? TryReadFirstParallaxFrameSize(string framesDirectory)
+    {
+        try
+        {
+            var firstFrame = Directory.Exists(framesDirectory)
+                ? Directory.EnumerateFiles(framesDirectory, "frame_*.png")
+                    .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault()
+                : null;
+            return firstFrame is null ? null : TryReadPngSize(firstFrame);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static (int Width, int Height)? TryReadPngSize(string path)
+    {
+        Span<byte> header = stackalloc byte[24];
+        using var stream = File.OpenRead(path);
+        stream.ReadExactly(header);
+        ReadOnlySpan<byte> signature = [137, 80, 78, 71, 13, 10, 26, 10];
+        if (!header[..8].SequenceEqual(signature) ||
+            header[12] != 'I' ||
+            header[13] != 'H' ||
+            header[14] != 'D' ||
+            header[15] != 'R')
+        {
+            return null;
+        }
+
+        var width = BinaryPrimitives.ReadInt32BigEndian(header[16..20]);
+        var height = BinaryPrimitives.ReadInt32BigEndian(header[20..24]);
+        return width > 0 && height > 0 ? (width, height) : null;
+    }
+
+    private static int ToEven(int value) =>
+        value % 2 == 0 ? value : value + 1;
 
     private static string GetModelFileNameForOutput(LocalModelPlanSelection? selectedModel) =>
         string.IsNullOrWhiteSpace(selectedModel?.MappingKey)

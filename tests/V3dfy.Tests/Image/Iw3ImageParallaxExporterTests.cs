@@ -107,6 +107,30 @@ public sealed class Iw3ImageParallaxExporterTests
     }
 
     [Fact]
+    public async Task ExportAsync_PadsOddParallaxFramesBeforeFfmpegYuv420pEncoding()
+    {
+        var paths = CreateReadyBundle();
+        var sourcePath = CreateSourceImageFile("fondo.png");
+        var outputDirectory = Path.GetDirectoryName(sourcePath)!;
+        var runner = new RecordingParallaxProcessRunner(frameWidth: 1081, frameHeight: 1455);
+        var exporter = new Iw3ImageParallaxExporter(runner);
+        var request = CreateRequest(paths, sourcePath, outputDirectory, CreateCapabilities(paths));
+        var progress = new RecordingParallaxProgress();
+
+        var result = await exporter.ExportAsync(request, progress);
+
+        Assert.True(result.Success);
+        var ffmpegArguments = runner.Requests[2].Arguments.ToList();
+        var filterIndex = ffmpegArguments.IndexOf("-vf");
+        Assert.True(filterIndex >= 0);
+        Assert.Equal("pad=1082:1456", ffmpegArguments[filterIndex + 1]);
+        Assert.Contains(progress.Messages, message =>
+            message.EnglishMessage == "Original parallax frame size: 1081x1455.");
+        Assert.Contains(progress.Messages, message =>
+            message.EnglishMessage.Contains("1082x1456", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ExportAsync_ReportsLiveParallaxFrameCountProgress()
     {
         var paths = CreateReadyBundle();
@@ -319,7 +343,7 @@ public sealed class Iw3ImageParallaxExporterTests
         return directory?.FullName ?? throw new InvalidOperationException("Could not locate repository root.");
     }
 
-    private sealed class RecordingParallaxProcessRunner : ILocalProcessRunner
+    private sealed class RecordingParallaxProcessRunner(int? frameWidth = null, int? frameHeight = null) : ILocalProcessRunner
     {
         public List<ProcessExecutionRequest> Requests { get; } = [];
 
@@ -342,7 +366,15 @@ public sealed class Iw3ImageParallaxExporterTests
             else if (arguments.Contains("--frames-dir", StringComparer.OrdinalIgnoreCase))
             {
                 var framesDirectory = GetArgumentAfter(arguments, "--frames-dir");
-                CreateFile(Path.Combine(framesDirectory, "frame_00000.png"));
+                var framePath = Path.Combine(framesDirectory, "frame_00000.png");
+                if (frameWidth.HasValue && frameHeight.HasValue)
+                {
+                    CreatePngHeaderFile(framePath, frameWidth.Value, frameHeight.Value);
+                }
+                else
+                {
+                    CreateFile(framePath);
+                }
             }
             else
             {
@@ -368,6 +400,22 @@ public sealed class Iw3ImageParallaxExporterTests
                 ? arguments[index + 1]
                 : throw new InvalidOperationException($"Missing argument after {switchName}.");
         }
+    }
+
+    private static void CreatePngHeaderFile(string path, int width, int height)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        Span<byte> header =
+        [
+            137, 80, 78, 71, 13, 10, 26, 10,
+            0, 0, 0, 13,
+            73, 72, 68, 82,
+            0, 0, 0, 0,
+            0, 0, 0, 0,
+        ];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header[16..20], width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header[20..24], height);
+        File.WriteAllBytes(path, header.ToArray());
     }
 
     private sealed class DelayedFrameProgressParallaxProcessRunner : ILocalProcessRunner

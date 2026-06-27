@@ -19,6 +19,26 @@ public sealed class MainWindowImageLocalizationSourceTests
     }
 
     [Fact]
+    public void ImageParallaxUserFacingText_MarksParallaxExperimentalOnly()
+    {
+        var english = ReadLocalizationStrings("en.json");
+        var spanish = ReadLocalizationStrings("es.json");
+        var readme = ReadRepoFile("README.md");
+
+        Assert.Equal("2.5D Photo / Parallax (Experimental)", english[LocalizationKeys.ImageWorkflowParallaxTitle]);
+        Assert.Equal("Foto 2.5D / Parallax (Experimental)", spanish[LocalizationKeys.ImageWorkflowParallaxTitle]);
+        Assert.Contains("Experimental 2.5D / Parallax", english[LocalizationKeys.ImageWorkflowParallaxDescription]);
+        Assert.Contains("2.5D / Parallax experimental", spanish[LocalizationKeys.ImageWorkflowParallaxDescription]);
+        Assert.Contains("source image, depth map quality, and scene structure", english[LocalizationKeys.ImageParallaxQualityGuidance]);
+        Assert.Contains("imagen origen, la calidad del mapa de profundidad y la estructura de la escena", spanish[LocalizationKeys.ImageParallaxQualityGuidance]);
+        Assert.Contains("Experimental 2.5D / parallax image-to-video export", readme);
+        Assert.DoesNotContain("Experimental", english[LocalizationKeys.ImageWorkflowStereoTitle], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Experimental", spanish[LocalizationKeys.ImageWorkflowStereoTitle], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Experimental", english[LocalizationKeys.VideoTitle], StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Experimental", spanish[LocalizationKeys.VideoTitle], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ImageViewModelUserFacingProperties_UseLocalizationKeys()
     {
         var source = ReadRepoFile("src", "V3dfy.App", "ViewModels", "MainWindowViewModel.cs");
@@ -219,6 +239,18 @@ public sealed class MainWindowImageLocalizationSourceTests
             .EnumerateObject()
             .Select(property => property.Name)
             .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static Dictionary<string, string> ReadLocalizationStrings(string fileName)
+    {
+        using var document = JsonDocument.Parse(ReadRepoFile("src", "V3dfy.App", "Localization", fileName));
+        return document.RootElement
+            .GetProperty("strings")
+            .EnumerateObject()
+            .ToDictionary(
+                property => property.Name,
+                property => property.Value.GetString() ?? string.Empty,
+                StringComparer.Ordinal);
     }
 
     private static string ReadRepoFile(params string[] relativePath)

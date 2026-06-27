@@ -10,7 +10,7 @@ This is a preview release. The app is built for local workflows, large media fil
 
 - Video conversion with source analysis, recommended setup, preview review, final conversion, progress, logs, and technical details.
 - Image conversion for stereoscopic image export.
-- Image conversion for 2.5D / parallax photo-to-video export.
+- Experimental 2.5D / parallax image-to-video export. Results depend heavily on the source image, depth map quality, and scene structure.
 - Local/offline execution with bundled FFmpeg/FFprobe, engine runtime, and model files.
 - English and Spanish localization.
 - Light and dark themes.
@@ -28,11 +28,11 @@ Before running a full conversion, v3dfy can generate a short preview so the setu
 
 ## Image Conversion
 
-The Image workflow supports both still stereoscopic output and 2.5D / parallax motion output from a 2D image.
+The Image workflow supports still stereoscopic output and experimental 2.5D / parallax motion output from a 2D image. The parallax path is source-dependent and should be treated as experimental rather than equal in reliability to stereoscopic image export or video conversion.
 
 ![Stereoscopic image workflow](docs/images/readme/image-stereoscopic.png)
 
-![2.5D parallax image workflow](docs/images/readme/image-parallax-2-5d.png)
+![Experimental 2.5D parallax image workflow](docs/images/readme/image-parallax-2-5d.png)
 
 ## 3D Output Modes
 
@@ -42,7 +42,7 @@ v3dfy exposes common 3D output forms, including:
 - Half Top-Bottom
 - Anaglyph
 
-The exact labels and availability are workflow-specific. Video conversion currently focuses on TV-friendly 3D video formats, while Image conversion exposes stereoscopic image and parallax-specific controls.
+The exact labels and availability are workflow-specific. Video conversion currently focuses on TV-friendly 3D video formats, while Image conversion exposes stereoscopic image controls and experimental parallax-specific controls.
 
 ## Local Models And Offline Tools
 
